@@ -1,0 +1,32 @@
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+*.apk
+*.aab
