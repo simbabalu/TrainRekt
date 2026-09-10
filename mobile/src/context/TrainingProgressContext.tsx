@@ -3,14 +3,18 @@ import { createContext, PropsWithChildren, useEffect, useReducer, useRef, useSta
 import { mockProgress } from '@/data/mockProgress';
 import { applyTrainingResult } from '@/domain/progress/applyTrainingResult';
 import { createProgressSnapshot } from '@/domain/progress/calculateLevel';
-import { DecisionResult, TrainingScenario } from '@/types/scenario';
+import { getLocalDateKey } from '@/domain/training/getLocalDateKey';
+import { createDefaultDailyTrainingState, normalizeDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
+import { TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { TrainingProgress, TrainingProgressSnapshot } from '@/types/progress';
+import { TrainingMode } from '@/types/training';
 import { clearTrainingProgress, loadTrainingProgress, saveTrainingProgress } from '@/storage/trainingProgressStorage';
 
 interface ApplyResultAction {
   type: 'apply-result';
-  scenario: TrainingScenario;
-  result: DecisionResult;
+  exercise: TrainingExercise;
+  result: TrainingExerciseResult;
+  mode: TrainingMode;
   historyId: string;
   timestamp: string;
 }
@@ -20,22 +24,33 @@ interface HydrateAction {
   progress: TrainingProgress;
 }
 
-type ProgressAction = ApplyResultAction | HydrateAction;
+interface DebugShiftDailyDateAction {
+  type: 'debug-shift-daily-date';
+}
+
+type ProgressAction = ApplyResultAction | HydrateAction | DebugShiftDailyDateAction;
 
 interface TrainingProgressContextValue {
   progress: TrainingProgressSnapshot;
   isHydrated: boolean;
-  recordTrainingResult: (scenario: TrainingScenario, result: DecisionResult) => void;
+  recordTrainingResult: (exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode) => void;
   resetProgress: () => Promise<void>;
+  debugSimulatePreviousDay: () => void;
 }
 
 export const TrainingProgressContext = createContext<TrainingProgressContextValue | null>(null);
 
 function progressReducer(progress: TrainingProgress, action: ProgressAction): TrainingProgress {
   if (action.type === 'hydrate') return action.progress;
-  return applyTrainingResult(progress, action.scenario, action.result, {
+  if (action.type === 'debug-shift-daily-date') {
+    const shiftedDate = new Date(`${progress.daily.todayDateKey}T00:00:00`);
+    shiftedDate.setDate(shiftedDate.getDate() - 1);
+    return { ...progress, daily: { ...progress.daily, todayDateKey: getLocalDateKey(shiftedDate) } };
+  }
+  return applyTrainingResult(progress, action.exercise, action.result, {
     historyId: action.historyId,
     timestamp: action.timestamp,
+    mode: action.mode,
   });
 }
 
@@ -49,7 +64,8 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
     let isCancelled = false;
     void loadTrainingProgress().then((loadedProgress) => {
       if (isCancelled) return;
-      dispatch({ type: 'hydrate', progress: loadedProgress });
+      const normalized: TrainingProgress = { ...loadedProgress, daily: normalizeDailyTrainingState(loadedProgress.daily, new Date()) };
+      dispatch({ type: 'hydrate', progress: normalized });
       setIsHydrated(true);
     });
     return () => { isCancelled = true; };
@@ -64,13 +80,14 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
     void saveTrainingProgress(progressState);
   }, [isHydrated, progressState]);
 
-  function recordTrainingResult(scenario: TrainingScenario, result: DecisionResult) {
+  function recordTrainingResult(exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode) {
     if (!isHydrated) return;
     historySequence.current += 1;
     dispatch({
       type: 'apply-result',
-      scenario,
+      exercise,
       result,
+      mode,
       historyId: `training-${Date.now()}-${historySequence.current}`,
       timestamp: new Date().toISOString(),
     });
@@ -79,11 +96,16 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
   async function resetProgress() {
     skipNextPersist.current = true;
     await clearTrainingProgress();
-    dispatch({ type: 'hydrate', progress: mockProgress });
+    dispatch({ type: 'hydrate', progress: { ...mockProgress, daily: createDefaultDailyTrainingState() } });
+  }
+
+  function debugSimulatePreviousDay() {
+    if (!__DEV__) return;
+    dispatch({ type: 'debug-shift-daily-date' });
   }
 
   return (
-    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, resetProgress }}>
+    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, resetProgress, debugSimulatePreviousDay }}>
       {children}
     </TrainingProgressContext.Provider>
   );

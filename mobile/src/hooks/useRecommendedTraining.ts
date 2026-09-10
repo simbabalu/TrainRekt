@@ -1,12 +1,12 @@
-import { scenarioCatalog } from '@/data/scenarioCatalog';
-import { selectAdaptiveScenario } from '@/domain/training/selectAdaptiveScenario';
+import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { selectAdaptiveExercise } from '@/domain/training/selectAdaptiveExercise';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
 const stableRecommendationRandom = () => 0;
 
-export function useRecommendedTraining(currentScenarioId?: string | null) {
+export function useRecommendedTraining(currentExerciseId?: string | null) {
   const { progress } = useTrainingProgress();
   const { settings } = useSettings();
-  return selectAdaptiveScenario({ scenarios: scenarioCatalog, progress, difficulty: settings.difficulty, currentScenarioId }, stableRecommendationRandom);
+  return selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: settings.difficulty, currentExerciseId }, stableRecommendationRandom);
 }

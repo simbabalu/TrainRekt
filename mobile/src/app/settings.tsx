@@ -10,7 +10,7 @@ import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
 export default function SettingsScreen() {
   const { settings, setDifficulty, setPreference, resetSettings } = useSettings();
-  const { resetProgress } = useTrainingProgress();
+  const { resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
 
   function confirmResetProgress() {
     Alert.alert('Reset training progress?', 'This will restore the default training score and history.', [
@@ -46,6 +46,15 @@ export default function SettingsScreen() {
           <Pressable onPress={confirmResetSettings} style={styles.resetButton}><Text style={styles.resetLabel}>Reset settings</Text></Pressable>
         </View>
       </SectionCard>
+      {__DEV__ && (
+        <SectionCard>
+          <Text style={styles.sectionTitle}>DEVELOPER</Text>
+          <Text style={styles.about}>Simulate the daily training rollover without changing the device clock.</Text>
+          <View style={styles.resetButtons}>
+            <Pressable onPress={debugSimulatePreviousDay} style={styles.resetButton}><Text style={styles.resetLabel}>Simulate previous day</Text></Pressable>
+          </View>
+        </SectionCard>
+      )}
       <SectionCard>
         <Text style={styles.sectionTitle}>About TrainRekt</Text>
         <Text style={styles.about}>TrainRekt is a crypto decision-training simulator.{`\n`}No real assets are traded.</Text>

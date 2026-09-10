@@ -1,39 +1,46 @@
 import { Training } from '@/constants/theme';
-import { DecisionResult, TrainingScenario } from '@/types/scenario';
+import { applyDailyTrainingCompletion } from '@/domain/training/applyDailyTrainingCompletion';
+import { TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { SkillScores, TrainingProgress } from '@/types/progress';
+import { TrainingMode } from '@/types/training';
 
 export interface TrainingCompletionMetadata {
   historyId: string;
   timestamp: string;
+  mode: TrainingMode;
 }
 
 export function applyTrainingResult(
   progress: TrainingProgress,
-  scenario: TrainingScenario,
-  result: DecisionResult,
+  exercise: TrainingExercise,
+  result: TrainingExerciseResult,
   metadata: TrainingCompletionMetadata,
 ): TrainingProgress {
   const currentStreak = result.isCorrect ? progress.currentStreak + 1 : 0;
   const updatedHistory = [{
     id: metadata.historyId,
-    scenarioId: scenario.id,
-    scenarioTitle: scenario.title,
+    scenarioId: exercise.id,
+    scenarioTitle: exercise.title,
     correct: result.isCorrect,
-    skill: scenario.skill,
+    skill: exercise.skill,
     timestamp: metadata.timestamp,
     xpEarned: result.xpEarned,
+    exerciseType: exercise.type,
   }, ...progress.recentTrainingHistory].slice(0, Training.maxHistoryEntries);
+
+  const dailyResult = applyDailyTrainingCompletion(progress.daily, metadata.mode, new Date(metadata.timestamp));
 
   return {
     ...progress,
-    totalXp: progress.totalXp + result.xpEarned,
+    totalXp: progress.totalXp + result.xpEarned + dailyResult.bonusXpAwarded,
     sessionsCompleted: progress.sessionsCompleted + 1,
     correctDecisions: progress.correctDecisions + (result.isCorrect ? 1 : 0),
     wrongDecisions: progress.wrongDecisions + (result.isCorrect ? 0 : 1),
     currentStreak,
     bestStreak: Math.max(progress.bestStreak, currentStreak),
-    skillScores: updateSkillScore(progress.skillScores, scenario.skill, result.isCorrect),
+    skillScores: updateSkillScore(progress.skillScores, exercise.skill, result.isCorrect),
     recentTrainingHistory: updatedHistory,
+    daily: dailyResult.daily,
   };
 }
 

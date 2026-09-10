@@ -1,36 +1,37 @@
 import { useRef, useState } from 'react';
 
-import { scenarioCatalog } from '@/data/scenarioCatalog';
-import { evaluateDecision } from '@/domain/training/evaluateDecision';
+import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { evaluateExercise, ExerciseAnswer } from '@/domain/training/evaluateExercise';
 import { useRecommendedTraining } from '@/hooks/useRecommendedTraining';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
-import { DecisionId, DecisionResult } from '@/types/scenario';
+import { TrainingExerciseResult } from '@/types/exercise';
+import { TrainingMode } from '@/types/training';
 
-export function useTrainingScenario() {
+export function useTrainingScenario(mode: TrainingMode) {
   const { recordTrainingResult } = useTrainingProgress();
-  const recommendedScenario = useRecommendedTraining();
-  const [currentScenarioId, setCurrentScenarioId] = useState(recommendedScenario.id);
-  const [selectedDecision, setSelectedDecision] = useState<DecisionId | null>(null);
-  const [result, setResult] = useState<DecisionResult | null>(null);
-  const answeredScenarioId = useRef<string | null>(null);
-  const currentScenario = scenarioCatalog.find((scenario) => scenario.id === currentScenarioId) ?? recommendedScenario;
-  const nextRecommendation = useRecommendedTraining(currentScenario.id);
+  const recommendedExercise = useRecommendedTraining();
+  const [currentExerciseId, setCurrentExerciseId] = useState(recommendedExercise.id);
+  const [selectedAnswer, setSelectedAnswer] = useState<ExerciseAnswer | null>(null);
+  const [result, setResult] = useState<TrainingExerciseResult | null>(null);
+  const answeredExerciseId = useRef<string | null>(null);
+  const currentExercise = exerciseCatalog.find((exercise) => exercise.id === currentExerciseId) ?? recommendedExercise;
+  const nextRecommendation = useRecommendedTraining(currentExercise.id);
 
-  function submitDecision(decision: DecisionId) {
-    if (answeredScenarioId.current === currentScenario.id) return;
-    answeredScenarioId.current = currentScenario.id;
-    const decisionResult = evaluateDecision(currentScenario, decision);
-    setSelectedDecision(decision);
-    setResult(decisionResult);
-    recordTrainingResult(currentScenario, decisionResult);
+  function submitAnswer(answer: ExerciseAnswer) {
+    if (answeredExerciseId.current === currentExercise.id) return;
+    answeredExerciseId.current = currentExercise.id;
+    const exerciseResult = evaluateExercise(currentExercise, answer);
+    setSelectedAnswer(answer);
+    setResult(exerciseResult);
+    recordTrainingResult(currentExercise, exerciseResult, mode);
   }
 
-  function nextScenario() {
-    setCurrentScenarioId(nextRecommendation.id);
-    answeredScenarioId.current = null;
-    setSelectedDecision(null);
+  function nextExercise() {
+    setCurrentExerciseId(nextRecommendation.id);
+    answeredExerciseId.current = null;
+    setSelectedAnswer(null);
     setResult(null);
   }
 
-  return { currentScenario, selectedDecision, result, hasAnswered: Boolean(result), submitDecision, nextScenario };
+  return { currentExercise, selectedAnswer, result, hasAnswered: Boolean(result), submitAnswer, nextExercise };
 }

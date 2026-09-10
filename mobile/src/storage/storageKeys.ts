@@ -3,4 +3,4 @@ export const storageKeys = {
   settings: '@trainrekt/settings',
 } as const;
 
-export const storageSchemaVersion = 1;
+export const storageSchemaVersion = 2;

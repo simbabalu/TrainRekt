@@ -51,6 +51,8 @@ export const Training = {
   correctSkillPoints: 2,
   incorrectSkillPoints: -1,
   maxHistoryEntries: 10,
+  dailyGoal: 3,
+  dailyCompletionBonusXp: 150,
 } as const;
 
 export type ThemeColor =

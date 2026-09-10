@@ -1,35 +1,89 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { useRef } from 'react';
+import { LayoutChangeEvent, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { DailyGoalInlineStatus } from '@/components/DailyGoalInlineStatus';
+import { DailyTrainingCompleteCard } from '@/components/DailyTrainingCompleteCard';
+import { DecisionExerciseView } from '@/components/DecisionExerciseView';
 import { DecisionResultPanel } from '@/components/DecisionResultPanel';
 import { PageHeading } from '@/components/PageHeading';
-import { ScenarioMarketCard } from '@/components/ScenarioMarketCard';
-import { ScenarioOption } from '@/components/ScenarioOption';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
-import { Colors, Spacing, Typography } from '@/constants/theme';
-import { skillLabels } from '@/constants/training';
+import { SignatureSimulationView } from '@/components/SignatureSimulationView';
+import { TrainingModeHeader } from '@/components/TrainingModeHeader';
+import { Colors, Typography } from '@/constants/theme';
+import { exerciseTypeLabels, skillLabels } from '@/constants/training';
+import { calculateDailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
+import { getDailyTrainingStep } from '@/domain/training/getDailyTrainingStep';
+import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComplete';
+import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
+import { DecisionId } from '@/types/scenario';
+import { SignatureDecision } from '@/types/exercise';
+import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
-  const { currentScenario, selectedDecision, result, submitDecision, nextScenario } = useTrainingScenario();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const mode = isTrainingMode(params.mode) ? params.mode : 'daily';
+  // Remount on mode change so a fresh exercise/result replaces any stale answered state.
+  return <TrainSession key={mode} mode={mode} />;
+}
+
+function TrainSession({ mode }: { mode: TrainingMode }) {
+  const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise } = useTrainingScenario(mode);
+  const { progress } = useTrainingProgress();
+  const scrollRef = useRef<ScrollView>(null);
+  const scrolledResultRef = useRef<typeof result>(null);
+  const step = getDailyTrainingStep(progress.daily);
+  const dailyGoalProgress = calculateDailyGoalProgress(progress.daily);
+  const sessionComplete = isDailyTrainingComplete(progress.daily, mode);
+
+  function handleResultAnchorLayout(event: LayoutChangeEvent) {
+    if (!result || scrolledResultRef.current === result) return;
+    scrolledResultRef.current = result;
+    scrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: true });
+  }
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <PageHeading eyebrow="TRAINING SCENARIO" title="Decision exercise" />
-      <View style={styles.metadata}><Text style={styles.skill}>Skill: {skillLabels[currentScenario.skill]}</Text><Text style={styles.difficulty}>{currentScenario.difficulty}</Text></View>
-      <Text style={styles.title}>{currentScenario.title}</Text>
-      <ScenarioMarketCard scenario={currentScenario} />
-      <Text style={styles.question}>{currentScenario.question}</Text>
-      <View style={styles.options}>{currentScenario.options.map((option) => <ScenarioOption key={option.id} decision={option.id} label={option.label} selected={selectedDecision === option.id} correct={Boolean(result?.isCorrect && option.id === currentScenario.correctOptionId)} disabled={Boolean(result)} onPress={() => submitDecision(option.id)} />)}</View>
-      {result && <DecisionResultPanel result={result} skill={currentScenario.skill} onNext={nextScenario} />}
+      <TrainingModeHeader mode={mode} step={step} />
+      <Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text>
+      <View style={styles.metadata}><Text style={styles.skill}>Skill: {skillLabels[currentExercise.skill]}</Text><Text style={styles.difficulty}>{currentExercise.difficulty}</Text></View>
+
+      {currentExercise.type === 'decision' ? (
+        <DecisionExerciseView
+          exercise={currentExercise}
+          selectedAnswer={selectedAnswer as DecisionId | null}
+          result={result}
+          onSelect={submitAnswer}
+        />
+      ) : (
+        <SignatureSimulationView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: SignatureDecision) => submitAnswer(decision)}
+        />
+      )}
+
+      {result && (
+        <View onLayout={handleResultAnchorLayout}>
+          <DecisionResultPanel result={result} skill={currentExercise.skill} />
+          {mode === 'daily' && !sessionComplete && <DailyGoalInlineStatus goalProgress={dailyGoalProgress} />}
+          {sessionComplete ? (
+            <DailyTrainingCompleteCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
+          ) : (
+            <PrimaryButton onPress={nextExercise} variant="secondary">NEXT EXERCISE</PrimaryButton>
+          )}
+        </View>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  exerciseTypeLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2 },
   metadata: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   skill: { color: Colors.accent, fontSize: Typography.body, fontWeight: '800' },
   difficulty: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
-  title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
-  question: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800', marginTop: Spacing.sm },
-  options: { gap: Spacing.sm },
 });

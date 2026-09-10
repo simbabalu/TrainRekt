@@ -29,7 +29,7 @@ describe('training progress storage', () => {
   it('serializes authoritative progress without derived values', () => {
     const parsed = JSON.parse(serializeTrainingProgress(mockProgress)) as { version: number; data: Record<string, unknown> };
 
-    expect(parsed.version).toBe(1);
+    expect(parsed.version).toBe(2);
     expect(parsed.data.totalXp).toBe(mockProgress.totalXp);
     expect(parsed.data).not.toHaveProperty('level');
     expect(parsed.data).not.toHaveProperty('winRate');
@@ -54,6 +54,29 @@ describe('training progress storage', () => {
 
     expect(storage.setItem).toHaveBeenCalledTimes(1);
     expect(storage.removeItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('hydrates legacy persisted progress without daily fields using safe defaults', async () => {
+    const legacyData: Record<string, unknown> = { ...mockProgress };
+    delete legacyData.daily;
+    storage.getItem.mockResolvedValue(JSON.stringify({ version: 1, data: legacyData }));
+
+    const loaded = await loadTrainingProgress();
+
+    expect(loaded.totalXp).toBe(mockProgress.totalXp);
+    expect(loaded.recentTrainingHistory).toEqual(mockProgress.recentTrainingHistory);
+    expect(loaded.daily.dailyGoal).toBe(3);
+    expect(loaded.daily.todayCompletedDecisions).toBe(0);
+    expect(loaded.daily.dailyGoalCompleted).toBe(false);
+  });
+
+  it('round-trips daily training fields through save and load', async () => {
+    const progressWithDailyProgress = { ...mockProgress, daily: { ...mockProgress.daily, todayCompletedDecisions: 2, dailyTrainingStreak: 3, bestDailyTrainingStreak: 5 } };
+    storage.getItem.mockResolvedValue(serializeTrainingProgress(progressWithDailyProgress));
+
+    await saveTrainingProgress(progressWithDailyProgress);
+
+    await expect(loadTrainingProgress()).resolves.toEqual(progressWithDailyProgress);
   });
 });
 

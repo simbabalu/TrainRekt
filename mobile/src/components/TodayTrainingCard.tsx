@@ -1,17 +1,27 @@
 import { StyleSheet, Text } from 'react-native';
 
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { skillLabels } from '@/constants/training';
-import { TrainingScenario } from '@/types/scenario';
+import { exerciseTypeLabels, skillLabels } from '@/constants/training';
+import { TrainingExercise } from '@/types/exercise';
 import { ScenarioContextChips } from './ScenarioContextChips';
 import { SectionCard } from './SectionCard';
 
-export function TodayTrainingCard({ scenario }: { scenario: TrainingScenario }) {
-  return <SectionCard><Text style={styles.title}>{scenario.title}</Text><Text style={styles.description}>{scenario.description}</Text><Text style={styles.meta}>Skill: {skillLabels[scenario.skill]}</Text><Text style={styles.meta}>{scenario.difficulty}  •  {scenario.estimatedDuration}  •  +{scenario.xpReward} XP</Text><ScenarioContextChips context={scenario.marketContext} limit={3} /></SectionCard>;
+export function TodayTrainingCard({ exercise }: { exercise: TrainingExercise }) {
+  return (
+    <SectionCard>
+      <Text style={styles.title}>{exercise.title}</Text>
+      <Text style={styles.description}>{exercise.description}</Text>
+      <Text style={styles.meta}>Skill: {skillLabels[exercise.skill]}</Text>
+      <Text style={styles.meta}>{exercise.difficulty}{exercise.type === 'decision' ? `  •  ${exercise.estimatedDuration}` : ''}  •  +{exercise.xpReward} XP</Text>
+      <Text style={styles.typeLabel}>{exerciseTypeLabels[exercise.type]}</Text>
+      {exercise.type === 'decision' && <ScenarioContextChips context={exercise.marketContext} limit={3} />}
+    </SectionCard>
+  );
 }
 
 const styles = StyleSheet.create({
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
   description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22, marginTop: Spacing.sm },
   meta: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700', marginTop: Spacing.md },
+  typeLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2, marginTop: Spacing.sm },
 });

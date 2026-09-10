@@ -1,27 +1,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { mockProgress } from '@/data/mockProgress';
-import { SkillKey, SkillScores, TrainingProgress } from '@/types/progress';
+import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
+import { DailyTrainingState, SkillKey, SkillScores, TrainingProgress } from '@/types/progress';
 import { storageKeys, storageSchemaVersion } from './storageKeys';
 
 interface StoredProgress {
   version: number;
-  data: TrainingProgress;
+  data: Record<string, unknown>;
 }
 
-const skillKeys: SkillKey[] = ['riskManagement', 'profitTaking', 'fomoResistance', 'positionSizing', 'scamAwareness', 'leverageRisk', 'panicSelling', 'marketInterpretation'];
+const skillKeys: SkillKey[] = ['riskManagement', 'profitTaking', 'fomoResistance', 'positionSizing', 'scamAwareness', 'leverageRisk', 'panicSelling', 'marketInterpretation', 'walletSafety'];
+const defaultSkillScore = 50;
 
 export function serializeTrainingProgress(progress: TrainingProgress): string {
-  const stored: StoredProgress = { version: storageSchemaVersion, data: progress };
-  return JSON.stringify(stored);
+  return JSON.stringify({ version: storageSchemaVersion, data: progress });
 }
 
 export function deserializeTrainingProgress(value: string | null): TrainingProgress | null {
   if (!value) return null;
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!isStoredProgress(parsed)) return null;
-    return parsed.data;
+    if (!isStoredEnvelope(parsed) || !isValidBaseProgress(parsed.data)) return null;
+    const base = parsed.data as unknown as TrainingProgress;
+    return { ...base, skillScores: normalizeStoredSkillScores(parsed.data.skillScores), daily: normalizeStoredDaily(parsed.data.daily) };
   } catch (error) {
     console.warn('[TrainRekt] Could not parse stored training progress.', error);
     return null;
@@ -54,15 +56,31 @@ export async function clearTrainingProgress(): Promise<void> {
   }
 }
 
-function isStoredProgress(value: unknown): value is StoredProgress {
-  if (!isRecord(value) || value.version !== storageSchemaVersion || !isRecord(value.data)) return false;
-  const data = value.data;
-  return isNonNegativeNumber(data.totalXp) && isNonNegativeNumber(data.sessionsCompleted) && isNonNegativeNumber(data.correctDecisions) && isNonNegativeNumber(data.wrongDecisions) && isNonNegativeNumber(data.currentStreak) && isNonNegativeNumber(data.bestStreak) && isSkillScores(data.skillScores) && isHistory(data.recentTrainingHistory);
+function isStoredEnvelope(value: unknown): value is StoredProgress {
+  return isRecord(value) && typeof value.version === 'number' && isRecord(value.data);
 }
 
-function isSkillScores(value: unknown): value is SkillScores {
+function isValidBaseProgress(data: Record<string, unknown>): boolean {
+  return isNonNegativeNumber(data.totalXp) && isNonNegativeNumber(data.sessionsCompleted) && isNonNegativeNumber(data.correctDecisions) && isNonNegativeNumber(data.wrongDecisions) && isNonNegativeNumber(data.currentStreak) && isNonNegativeNumber(data.bestStreak) && isRecord(data.skillScores) && isHistory(data.recentTrainingHistory);
+}
+
+function normalizeStoredDaily(value: unknown): DailyTrainingState {
+  return isValidDailyState(value) ? value : createDefaultDailyTrainingState();
+}
+
+// Backfills any skill missing from legacy saves (e.g. a newly introduced skill) without discarding the rest of the progress.
+function normalizeStoredSkillScores(value: unknown): SkillScores {
+  const source = isRecord(value) ? value : {};
+  const normalized = {} as SkillScores;
+  skillKeys.forEach((key) => {
+    normalized[key] = isNumberBetween(source[key], 0, 100) ? (source[key] as number) : defaultSkillScore;
+  });
+  return normalized;
+}
+
+function isValidDailyState(value: unknown): value is DailyTrainingState {
   if (!isRecord(value)) return false;
-  return skillKeys.every((key) => isNumberBetween(value[key], 0, 100));
+  return isNonNegativeNumber(value.dailyGoal) && isNonNegativeNumber(value.todayCompletedDecisions) && typeof value.todayDateKey === 'string' && typeof value.dailyGoalCompleted === 'boolean' && (value.lastDailyCompletionDate === null || typeof value.lastDailyCompletionDate === 'string') && isNonNegativeNumber(value.dailyTrainingStreak) && isNonNegativeNumber(value.bestDailyTrainingStreak);
 }
 
 function isHistory(value: unknown): value is TrainingProgress['recentTrainingHistory'] {

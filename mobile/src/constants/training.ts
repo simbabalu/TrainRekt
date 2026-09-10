@@ -1,4 +1,5 @@
 import { SkillKey } from '@/types/progress';
+import { ExerciseType } from '@/types/exercise';
 
 export const skillLabels: Record<SkillKey, string> = {
   riskManagement: 'Risk Management',
@@ -9,4 +10,10 @@ export const skillLabels: Record<SkillKey, string> = {
   leverageRisk: 'Leverage Risk',
   panicSelling: 'Panic Selling',
   marketInterpretation: 'Market Interpretation',
+  walletSafety: 'Wallet Safety',
+};
+
+export const exerciseTypeLabels: Record<ExerciseType, string> = {
+  decision: 'MARKET DECISION',
+  'signature-simulation': 'WALLET SAFETY',
 };

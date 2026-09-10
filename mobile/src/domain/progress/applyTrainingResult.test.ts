@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { mockProgress } from '@/data/mockProgress';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
+import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { applyTrainingResult } from './applyTrainingResult';
 import { createProgressSnapshot, calculateLevel, calculateWinRate } from './calculateLevel';
 import { evaluateDecision } from '@/domain/training/evaluateDecision';
+import { DecisionExercise } from '@/types/exercise';
 
-const scenario = scenarioCatalog[0];
-const metadata = { historyId: 'test-history', timestamp: '2026-09-10T12:00:00.000Z' };
+const scenario: DecisionExercise = { ...scenarioCatalog[0], type: 'decision' };
+const metadata = { historyId: 'test-history', timestamp: '2026-09-10T12:00:00.000Z', mode: 'daily' as const };
 
 describe('progress calculations', () => {
   it('calculates level boundaries from total XP', () => {
@@ -73,5 +75,57 @@ describe('progress calculations', () => {
     const snapshot = createProgressSnapshot({ ...mockProgress, totalXp: 2742 });
 
     expect(snapshot).toMatchObject({ level: 3, xpIntoCurrentLevel: 742, xpRequiredForNextLevel: 1000, winRate: 58 });
+  });
+
+  it('increments todays completed decisions and awards the daily bonus exactly once when the goal is reached', () => {
+    const now = new Date(2026, 8, 10, 9, 0);
+    let progressState = { ...mockProgress, daily: createDefaultDailyTrainingState(now) };
+    const submit = () => applyTrainingResult(progressState, scenario, evaluateDecision(scenario, scenario.correctOptionId), { historyId: `h-${progressState.daily.todayCompletedDecisions}`, timestamp: now.toISOString(), mode: 'daily' });
+
+    progressState = submit();
+    expect(progressState.daily.todayCompletedDecisions).toBe(1);
+
+    progressState = submit();
+    const xpBeforeThird = progressState.totalXp;
+
+    progressState = submit();
+    expect(progressState.daily.dailyGoalCompleted).toBe(true);
+    expect(progressState.totalXp).toBe(xpBeforeThird + scenario.xpReward + 150);
+
+    const xpAfterGoal = progressState.totalXp;
+    progressState = submit();
+    expect(progressState.totalXp).toBe(xpAfterGoal + scenario.xpReward);
+  });
+
+  it('rolls the day over without destroying total XP, skills, or history', () => {
+    const day1 = new Date(2026, 8, 10, 9, 0);
+    const day2 = new Date(2026, 8, 11, 9, 0);
+    let progressState = { ...mockProgress, daily: createDefaultDailyTrainingState(day1) };
+
+    progressState = applyTrainingResult(progressState, scenario, evaluateDecision(scenario, scenario.correctOptionId), { historyId: 'day1-h1', timestamp: day1.toISOString(), mode: 'daily' });
+    const xpAfterDay1 = progressState.totalXp;
+    const historyLengthAfterDay1 = progressState.recentTrainingHistory.length;
+
+    progressState = applyTrainingResult(progressState, scenario, evaluateDecision(scenario, scenario.correctOptionId), { historyId: 'day2-h1', timestamp: day2.toISOString(), mode: 'daily' });
+
+    expect(progressState.daily.todayCompletedDecisions).toBe(1);
+    expect(progressState.totalXp).toBe(xpAfterDay1 + scenario.xpReward);
+    expect(progressState.recentTrainingHistory.length).toBe(historyLengthAfterDay1 + 1);
+  });
+
+  it('records extra-practice XP, skills, and history without touching the daily goal or streak', () => {
+    const now = new Date(2026, 8, 10, 9, 0);
+    const completedDaily = { ...createDefaultDailyTrainingState(now), todayCompletedDecisions: 3, dailyGoalCompleted: true, dailyTrainingStreak: 1, bestDailyTrainingStreak: 1 };
+    const initial = { ...mockProgress, daily: completedDaily };
+
+    const updated = applyTrainingResult(initial, scenario, evaluateDecision(scenario, scenario.correctOptionId), { historyId: 'practice-h1', timestamp: now.toISOString(), mode: 'practice' });
+
+    expect(updated.totalXp).toBe(initial.totalXp + scenario.xpReward);
+    expect(updated.correctDecisions).toBe(initial.correctDecisions + 1);
+    expect(updated.skillScores.profitTaking).toBe(initial.skillScores.profitTaking + 2);
+    expect(updated.recentTrainingHistory[0]).toMatchObject({ id: 'practice-h1', correct: true });
+    expect(updated.daily.todayCompletedDecisions).toBe(3);
+    expect(updated.daily.dailyTrainingStreak).toBe(1);
+    expect(updated.daily.dailyGoalCompleted).toBe(true);
   });
 });
