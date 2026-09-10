@@ -33,5 +33,15 @@ export function useTrainingScenario(mode: TrainingMode) {
     setResult(null);
   }
 
-  return { currentExercise, selectedAnswer, result, hasAnswered: Boolean(result), submitAnswer, nextExercise };
+  function debugSelectExercise(exerciseId: string) {
+    if (!__DEV__) return;
+    const match = exerciseCatalog.find((exercise) => exercise.id === exerciseId);
+    if (!match) return;
+    setCurrentExerciseId(match.id);
+    answeredExerciseId.current = null;
+    setSelectedAnswer(null);
+    setResult(null);
+  }
+
+  return { currentExercise, selectedAnswer, result, hasAnswered: Boolean(result), submitAnswer, nextExercise, debugSelectExercise };
 }

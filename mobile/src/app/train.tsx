@@ -19,8 +19,11 @@ import { getDailyTrainingStep } from '@/domain/training/getDailyTrainingStep';
 import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComplete';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
+import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
+import { SectionCard } from '@/components/SectionCard';
 import { DecisionId } from '@/types/scenario';
-import { SignatureDecision, TransactionInspectionDecision } from '@/types/exercise';
+import { SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
@@ -31,7 +34,7 @@ export default function TrainScreen() {
 }
 
 function TrainSession({ mode }: { mode: TrainingMode }) {
-  const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise } = useTrainingScenario(mode);
+  const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise, debugSelectExercise } = useTrainingScenario(mode);
   const { progress } = useTrainingProgress();
   const scrollRef = useRef<ScrollView>(null);
   const scrolledResultRef = useRef<typeof result>(null);
@@ -45,6 +48,25 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
     scrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: true });
   }
 
+  function scrollToTopAfterExerciseChange() {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+  }
+
+  function handleNextExercise() {
+    nextExercise();
+    scrollToTopAfterExerciseChange();
+  }
+
+  function handleDebugSelectExercise(exerciseId: string) {
+    debugSelectExercise(exerciseId);
+    scrollToTopAfterExerciseChange();
+  }
+
+  const firstDecision = exerciseCatalog.find((exercise) => exercise.type === 'decision');
+  const firstSignature = exerciseCatalog.find((exercise) => exercise.type === 'signature-simulation');
+
   return (
     <Screen ref={scrollRef}>
       <TrainingModeHeader mode={mode} step={step} />
@@ -53,26 +75,7 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
         <View style={styles.metadataItem}><AppIcon accessibilityLabel="Difficulty" name={{ ios: 'dial.medium.fill', android: 'tune', web: 'tune' }} size={16} tintColor={Colors.mutedText} /><Text style={styles.difficulty}>{currentExercise.difficulty}</Text></View>
       </View>
 
-      {currentExercise.type === 'decision' ? (
-        <DecisionExerciseView
-          exercise={currentExercise}
-          selectedAnswer={selectedAnswer as DecisionId | null}
-          result={result}
-          onSelect={submitAnswer}
-        />
-      ) : currentExercise.type === 'signature-simulation' ? (
-        <SignatureSimulationView
-          exercise={currentExercise}
-          disabled={Boolean(result)}
-          onSelect={(decision: SignatureDecision) => submitAnswer(decision)}
-        />
-      ) : (
-        <TransactionInspectionView
-          exercise={currentExercise}
-          disabled={Boolean(result)}
-          onSelect={(decision: TransactionInspectionDecision) => submitAnswer(decision)}
-        />
-      )}
+      {renderExerciseByType(currentExercise, selectedAnswer as DecisionId | null, result, submitAnswer)}
 
       {result && (
         <View onLayout={handleResultAnchorLayout}>
@@ -81,12 +84,65 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
           {sessionComplete ? (
             <DailyTrainingCompleteCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
           ) : (
-            <PrimaryButton onPress={nextExercise} variant="secondary">NEXT EXERCISE</PrimaryButton>
+            <PrimaryButton onPress={handleNextExercise} variant="secondary">NEXT EXERCISE</PrimaryButton>
           )}
         </View>
       )}
+
+      {__DEV__ && (
+        <SectionCard>
+          <Text style={styles.devTitle}>DEV EXERCISE PICKER</Text>
+          <Text style={styles.devSubtitle}>Loads the selected exercise through the normal Train session path.</Text>
+          <View style={styles.devButtons}>
+            {firstDecision && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstDecision.id)}>Load decision</PrimaryButton>}
+            {firstSignature && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstSignature.id)}>Load signature</PrimaryButton>}
+            {transactionInspectionCatalog.map((exercise) => (
+              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>{exercise.title}</PrimaryButton>
+            ))}
+          </View>
+        </SectionCard>
+      )}
     </Screen>
   );
+}
+
+function renderExerciseByType(
+  currentExercise: TrainingExercise,
+  selectedAnswer: DecisionId | null,
+  result: TrainingExerciseResult | null,
+  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision) => void,
+) {
+  switch (currentExercise.type) {
+    case 'decision':
+      return (
+        <DecisionExerciseView
+          exercise={currentExercise}
+          selectedAnswer={selectedAnswer}
+          result={result}
+          onSelect={submitAnswer}
+        />
+      );
+    case 'signature-simulation':
+      return (
+        <SignatureSimulationView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: SignatureDecision) => submitAnswer(decision)}
+        />
+      );
+    case 'transaction-inspection':
+      return (
+        <TransactionInspectionView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: TransactionInspectionDecision) => submitAnswer(decision)}
+        />
+      );
+    default: {
+      const unsupportedType: never = currentExercise;
+      throw new Error(`Unsupported exercise type: ${String(unsupportedType)}`);
+    }
+  }
 }
 
 const styles = StyleSheet.create({
@@ -94,4 +150,7 @@ const styles = StyleSheet.create({
   metadata: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingTop: Spacing.xs },
   metadataItem: { alignItems: 'center', flexDirection: 'row' },
   difficulty: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
+  devTitle: { color: Colors.warning, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.1 },
+  devSubtitle: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
+  devButtons: { gap: Spacing.sm, marginTop: Spacing.md },
 });

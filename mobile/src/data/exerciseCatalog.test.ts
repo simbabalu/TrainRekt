@@ -6,6 +6,17 @@ import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 
 describe('exerciseCatalog', () => {
+  it('has the expected total and per-type counts in the runtime catalog', () => {
+    const decisions = exerciseCatalog.filter((exercise) => exercise.type === 'decision');
+    const signatures = exerciseCatalog.filter((exercise) => exercise.type === 'signature-simulation');
+    const inspections = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
+
+    expect(exerciseCatalog).toHaveLength(21);
+    expect(decisions).toHaveLength(12);
+    expect(signatures).toHaveLength(4);
+    expect(inspections).toHaveLength(5);
+  });
+
   it('contains all decision exercises with type: decision', () => {
     const decisions = exerciseCatalog.filter((exercise) => exercise.type === 'decision');
     expect(decisions).toHaveLength(scenarioCatalog.length);
@@ -27,6 +38,8 @@ describe('exerciseCatalog', () => {
   it('contains all transaction inspection exercises with type: transaction-inspection', () => {
     const inspections = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
     expect(inspections).toHaveLength(transactionInspectionCatalog.length);
+    const runtimeIds = new Set(inspections.map((exercise) => exercise.id));
+    expect(runtimeIds).toEqual(new Set(transactionInspectionCatalog.map((exercise) => exercise.id)));
     inspections.forEach((inspection, index) => {
       expect(inspection.id).toBe(transactionInspectionCatalog[index].id);
       expect(inspection.skill).toBe('walletSafety');
