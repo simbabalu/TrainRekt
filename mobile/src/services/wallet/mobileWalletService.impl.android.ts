@@ -87,7 +87,6 @@ export const mobileWalletServiceImpl: MobileWalletService = {
 
       return { ok: true, wallet: authorizedWallet.wallet, authToken: authorizedWallet.authToken };
     } catch (error) {
-      if (__DEV__) console.warn('MWA connect failed', error);
       const mapped = mapError(error);
       return { ok: false, reason: mapped.reason, message: mapped.message };
     }
@@ -96,18 +95,9 @@ export const mobileWalletServiceImpl: MobileWalletService = {
   async disconnectWallet(authToken?: string): Promise<WalletDisconnectResult> {
     if (!authToken) return { ok: true };
 
-    // Avoid exposing auth tokens in debug logcat through upstream native deauthorize logging.
-    if (__DEV__) return { ok: true };
-
-    try {
-      await transact(async (wallet: Web3MobileWallet) => {
-        await wallet.deauthorize({ auth_token: authToken });
-      });
-      return { ok: true };
-    } catch (error) {
-      if (__DEV__) console.warn('MWA disconnect failed', error);
-      const mapped = mapError(error);
-      return { ok: false, reason: mapped.reason, message: mapped.message };
-    }
+    // SECURITY TEMPORARY: deauthorize is disabled because upstream/native MWA
+    // logging was observed exposing raw auth tokens in Android logcat.
+    // Re-enable only after verified-safe upstream behavior.
+    return { ok: true };
   },
 };

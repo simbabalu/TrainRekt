@@ -93,6 +93,75 @@ describe('WalletProvider', () => {
     expect(wallet.error).toBeNull();
   });
 
+  it('clears the in-memory auth token after disconnect', async () => {
+    const service = createMockService();
+    vi.mocked(service.connectWallet).mockResolvedValue({
+      ok: true,
+      wallet: { address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9Wq' },
+      authToken: 'secret-auth-token',
+    });
+    vi.mocked(service.disconnectWallet).mockResolvedValue({ ok: true });
+
+    let wallet!: WalletController;
+
+    function Harness() {
+      wallet = useWallet();
+      return null;
+    }
+
+    await act(async () => {
+      create(<WalletProvider service={service}><Harness /></WalletProvider>);
+    });
+
+    await act(async () => {
+      await wallet.connect();
+      await wallet.disconnect();
+      await wallet.disconnect();
+    });
+
+    expect(service.disconnectWallet).toHaveBeenNthCalledWith(1, 'secret-auth-token');
+    expect(service.disconnectWallet).toHaveBeenNthCalledWith(2, undefined);
+    expect(wallet.status).toBe('disconnected');
+    expect(wallet.wallet).toBeNull();
+  });
+
+  it('can reconnect with a fresh authorize flow after local disconnect', async () => {
+    const service = createMockService();
+    vi.mocked(service.connectWallet)
+      .mockResolvedValueOnce({
+        ok: true,
+        wallet: { address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9Wq' },
+        authToken: 'first-token',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        wallet: { address: '9mAbKjA24sPuPqYxWwBfQ9cj2k9Zz' },
+        authToken: 'second-token',
+      });
+    vi.mocked(service.disconnectWallet).mockResolvedValue({ ok: true });
+
+    let wallet!: WalletController;
+
+    function Harness() {
+      wallet = useWallet();
+      return null;
+    }
+
+    await act(async () => {
+      create(<WalletProvider service={service}><Harness /></WalletProvider>);
+    });
+
+    await act(async () => {
+      await wallet.connect();
+      await wallet.disconnect();
+      await wallet.connect();
+    });
+
+    expect(service.connectWallet).toHaveBeenCalledTimes(2);
+    expect(wallet.status).toBe('connected');
+    expect(wallet.wallet).toEqual({ address: '9mAbKjA24sPuPqYxWwBfQ9cj2k9Zz' });
+  });
+
   it('returns to disconnected state when authorization is cancelled', async () => {
     const service = createMockService();
     vi.mocked(service.connectWallet).mockResolvedValue({
