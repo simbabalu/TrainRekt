@@ -25,6 +25,6 @@ export function TrainingModeHeader({ mode, step }: TrainingModeHeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.sm },
+  container: { borderBottomColor: Colors.border, borderBottomWidth: 1, gap: Spacing.sm, paddingBottom: Spacing.md },
   eyebrow: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2 },
 });

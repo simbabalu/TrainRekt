@@ -6,13 +6,12 @@ import { DailyGoalInlineStatus } from '@/components/DailyGoalInlineStatus';
 import { DailyTrainingCompleteCard } from '@/components/DailyTrainingCompleteCard';
 import { DecisionExerciseView } from '@/components/DecisionExerciseView';
 import { DecisionResultPanel } from '@/components/DecisionResultPanel';
-import { PageHeading } from '@/components/PageHeading';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { SignatureSimulationView } from '@/components/SignatureSimulationView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
-import { Colors, Typography } from '@/constants/theme';
-import { exerciseTypeLabels, skillLabels } from '@/constants/training';
+import { Colors, Spacing, Typography } from '@/constants/theme';
+import { exerciseTypeLabels } from '@/constants/training';
 import { calculateDailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
 import { getDailyTrainingStep } from '@/domain/training/getDailyTrainingStep';
 import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComplete';
@@ -46,10 +45,11 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
 
   return (
     <Screen ref={scrollRef}>
-      <PageHeading eyebrow="TRAINING SCENARIO" title="Decision exercise" />
       <TrainingModeHeader mode={mode} step={step} />
-      <Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text>
-      <View style={styles.metadata}><Text style={styles.skill}>Skill: {skillLabels[currentExercise.skill]}</Text><Text style={styles.difficulty}>{currentExercise.difficulty}</Text></View>
+      <View style={styles.metadata}>
+        <Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text>
+        <Text style={styles.difficulty}>{currentExercise.difficulty}</Text>
+      </View>
 
       {currentExercise.type === 'decision' ? (
         <DecisionExerciseView
@@ -83,7 +83,6 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
 
 const styles = StyleSheet.create({
   exerciseTypeLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2 },
-  metadata: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  skill: { color: Colors.accent, fontSize: Typography.body, fontWeight: '800' },
+  metadata: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingTop: Spacing.xs },
   difficulty: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
 });

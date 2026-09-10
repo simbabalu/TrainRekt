@@ -8,6 +8,8 @@ export function evaluateSignatureSimulation(exercise: SignatureSimulationExercis
     title: getResultTitle(isCorrect, decision),
     explanation: exercise.explanation,
     learningPoints: exercise.learningPoints,
+    riskIndicators: exercise.riskIndicators,
+    safeIndicators: exercise.safeIndicators,
   };
 }
 

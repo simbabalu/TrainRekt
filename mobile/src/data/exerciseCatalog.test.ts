@@ -52,9 +52,9 @@ describe('exerciseCatalog', () => {
       expect(exercise).toHaveProperty('expectedDecision');
       expect(['sign', 'reject']).toContain(exercise.expectedDecision);
       expect(exercise).toHaveProperty('displayedActions');
-      expect((exercise as any).displayedActions.length).toBeGreaterThan(0);
+      expect(exercise.displayedActions.length).toBeGreaterThan(0);
       expect(exercise).toHaveProperty('learningPoints');
-      expect((exercise as any).learningPoints.length).toBeGreaterThan(0);
+      expect(exercise.learningPoints.length).toBeGreaterThan(0);
     });
   });
 });

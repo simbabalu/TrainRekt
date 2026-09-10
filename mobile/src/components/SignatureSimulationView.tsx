@@ -27,10 +27,10 @@ export function SignatureSimulationView({ exercise, disabled, onSelect }: Signat
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.lg },
+  container: { gap: Spacing.md },
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
   description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22 },
   question: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
-  actions: { flexDirection: 'row', gap: Spacing.sm },
+  actions: { flexDirection: 'row', gap: Spacing.md },
   actionButton: { flex: 1 },
 });

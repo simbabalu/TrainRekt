@@ -39,13 +39,13 @@ export default function ProgressScreen() {
 
 const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.lg, rowGap: Spacing.lg },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.md, rowGap: Spacing.md },
   stat: { width: '33%' },
   statValue: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
   statLabel: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
   currentStreak: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800', marginTop: Spacing.lg },
-  skills: { gap: Spacing.lg, marginTop: Spacing.lg },
-  history: { gap: Spacing.lg, marginTop: Spacing.lg },
+  skills: { gap: Spacing.md, marginTop: Spacing.md },
+  history: { gap: Spacing.md, marginTop: Spacing.md },
   historyRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   historyMain: { flex: 1, paddingRight: Spacing.md },
   historyTitle: { color: Colors.text, fontSize: Typography.body, fontWeight: '700' },

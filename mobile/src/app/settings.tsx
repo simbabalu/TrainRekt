@@ -48,7 +48,7 @@ export default function SettingsScreen() {
       </SectionCard>
       {__DEV__ && (
         <SectionCard>
-          <Text style={styles.sectionTitle}>DEVELOPER</Text>
+          <Text style={styles.sectionTitle}>DEVELOPER TOOLS</Text>
           <Text style={styles.about}>Simulate the daily training rollover without changing the device clock.</Text>
           <View style={styles.resetButtons}>
             <Pressable onPress={debugSimulatePreviousDay} style={styles.resetButton}><Text style={styles.resetLabel}>Simulate previous day</Text></Pressable>
@@ -69,7 +69,7 @@ function SettingRow({ label, value, onChange }: { label: string; value: boolean;
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
+  sectionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
   segmented: { backgroundColor: Colors.secondaryCard, borderRadius: Radius.md, flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.lg, padding: Spacing.xs },
   segment: { alignItems: 'center', borderRadius: Radius.sm, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: Spacing.xs },
   selected: { backgroundColor: Colors.accent },

@@ -17,12 +17,14 @@ describe('evaluateSignatureSimulation', () => {
     const result = evaluateSignatureSimulation(maliciousExercise, 'reject');
     expect(result.isCorrect).toBe(true);
     expect(result.xpEarned).toBe(maliciousExercise.xpReward);
+    expect(result.riskIndicators).toEqual(maliciousExercise.riskIndicators);
   });
 
   it('treats signing a legitimate request as correct', () => {
     const result = evaluateSignatureSimulation(legitimateExercise, 'sign');
     expect(result.isCorrect).toBe(true);
     expect(result.xpEarned).toBe(legitimateExercise.xpReward);
+    expect(result.safeIndicators).toEqual(legitimateExercise.safeIndicators);
   });
 
   it('treats rejecting a legitimate request as incorrect', () => {

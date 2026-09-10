@@ -27,12 +27,16 @@ export interface SignatureRiskIndicator {
   severity: 'danger' | 'caution' | 'info';
 }
 
+export type SimulatedRequestAction =
+  | { kind: 'summary'; label: string }
+  | { kind: 'instruction'; instruction: string; program?: string; details?: readonly string[] };
+
 export interface SignatureSimulationExercise extends BaseTrainingExercise {
   type: 'signature-simulation';
   requestingApp: string;
   requestingDomain?: string;
   requestType: SignatureRequestType;
-  displayedActions: string[];
+  displayedActions: SimulatedRequestAction[];
   riskIndicators: SignatureRiskIndicator[];
   safeIndicators?: string[];
   learningPoints: string[];
@@ -48,4 +52,6 @@ export interface TrainingExerciseResult {
   title: string;
   explanation: string;
   learningPoints?: string[];
+  riskIndicators?: SignatureRiskIndicator[];
+  safeIndicators?: string[];
 }

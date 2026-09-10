@@ -14,5 +14,5 @@ export const Screen = forwardRef<ScrollView, PropsWithChildren>(function Screen(
 
 const styles = StyleSheet.create({
   safe: { backgroundColor: Colors.background, flex: 1 },
-  content: { gap: Spacing.lg, padding: Spacing.lg, paddingBottom: 110 },
+  content: { gap: Spacing.md, padding: Spacing.lg, paddingBottom: 110 },
 });
