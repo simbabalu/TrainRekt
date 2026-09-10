@@ -20,7 +20,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: storage }
 type ScenarioController = ReturnType<typeof useTrainingScenario>;
 
 function getCorrectAnswer(exercise: TrainingExercise): ExerciseAnswer {
-  return exercise.type === 'signature-simulation' ? exercise.expectedDecision : exercise.correctOptionId;
+  if (exercise.type === 'decision') return exercise.correctOptionId;
+  return exercise.expectedDecision;
 }
 
 describe('useTrainingScenario', () => {

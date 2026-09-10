@@ -4,13 +4,22 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, Spacing, Typography } from '@/constants/theme';
+import { AppIcon, type AppIconName } from '@/components/AppIcon';
+
+const tabIcons: Record<string, AppIconName> = {
+  Home: { ios: 'house.fill', android: 'home', web: 'home' },
+  Train: { ios: 'graduationcap.fill', android: 'school', web: 'school' },
+  Progress: { ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' },
+  Settings: { ios: 'gearshape.fill', android: 'settings', web: 'settings' },
+};
 
 export default function AppTabs() {
   return <Tabs><TabSlot style={{ height: '100%' }} /><TabList asChild><CustomTabList><TabTrigger name="home" href="/" asChild><TabButton>Home</TabButton></TabTrigger><TabTrigger name="train" href={'/train' as Href} asChild><TabButton>Train</TabButton></TabTrigger><TabTrigger name="progress" href="/explore" asChild><TabButton>Progress</TabButton></TabTrigger><TabTrigger name="settings" href={'/settings' as Href} asChild><TabButton>Settings</TabButton></TabTrigger></CustomTabList></TabList></Tabs>;
 }
 
 function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
-  return <Pressable {...props} style={[styles.tab, isFocused && styles.focused]}><Text style={[styles.tabLabel, isFocused && styles.focusedLabel]}>{children}</Text></Pressable>;
+  const label = String(children);
+  return <Pressable {...props} accessibilityLabel={label} style={[styles.tab, isFocused && styles.focused]}><AppIcon accessibilityLabel={`${label} tab`} name={tabIcons[label]} size={20} tintColor={isFocused ? Colors.accent : Colors.mutedText} /><Text style={[styles.tabLabel, isFocused && styles.focusedLabel]}>{children}</Text></Pressable>;
 }
 
 function CustomTabList(props: TabListProps) {
@@ -20,7 +29,7 @@ function CustomTabList(props: TabListProps) {
 
 const styles = StyleSheet.create({
   tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 80, paddingHorizontal: 0, paddingTop: 0, position: 'absolute', right: 0 },
-  tab: { alignItems: 'center', flex: 1, minHeight: 52, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.md },
+  tab: { alignItems: 'center', flex: 1, minHeight: 64, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.sm },
   focused: { backgroundColor: Colors.secondaryCard },
   tabLabel: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' },
   focusedLabel: { color: Colors.text },

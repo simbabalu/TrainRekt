@@ -1,0 +1,235 @@
+import { TransactionInspectionExercise } from '@/types/exercise';
+
+export const transactionInspectionCatalog: TransactionInspectionExercise[] = [
+  {
+    id: 'tx-normal-sol-transfer',
+    type: 'transaction-inspection',
+    title: 'Treasury Payout Transfer',
+    skill: 'walletSafety',
+    difficulty: 'Beginner',
+    xpReward: 130,
+    description: 'A known team treasury wallet is sending a fixed stipend to your wallet.',
+    requestingApp: 'Ops Console',
+    requestingDomain: 'ops.team-example.org',
+    transaction: {
+      network: 'solana-mainnet',
+      feeSol: 0.000005,
+      accountChanges: [],
+      tokenTransfers: [
+        {
+          asset: 'SOL',
+          amount: '0.45',
+          direction: 'in',
+          from: 'Team Treasury ...7Rm',
+          to: 'Your Wallet ...Bf2',
+        },
+      ],
+      programInvocations: [
+        { program: 'System Program', verified: true, purpose: 'Native SOL transfer' },
+      ],
+      instructions: [
+        { program: 'System Program', action: 'Transfer', details: ['From: Team Treasury', 'To: Your Wallet', 'Amount: 0.45 SOL'] },
+      ],
+    },
+    expectedDecision: 'approve',
+    explanation: 'This transaction performs a plain SOL transfer with no hidden authority or ownership changes.',
+    learningPoints: [
+      'A straightforward transfer on a verified program can be acceptable when counterparties are expected.',
+      'Always confirm direction and destination, even for simple transfers.',
+    ],
+    ruleToRemember: 'Approve only when value movement matches your intent and no control surfaces are modified.',
+  },
+  {
+    id: 'tx-authority-control-change',
+    type: 'transaction-inspection',
+    title: 'Reward Claim with Delegate Setup',
+    skill: 'walletSafety',
+    difficulty: 'Intermediate',
+    xpReward: 150,
+    description: 'A claim flow includes a token account delegate and close-authority update before payout.',
+    requestingApp: 'Claim Portal',
+    requestingDomain: 'claims.reward-portal.example',
+    transaction: {
+      network: 'solana-mainnet',
+      feeSol: 0.00001,
+      accountChanges: [
+        {
+          account: 'Token Account ...9Jq',
+          change: 'delegate-set',
+          detail: 'Delegate set to third-party account ...Q2m',
+        },
+        {
+          account: 'Token Account ...9Jq',
+          change: 'close-authority-changed',
+          detail: 'Close authority moved away from owner',
+        },
+      ],
+      tokenTransfers: [
+        {
+          asset: 'RWD',
+          amount: '120',
+          direction: 'in',
+          from: 'Reward Vault ...2Lp',
+          to: 'Your Wallet ...Bf2',
+        },
+      ],
+      programInvocations: [
+        { program: 'Token Program', verified: true, purpose: 'Token delegate and authority mutation' },
+        { program: 'Rewards Program v4', verified: false },
+      ],
+      instructions: [
+        { program: 'Token Program', action: 'Approve Delegate', details: ['Delegate: ...Q2m'] },
+        { program: 'Token Program', action: 'SetAuthority', details: ['Type: CloseAccount', 'New authority: ...Q2m'] },
+        { program: 'Token Program', action: 'TransferChecked', details: ['Amount: 120 RWD'] },
+      ],
+    },
+    expectedDecision: 'reject',
+    explanation: 'The claim adds persistent account-control changes that are unrelated to receiving a one-time payout.',
+    learningPoints: [
+      'Delegate and authority updates can grant ongoing control after the visible transfer is complete.',
+      'A reward claim should not require changing who can control or close your token account.',
+    ],
+    ruleToRemember: 'Reject if authority changes are unrelated to the stated action.',
+  },
+  {
+    id: 'tx-legit-swap-multi-program',
+    type: 'transaction-inspection',
+    title: 'DEX Swap Route Execution',
+    skill: 'walletSafety',
+    difficulty: 'Intermediate',
+    xpReward: 140,
+    description: 'A swap route uses a DEX aggregator and token program across two pools.',
+    requestingApp: 'RouteSwap',
+    requestingDomain: 'swap.routeswap.example',
+    transaction: {
+      network: 'solana-mainnet',
+      feeSol: 0.00002,
+      accountChanges: [],
+      tokenTransfers: [
+        {
+          asset: 'USDC',
+          amount: '25',
+          direction: 'out',
+          from: 'Your Wallet ...Bf2',
+          to: 'Pool Vault ...Ag9',
+        },
+        {
+          asset: 'SOL',
+          amount: '0.138',
+          direction: 'in',
+          from: 'Pool Vault ...7Yw',
+          to: 'Your Wallet ...Bf2',
+        },
+      ],
+      programInvocations: [
+        { program: 'RouteSwap Aggregator', verified: true, purpose: 'Find and execute swap route' },
+        { program: 'Token Program', verified: true, purpose: 'Token transfers' },
+      ],
+      instructions: [
+        { program: 'RouteSwap Aggregator', action: 'RouteSwap', details: ['Input: 25 USDC', 'Min output: 0.136 SOL'] },
+        { program: 'Token Program', action: 'TransferChecked', details: ['Debit: 25 USDC'] },
+        { program: 'Token Program', action: 'Transfer', details: ['Credit: 0.138 SOL equivalent'] },
+      ],
+    },
+    expectedDecision: 'approve',
+    explanation: 'The route invokes expected verified programs and only executes the intended in/out swap transfers.',
+    learningPoints: [
+      'Multi-program swaps can be legitimate when each program and transfer aligns with the swap intent.',
+      'Verify min-output and assets moved, not just the app branding.',
+    ],
+    ruleToRemember: 'Approve when all instructions match expected swap behavior and there are no extra control changes.',
+  },
+  {
+    id: 'tx-unknown-program-unexpected-movement',
+    type: 'transaction-inspection',
+    title: 'NFT Verification Prompt',
+    skill: 'walletSafety',
+    difficulty: 'Advanced',
+    xpReward: 160,
+    description: 'An NFT verifier asks to prove ownership, but the transaction includes additional token and NFT movements.',
+    requestingApp: 'Gallery Verify',
+    requestingDomain: 'verify.gallery-pass.example',
+    transaction: {
+      network: 'solana-mainnet',
+      feeSol: 0.00003,
+      accountChanges: [
+        {
+          account: 'Metadata PDA ...m2K',
+          change: 'data-write',
+          detail: 'Unknown metadata write requested by unverified program',
+        },
+      ],
+      tokenTransfers: [
+        {
+          asset: 'BONK',
+          amount: '4800',
+          direction: 'out',
+          from: 'Your Wallet ...Bf2',
+          to: 'Collector Wallet ...9Ad',
+        },
+        {
+          asset: 'Collection #128',
+          amount: '1',
+          direction: 'out',
+          from: 'Your Wallet ...Bf2',
+          to: 'Escrow ...Qv8',
+          isNft: true,
+        },
+      ],
+      programInvocations: [
+        { program: 'Unknown Program 9xQa...r2', verified: false },
+        { program: 'Token Program', verified: true, purpose: 'Asset movement' },
+      ],
+      instructions: [
+        { program: 'Unknown Program 9xQa...r2', action: 'VerifyAndLock', details: ['Escrow account: ...Qv8'] },
+        { program: 'Token Program', action: 'TransferChecked', details: ['BONK out: 4800'] },
+        { program: 'Token Program', action: 'Transfer', details: ['NFT out: Collection #128'] },
+      ],
+    },
+    expectedDecision: 'reject',
+    explanation: 'A verification flow should not require unknown-program writes and unrelated outgoing token/NFT transfers.',
+    learningPoints: [
+      'Verification prompts are common social-engineering wrappers for asset-drain transactions.',
+      'Unexpected outgoing NFT or token movement is a hard stop unless you explicitly initiated it.',
+    ],
+    ruleToRemember: 'Reject when unknown programs and unrequested outgoing assets appear together.',
+  },
+  {
+    id: 'tx-ambiguous-unfamiliar-flow',
+    type: 'transaction-inspection',
+    title: 'Protocol Migration Notice',
+    skill: 'walletSafety',
+    difficulty: 'Advanced',
+    xpReward: 150,
+    description: 'A protocol migration asks for approval with unfamiliar new program IDs and no immediate visible loss.',
+    requestingApp: 'Protocol Upgrade Center',
+    requestingDomain: 'migrate.protocol-upgrade.example',
+    transaction: {
+      network: 'solana-mainnet',
+      feeSol: 0.000025,
+      accountChanges: [
+        {
+          account: 'Position Account ...4Pk',
+          change: 'owner-changed',
+          detail: 'Ownership proposed from Program A to Program B',
+        },
+      ],
+      tokenTransfers: [],
+      programInvocations: [
+        { program: 'Legacy Program A', verified: true, purpose: 'Position management' },
+        { program: 'New Program B', verified: false },
+      ],
+      instructions: [
+        { program: 'Legacy Program A', action: 'BeginMigration', details: ['Target program: New Program B'] },
+        { program: 'New Program B', action: 'AcceptMigration', details: ['Position Account ...4Pk'] },
+      ],
+    },
+    expectedDecision: 'needs-review',
+    explanation: 'There is no immediate asset outflow, but ownership moves to an unfamiliar unverified program. Pause and verify externally first.',
+    learningPoints: [
+      'Not every ambiguous request is an instant reject if intent may be legitimate but unverified.',
+      'When ownership/control changes involve unknown programs, gather evidence before approval.',
+    ],
+    ruleToRemember: 'Use needs-review when control changes are plausible but not sufficiently verifiable in-session.',
+  },
+];

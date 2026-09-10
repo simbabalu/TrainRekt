@@ -4,6 +4,7 @@ import { Colors, Spacing, Training, Typography } from '@/constants/theme';
 import { DailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
 import { ProgressBar } from './ProgressBar';
 import { SectionCard } from './SectionCard';
+import { AppIcon } from './AppIcon';
 
 interface DailyGoalCardProps {
   goalProgress: DailyGoalProgress;
@@ -13,7 +14,7 @@ interface DailyGoalCardProps {
 export function DailyGoalCard({ goalProgress, dailyTrainingStreak }: DailyGoalCardProps) {
   return (
     <SectionCard>
-      <Text style={styles.title}>Daily goal</Text>
+      <View style={styles.titleRow}><AppIcon accessibilityLabel="Daily goal" name={{ ios: 'target', android: 'track_changes', web: 'track_changes' }} size={16} /><Text style={styles.title}>Daily goal</Text></View>
       <ProgressBar label={`${goalProgress.completed} / ${goalProgress.goal} decisions`} percentage={goalProgress.percentage} />
       {goalProgress.isComplete && (
         <View style={styles.completeBlock}>
@@ -27,7 +28,8 @@ export function DailyGoalCard({ goalProgress, dailyTrainingStreak }: DailyGoalCa
 }
 
 const styles = StyleSheet.create({
-  title: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2, marginBottom: Spacing.md },
+  titleRow: { alignItems: 'center', flexDirection: 'row', marginBottom: Spacing.md },
+  title: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
   completeBlock: { marginTop: Spacing.md },
   complete: { color: Colors.positive, fontSize: Typography.body, fontWeight: '800' },
   bonus: { color: Colors.positive, fontSize: Typography.small, fontWeight: '700', marginTop: Spacing.xs },

@@ -1,6 +1,7 @@
 import { transact, Web3MobileWallet } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 
 import type { ConnectedWallet, WalletConnectResult, WalletConnectionFailureReason, WalletDisconnectResult } from '@/types/wallet';
+import { normalizeMwaAccountAddress } from '@/domain/wallet/normalizeMwaAccountAddress';
 import type { MobileWalletService } from './mobileWalletService';
 
 const APP_IDENTITY = {
@@ -16,12 +17,6 @@ function toMessage(reason: WalletConnectionFailureReason): string {
   if (reason === 'unavailable') return 'Wallet adapter is unavailable on this device.';
   if (reason === 'unsupported') return 'Wallet connection is only available on Android development builds.';
   return 'Wallet connection failed. Please try again.';
-}
-
-function normalizeAddress(account: { address: string; display_address?: string }): string {
-  const displayAddress = account.display_address?.trim();
-  if (displayAddress) return displayAddress;
-  return account.address.trim();
 }
 
 function mapError(error: unknown): { reason: WalletConnectionFailureReason; message: string } {
@@ -54,12 +49,29 @@ function mapError(error: unknown): { reason: WalletConnectionFailureReason; mess
 function firstAuthorizedWallet(authorizationResult: {
   accounts: { address: string; label?: string; display_address?: string }[];
   auth_token?: string;
-}): { wallet: ConnectedWallet; authToken?: string } | null {
+}): { ok: true; wallet: ConnectedWallet; authToken?: string } | { ok: false; message: string } {
   const account = authorizationResult.accounts[0];
-  if (!account) return null;
+  if (!account) {
+    return {
+      ok: false,
+      message: 'Wallet authorization did not return an account.',
+    };
+  }
+
+  let canonicalAddress: string;
+  try {
+    canonicalAddress = normalizeMwaAccountAddress(account.address);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Wallet returned an invalid account address.',
+    };
+  }
+
   return {
+    ok: true,
     wallet: {
-      address: normalizeAddress(account),
+      address: canonicalAddress,
       label: account.label,
     },
     authToken: authorizationResult.auth_token,
@@ -77,11 +89,11 @@ export const mobileWalletServiceImpl: MobileWalletService = {
       });
 
       const authorizedWallet = firstAuthorizedWallet(authorizationResult);
-      if (!authorizedWallet) {
+      if (!authorizedWallet.ok) {
         return {
           ok: false,
           reason: 'failed',
-          message: 'Wallet authorization did not return an account.',
+          message: authorizedWallet.message,
         };
       }
 

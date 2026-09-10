@@ -33,6 +33,23 @@ export function DecisionResultPanel({ result, skill }: { result: TrainingExercis
           {result.learningPoints.map((point) => <View key={point} style={styles.learningPointRow}><Text style={styles.learningMarker}>•</Text><Text style={styles.learningPoint}>{point}</Text></View>)}
         </View>
       )}
+      {result.transactionInspection && (
+        <View style={styles.analysisBlock}>
+          <Text style={styles.lessonLabel}>TRANSACTION ANALYSIS</Text>
+          <Text style={styles.analysisDetail}>Network: {result.transactionInspection.network}</Text>
+          <Text style={styles.analysisDetail}>Fee: {result.transactionInspection.feeSol.toFixed(6)} SOL</Text>
+          {(result.transactionInspection.requestingApp || result.transactionInspection.requestingDomain) && (
+            <Text style={styles.analysisDetail}>Requester: {result.transactionInspection.requestingApp ?? 'Unknown'} ({result.transactionInspection.requestingDomain ?? 'Unknown domain'})</Text>
+          )}
+          {result.transactionInspection.programInvocations.map((program) => (
+            <View key={`${program.program}-${String(program.verified)}`} style={styles.analysisRow}>
+              <View style={[styles.analysisMarker, program.verified ? styles.info : styles.caution]} />
+              <Text style={styles.analysisDetail}>{program.program} ({program.verified ? 'verified' : 'unverified'})</Text>
+            </View>
+          ))}
+          {result.transactionInspection.ruleToRemember && <Text style={styles.explanation}>{result.transactionInspection.ruleToRemember}</Text>}
+        </View>
+      )}
     </SectionCard>
   );
 }

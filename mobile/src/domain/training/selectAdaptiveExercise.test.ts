@@ -24,11 +24,11 @@ describe('selectAdaptiveExercise', () => {
     expect(exercise.skill).toBe('scamAwareness');
   });
 
-  it('can select a signature-simulation exercise when walletSafety is the weakest skill', () => {
+  it('can select a walletSafety exercise when walletSafety is the weakest skill', () => {
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 10 } };
     const exercise = selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: 'Beginner' }, zeroRandom);
 
-    expect(exercise.type).toBe('signature-simulation');
+    expect(['signature-simulation', 'transaction-inspection']).toContain(exercise.type);
     expect(exercise.skill).toBe('walletSafety');
   });
 

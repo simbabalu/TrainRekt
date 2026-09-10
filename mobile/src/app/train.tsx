@@ -9,7 +9,9 @@ import { DecisionResultPanel } from '@/components/DecisionResultPanel';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { SignatureSimulationView } from '@/components/SignatureSimulationView';
+import { TransactionInspectionView } from '@/components/TransactionInspectionView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
+import { AppIcon } from '@/components/AppIcon';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { exerciseTypeLabels } from '@/constants/training';
 import { calculateDailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
@@ -18,7 +20,7 @@ import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComple
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
 import { DecisionId } from '@/types/scenario';
-import { SignatureDecision } from '@/types/exercise';
+import { SignatureDecision, TransactionInspectionDecision } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
@@ -47,8 +49,8 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
     <Screen ref={scrollRef}>
       <TrainingModeHeader mode={mode} step={step} />
       <View style={styles.metadata}>
-        <Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text>
-        <Text style={styles.difficulty}>{currentExercise.difficulty}</Text>
+        <View style={styles.metadataItem}><AppIcon accessibilityLabel="Exercise type" name={{ ios: 'square.grid.2x2.fill', android: 'category', web: 'category' }} size={16} /><Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text></View>
+        <View style={styles.metadataItem}><AppIcon accessibilityLabel="Difficulty" name={{ ios: 'dial.medium.fill', android: 'tune', web: 'tune' }} size={16} tintColor={Colors.mutedText} /><Text style={styles.difficulty}>{currentExercise.difficulty}</Text></View>
       </View>
 
       {currentExercise.type === 'decision' ? (
@@ -58,11 +60,17 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
           result={result}
           onSelect={submitAnswer}
         />
-      ) : (
+      ) : currentExercise.type === 'signature-simulation' ? (
         <SignatureSimulationView
           exercise={currentExercise}
           disabled={Boolean(result)}
           onSelect={(decision: SignatureDecision) => submitAnswer(decision)}
+        />
+      ) : (
+        <TransactionInspectionView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: TransactionInspectionDecision) => submitAnswer(decision)}
         />
       )}
 
@@ -84,5 +92,6 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
 const styles = StyleSheet.create({
   exerciseTypeLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2 },
   metadata: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingTop: Spacing.xs },
+  metadataItem: { alignItems: 'center', flexDirection: 'row' },
   difficulty: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
 });
