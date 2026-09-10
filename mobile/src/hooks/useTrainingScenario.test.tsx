@@ -1,6 +1,7 @@
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
+import { SettingsProvider } from '@/context/SettingsContext';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { useTrainingProgress } from './useTrainingProgress';
 import { useTrainingScenario } from './useTrainingScenario';
@@ -23,18 +24,19 @@ describe('useTrainingScenario', () => {
     }
 
     await act(async () => {
-      create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
       await Promise.resolve();
     });
 
     const initialXp = progress.totalXp;
     const initialSessions = progress.sessionsCompleted;
+    const expectedXp = controller.currentScenario.xpReward;
     act(() => {
-      controller.submitDecision('take-profit');
-      controller.submitDecision('take-profit');
+      controller.submitDecision(controller.currentScenario.correctOptionId);
+      controller.submitDecision(controller.currentScenario.correctOptionId);
     });
 
-    expect(progress.totalXp).toBe(initialXp + 120);
+    expect(progress.totalXp).toBe(initialXp + expectedXp);
     expect(progress.sessionsCompleted).toBe(initialSessions + 1);
     expect(progress.recentTrainingHistory).toHaveLength(4);
   });

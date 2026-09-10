@@ -23,9 +23,10 @@ The Android command opens the app on a connected device or emulator. The project
 ## Architecture
 
 - `src/data/` contains mock scenarios and progress records.
-- `src/data/scenarioCatalog.ts` contains the eight deterministic training scenarios.
+- `src/data/scenarioCatalog.ts` contains the twelve typed training scenarios.
 - `src/types/` contains domain interfaces and decision types.
 - `src/domain/training/` contains pure scenario evaluation logic.
+- `src/domain/training/` also contains weakest-skill and adaptive scenario selection logic.
 - `src/domain/progress/` contains pure XP, level, streak, skill, and history calculations.
 - `src/context/` owns the in-memory application progress state.
 - `src/hooks/` contains stateful training behavior.
@@ -58,6 +59,6 @@ npx expo export --platform android
 ## Current MVP limitations
 
 - Progress updates in memory when a training decision is submitted and resets when the app process restarts.
-- The catalog currently contains eight scenarios and rotates deterministically.
+- The catalog currently contains twelve scenarios. The next recommendation prioritizes weak skills, recent mistakes, selected difficulty, and scenario variety without immediately repeating the current scenario.
 - Settings are local React state and are not persisted.
 - There is no backend, wallet integration, Seed Vault integration, or real asset trading.

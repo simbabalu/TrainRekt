@@ -9,15 +9,15 @@ import { TodayTrainingCard } from '@/components/TodayTrainingCard';
 import { TrainingSummary } from '@/components/TrainingSummary';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { skillLabels } from '@/constants/training';
-import { scenarioCatalog } from '@/data/scenarioCatalog';
+import { getWeakestSkills } from '@/domain/training/getWeakestSkills';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
+import { useRecommendedTraining } from '@/hooks/useRecommendedTraining';
 import { SkillKey } from '@/types/progress';
-
-const previewSkills: SkillKey[] = ['fomoResistance', 'profitTaking'];
 
 export default function HomeScreen() {
   const { progress } = useTrainingProgress();
-  const trainingScenario = scenarioCatalog[0];
+  const trainingScenario = useRecommendedTraining();
+  const previewSkills: SkillKey[] = getWeakestSkills(progress.skillScores).slice(0, 2).map((entry) => entry.skill);
 
   return (
     <Screen>

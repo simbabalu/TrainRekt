@@ -8,7 +8,7 @@ const validSkills: SkillKey[] = ['riskManagement', 'profitTaking', 'fomoResistan
 
 describe('scenario catalog', () => {
   it('contains eight scenarios with unique IDs and valid options', () => {
-    expect(scenarioCatalog).toHaveLength(8);
+    expect(scenarioCatalog).toHaveLength(12);
     expect(new Set(scenarioCatalog.map((scenario) => scenario.id)).size).toBe(scenarioCatalog.length);
     scenarioCatalog.forEach((scenario) => {
       expect(scenario.options.length).toBeGreaterThanOrEqual(2);

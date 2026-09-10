@@ -2,17 +2,19 @@ import { useRef, useState } from 'react';
 
 import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { evaluateDecision } from '@/domain/training/evaluateDecision';
-import { selectNextScenarioIndex } from '@/domain/training/selectNextScenario';
+import { useRecommendedTraining } from '@/hooks/useRecommendedTraining';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { DecisionId, DecisionResult } from '@/types/scenario';
 
 export function useTrainingScenario() {
   const { recordTrainingResult } = useTrainingProgress();
-  const [scenarioIndex, setScenarioIndex] = useState(0);
+  const recommendedScenario = useRecommendedTraining();
+  const [currentScenarioId, setCurrentScenarioId] = useState(recommendedScenario.id);
   const [selectedDecision, setSelectedDecision] = useState<DecisionId | null>(null);
   const [result, setResult] = useState<DecisionResult | null>(null);
   const answeredScenarioId = useRef<string | null>(null);
-  const currentScenario = scenarioCatalog[scenarioIndex];
+  const currentScenario = scenarioCatalog.find((scenario) => scenario.id === currentScenarioId) ?? recommendedScenario;
+  const nextRecommendation = useRecommendedTraining(currentScenario.id);
 
   function submitDecision(decision: DecisionId) {
     if (answeredScenarioId.current === currentScenario.id) return;
@@ -24,7 +26,7 @@ export function useTrainingScenario() {
   }
 
   function nextScenario() {
-    setScenarioIndex((index) => selectNextScenarioIndex(index, scenarioCatalog.length));
+    setCurrentScenarioId(nextRecommendation.id);
     answeredScenarioId.current = null;
     setSelectedDecision(null);
     setResult(null);
