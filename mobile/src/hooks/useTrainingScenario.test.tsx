@@ -1,15 +1,18 @@
 import { act, create } from 'react-test-renderer';
-import { describe, expect, it } from 'vitest';
-
+import { describe, expect, it, vi } from 'vitest';
 import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
+import { TrainingProgressSnapshot } from '@/types/progress';
 import { useTrainingProgress } from './useTrainingProgress';
 import { useTrainingScenario } from './useTrainingScenario';
-import { TrainingProgressSnapshot } from '@/types/progress';
+
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined), removeItem: vi.fn().mockResolvedValue(undefined) },
+}));
 
 type ScenarioController = ReturnType<typeof useTrainingScenario>;
 
 describe('useTrainingScenario', () => {
-  it('does not award progress twice for duplicate decision presses', () => {
+  it('does not award progress twice for duplicate decision presses', async () => {
     let controller!: ScenarioController;
     let progress!: TrainingProgressSnapshot;
 
@@ -19,8 +22,9 @@ describe('useTrainingScenario', () => {
       return null;
     }
 
-    act(() => {
+    await act(async () => {
       create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+      await Promise.resolve();
     });
 
     const initialXp = progress.totalXp;
