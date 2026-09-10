@@ -7,9 +7,11 @@ import { SectionCard } from '@/components/SectionCard';
 import { StatCard } from '@/components/StatCard';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { mockScenarios } from '@/data/mockScenarios';
+import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
 export default function HomeScreen() {
   const challenge = mockScenarios[0];
+  const { progress } = useTrainingProgress();
 
   return (
     <Screen>
@@ -19,17 +21,17 @@ export default function HomeScreen() {
           <Text style={styles.subtitle}>Learn trading by surviving bad decisions.</Text>
         </View>
         <View style={styles.level}>
-          <Text style={styles.levelNumber}>7</Text>
+          <Text style={styles.levelNumber}>{progress.level}</Text>
           <Text style={styles.levelLabel}>LEVEL</Text>
         </View>
       </View>
 
       <Text style={styles.sectionTitle}>Your training desk</Text>
       <View style={styles.stats}>
-        <StatCard label="Training Score" value="742" detail="Intermediate" />
-        <StatCard label="Sessions completed" value="12" />
-        <StatCard label="Win rate" value="58%" />
-        <StatCard label="Current streak" value="4 days" />
+        <StatCard label="Training Score" value={String(progress.totalXp)} detail={`Level ${progress.level}`} />
+        <StatCard label="Sessions completed" value={String(progress.sessionsCompleted)} />
+        <StatCard label="Win rate" value={`${progress.winRate}%`} />
+        <StatCard label="Correct streak" value={String(progress.currentStreak)} detail="decisions" />
       </View>
 
       <Link href={'/train' as Href} asChild>

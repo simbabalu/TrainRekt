@@ -1,23 +1,21 @@
 import { TrainingProgress } from '@/types/progress';
 
 export const mockProgress: TrainingProgress = {
-  level: 7,
-  currentXp: 742,
-  nextLevelXp: 1000,
-  sessions: 12,
+  totalXp: 6742,
+  sessionsCompleted: 12,
   correctDecisions: 34,
   wrongDecisions: 25,
-  winRate: 58,
+  currentStreak: 4,
   bestStreak: 6,
-  skills: [
-    { name: 'Risk Management', percentage: 72 },
-    { name: 'Profit Taking', percentage: 65 },
-    { name: 'FOMO Resistance', percentage: 48 },
-    { name: 'Position Sizing', percentage: 81 },
-  ],
-  history: [
-    { scenarioTitle: 'SOL Momentum Trap', result: 'Correct', xpEarned: 120 },
-    { scenarioTitle: 'BTC Panic Sell', result: 'Wrong', xpEarned: 30 },
-    { scenarioTitle: 'Memecoin FOMO', result: 'Correct', xpEarned: 100 },
+  skillScores: {
+    riskManagement: 72,
+    profitTaking: 65,
+    fomoResistance: 48,
+    positionSizing: 81,
+  },
+  recentTrainingHistory: [
+    { id: 'history-sol-momentum-trap', scenarioId: 'sol-momentum-trap', scenarioTitle: 'SOL Momentum Trap', correct: true, skill: 'profitTaking', timestamp: '2026-09-10T08:00:00.000Z', xpEarned: 120 },
+    { id: 'history-btc-panic-sell', scenarioId: 'btc-panic-sell', scenarioTitle: 'BTC Panic Sell', correct: false, skill: 'riskManagement', timestamp: '2026-09-09T08:00:00.000Z', xpEarned: 30 },
+    { id: 'history-memecoin-fomo', scenarioId: 'memecoin-fomo', scenarioTitle: 'Memecoin FOMO', correct: true, skill: 'fomoResistance', timestamp: '2026-09-08T08:00:00.000Z', xpEarned: 100 },
   ],
 };

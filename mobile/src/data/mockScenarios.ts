@@ -7,6 +7,7 @@ export const mockScenarios: TrainingScenario[] = [
     difficulty: 'Intermediate',
     duration: '~2 min',
     reward: 120,
+    skill: 'profitTaking',
     market: 'SOL / USD',
     prompt: 'SOL has rallied 18% in four hours. Volume is increasing rapidly and social sentiment is extremely bullish. You entered at $178. Price is now $196.',
     question: 'What do you do?',

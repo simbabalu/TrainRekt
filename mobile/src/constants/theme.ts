@@ -46,6 +46,13 @@ export const Typography = {
   label: 11,
 } as const;
 
+export const Training = {
+  xpPerLevel: 1000,
+  correctSkillPoints: 2,
+  incorrectSkillPoints: -1,
+  maxHistoryEntries: 10,
+} as const;
+
 export type ThemeColor =
   | 'text'
   | 'background'

@@ -25,6 +25,8 @@ The Android command opens the app on a connected device or emulator. The project
 - `src/data/` contains mock scenarios and progress records.
 - `src/types/` contains domain interfaces and decision types.
 - `src/domain/training/` contains pure scenario evaluation logic.
+- `src/domain/progress/` contains pure XP, level, streak, skill, and history calculations.
+- `src/context/` owns the in-memory application progress state.
 - `src/hooks/` contains stateful training behavior.
 - `src/components/` contains reusable presentation components.
 - `src/constants/theme.ts` contains shared colors, spacing, radii, and typography.
@@ -54,7 +56,7 @@ npx expo export --platform android
 
 ## Current MVP limitations
 
-- Progress is mock data and does not update from training decisions yet.
+- Progress updates in memory when a training decision is submitted and resets when the app process restarts.
 - The app contains one training scenario.
 - Settings are local React state and are not persisted.
 - There is no backend, wallet integration, Seed Vault integration, or real asset trading.

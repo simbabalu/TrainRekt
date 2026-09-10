@@ -5,23 +5,28 @@ import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { mockProgress } from '@/data/mockProgress';
+import { skillLabels } from '@/constants/training';
+import { SkillKey } from '@/types/progress';
+import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
-const stats = [
-  ['Sessions', mockProgress.sessions],
-  ['Correct decisions', mockProgress.correctDecisions],
-  ['Wrong decisions', mockProgress.wrongDecisions],
-  ['Win rate', `${mockProgress.winRate}%`],
-  ['Best streak', mockProgress.bestStreak],
-] as const;
+const skillKeys: SkillKey[] = ['riskManagement', 'profitTaking', 'fomoResistance', 'positionSizing'];
 
 export default function ProgressScreen() {
-  const progressPercentage = (mockProgress.currentXp / mockProgress.nextLevelXp) * 100;
+  const { progress } = useTrainingProgress();
+  const progressPercentage = (progress.xpIntoCurrentLevel / progress.xpRequiredForNextLevel) * 100;
+  const stats = [
+    ['Sessions', progress.sessionsCompleted],
+    ['Correct decisions', progress.correctDecisions],
+    ['Wrong decisions', progress.wrongDecisions],
+    ['Win rate', `${progress.winRate}%`],
+    ['Current streak', progress.currentStreak],
+    ['Best streak', progress.bestStreak],
+  ] as const;
 
   return (
     <Screen>
-      <PageHeading eyebrow="PROGRESS" title={`Level ${mockProgress.level}`} />
-      <Text style={styles.xp}>{mockProgress.currentXp} XP <Text style={styles.xpMuted}>/ {mockProgress.nextLevelXp} XP</Text></Text>
+      <PageHeading eyebrow="PROGRESS" title={`Level ${progress.level}`} />
+      <Text style={styles.xp}>{progress.xpIntoCurrentLevel} XP <Text style={styles.xpMuted}>/ {progress.xpRequiredForNextLevel} XP</Text></Text>
       <View style={styles.track}><View style={[styles.fill, { width: `${progressPercentage}%` }]} /></View>
 
       <SectionCard>
@@ -33,12 +38,12 @@ export default function ProgressScreen() {
 
       <SectionCard>
         <Text style={styles.sectionTitle}>Skills</Text>
-        <View style={styles.skills}>{mockProgress.skills.map((skill) => <ProgressBar key={skill.name} label={skill.name} percentage={skill.percentage} />)}</View>
+        <View style={styles.skills}>{skillKeys.map((skill) => <ProgressBar key={skill} label={skillLabels[skill]} percentage={progress.skillScores[skill]} />)}</View>
       </SectionCard>
 
       <SectionCard>
         <Text style={styles.sectionTitle}>Recent history</Text>
-        <View style={styles.history}>{mockProgress.history.map((entry) => <View key={entry.scenarioTitle} style={styles.historyRow}><View><Text style={styles.historyTitle}>{entry.scenarioTitle}</Text><Text style={[styles.historyResult, entry.result === 'Correct' ? styles.positive : styles.negative]}>{entry.result}</Text></View><Text style={styles.historyXp}>+{entry.xpEarned} XP</Text></View>)}</View>
+        <View style={styles.history}>{progress.recentTrainingHistory.slice(0, 3).map((entry) => <View key={entry.id} style={styles.historyRow}><View><Text style={styles.historyTitle}>{entry.scenarioTitle}</Text><Text style={[styles.historyResult, entry.correct ? styles.positive : styles.negative]}>{entry.correct ? 'Correct' : 'Wrong'}</Text></View><Text style={styles.historyXp}>+{entry.xpEarned} XP</Text></View>)}</View>
       </SectionCard>
     </Screen>
   );

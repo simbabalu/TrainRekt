@@ -1,3 +1,5 @@
+import { SkillKey } from '@/types/progress';
+
 export type DecisionId = 'sell-all' | 'take-profit' | 'hold' | 'add-position';
 
 export interface MarketMetric {
@@ -17,6 +19,7 @@ export interface TrainingScenario {
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   duration: string;
   reward: number;
+  skill: SkillKey;
   market: string;
   prompt: string;
   question: string;

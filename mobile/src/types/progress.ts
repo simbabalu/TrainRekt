@@ -1,23 +1,33 @@
-export interface SkillProgress {
-  name: string;
-  percentage: number;
-}
+export type SkillKey = 'riskManagement' | 'profitTaking' | 'fomoResistance' | 'positionSizing';
+
+export type SkillScores = Record<SkillKey, number>;
 
 export interface HistoryEntry {
+  id: string;
+  scenarioId: string;
   scenarioTitle: string;
-  result: 'Correct' | 'Wrong';
+  correct: boolean;
+  skill: SkillKey;
+  timestamp: string;
   xpEarned: number;
 }
 
 export interface TrainingProgress {
-  level: number;
-  currentXp: number;
-  nextLevelXp: number;
-  sessions: number;
+  totalXp: number;
+  sessionsCompleted: number;
   correctDecisions: number;
   wrongDecisions: number;
-  winRate: number;
+  currentStreak: number;
   bestStreak: number;
-  skills: SkillProgress[];
-  history: HistoryEntry[];
+  skillScores: SkillScores;
+  recentTrainingHistory: HistoryEntry[];
 }
+
+export interface ProgressSummary {
+  level: number;
+  xpIntoCurrentLevel: number;
+  xpRequiredForNextLevel: number;
+  winRate: number;
+}
+
+export type TrainingProgressSnapshot = TrainingProgress & ProgressSummary;
