@@ -1,12 +1,13 @@
 import { Training } from '@/constants/theme';
 import { ProgressSummary, TrainingProgress } from '@/types/progress';
 
-export function calculateLevel(totalXp: number): Pick<ProgressSummary, 'level' | 'xpIntoCurrentLevel' | 'xpRequiredForNextLevel'> {
+export function calculateLevel(totalXp: number): Pick<ProgressSummary, 'level' | 'xpIntoCurrentLevel' | 'xpRequiredForNextLevel' | 'xpToNextLevel'> {
   const normalizedXp = Math.max(0, totalXp);
   return {
     level: Math.floor(normalizedXp / Training.xpPerLevel) + 1,
     xpIntoCurrentLevel: normalizedXp % Training.xpPerLevel,
     xpRequiredForNextLevel: Training.xpPerLevel,
+    xpToNextLevel: Training.xpPerLevel - (normalizedXp % Training.xpPerLevel),
   };
 }
 

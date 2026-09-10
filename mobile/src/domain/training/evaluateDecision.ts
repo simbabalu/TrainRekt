@@ -1,10 +1,10 @@
 import { DecisionResult, DecisionId, TrainingScenario } from '@/types/scenario';
 
 export function evaluateDecision(scenario: TrainingScenario, selectedDecision: DecisionId): DecisionResult {
-  const isCorrect = selectedDecision === scenario.correctDecision;
+  const isCorrect = selectedDecision === scenario.correctOptionId;
   return {
     isCorrect,
-    xpEarned: isCorrect ? scenario.reward : 30,
+    xpEarned: isCorrect ? scenario.xpReward : 30,
     title: isCorrect ? 'Good decision' : 'Risky decision',
     explanation: isCorrect
       ? scenario.explanation

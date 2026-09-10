@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { mockProgress } from '@/data/mockProgress';
-import { mockScenarios } from '@/data/mockScenarios';
+import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { applyTrainingResult } from './applyTrainingResult';
 import { createProgressSnapshot, calculateLevel, calculateWinRate } from './calculateLevel';
 import { evaluateDecision } from '@/domain/training/evaluateDecision';
 
-const scenario = mockScenarios[0];
+const scenario = scenarioCatalog[0];
 const metadata = { historyId: 'test-history', timestamp: '2026-09-10T12:00:00.000Z' };
 
 describe('progress calculations', () => {
@@ -24,7 +24,7 @@ describe('progress calculations', () => {
   });
 
   it('applies a correct result, streak, best streak, skill score, and history entry', () => {
-    const result = evaluateDecision(scenario, scenario.correctDecision);
+    const result = evaluateDecision(scenario, scenario.correctOptionId);
     const initial = { ...mockProgress, currentStreak: 2, bestStreak: 2 };
     const updated = applyTrainingResult(initial, scenario, result, metadata);
 
@@ -50,7 +50,7 @@ describe('progress calculations', () => {
   });
 
   it('clamps skill scores between zero and one hundred', () => {
-    const result = evaluateDecision(scenario, scenario.correctDecision);
+    const result = evaluateDecision(scenario, scenario.correctOptionId);
     const high = applyTrainingResult({ ...mockProgress, skillScores: { ...mockProgress.skillScores, profitTaking: 100 } }, scenario, result, metadata);
     const wrongResult = evaluateDecision(scenario, 'hold');
     const low = applyTrainingResult({ ...mockProgress, skillScores: { ...mockProgress.skillScores, profitTaking: 0 } }, scenario, wrongResult, metadata);
@@ -61,7 +61,7 @@ describe('progress calculations', () => {
 
   it('keeps history newest-first and limits it to ten entries', () => {
     const history = Array.from({ length: 10 }, (_, index) => ({ ...mockProgress.recentTrainingHistory[0], id: `existing-${index}` }));
-    const updated = applyTrainingResult({ ...mockProgress, recentTrainingHistory: history }, scenario, evaluateDecision(scenario, scenario.correctDecision), metadata);
+    const updated = applyTrainingResult({ ...mockProgress, recentTrainingHistory: history }, scenario, evaluateDecision(scenario, scenario.correctOptionId), metadata);
 
     expect(updated.recentTrainingHistory).toHaveLength(10);
     expect(updated.recentTrainingHistory[0].id).toBe(metadata.historyId);

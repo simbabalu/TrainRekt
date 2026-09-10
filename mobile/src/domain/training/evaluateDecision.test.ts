@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { mockScenarios } from '@/data/mockScenarios';
+import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { evaluateDecision } from './evaluateDecision';
 
-const scenario = mockScenarios[0];
+const scenario = scenarioCatalog[0];
 
 describe('evaluateDecision', () => {
   it('rewards the correct decision with the scenario reward', () => {
-    const result = evaluateDecision(scenario, scenario.correctDecision);
+    const result = evaluateDecision(scenario, scenario.correctOptionId);
 
     expect(result).toEqual({
       isCorrect: true,

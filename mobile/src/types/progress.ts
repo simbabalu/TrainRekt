@@ -1,4 +1,12 @@
-export type SkillKey = 'riskManagement' | 'profitTaking' | 'fomoResistance' | 'positionSizing';
+export type SkillKey =
+  | 'riskManagement'
+  | 'profitTaking'
+  | 'fomoResistance'
+  | 'positionSizing'
+  | 'scamAwareness'
+  | 'leverageRisk'
+  | 'panicSelling'
+  | 'marketInterpretation';
 
 export type SkillScores = Record<SkillKey, number>;
 
@@ -27,6 +35,7 @@ export interface ProgressSummary {
   level: number;
   xpIntoCurrentLevel: number;
   xpRequiredForNextLevel: number;
+  xpToNextLevel: number;
   winRate: number;
 }
 

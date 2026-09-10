@@ -12,6 +12,10 @@ export const mockProgress: TrainingProgress = {
     profitTaking: 65,
     fomoResistance: 48,
     positionSizing: 81,
+    scamAwareness: 50,
+    leverageRisk: 50,
+    panicSelling: 50,
+    marketInterpretation: 50,
   },
   recentTrainingHistory: [
     { id: 'history-sol-momentum-trap', scenarioId: 'sol-momentum-trap', scenarioTitle: 'SOL Momentum Trap', correct: true, skill: 'profitTaking', timestamp: '2026-09-10T08:00:00.000Z', xpEarned: 120 },

@@ -1,11 +1,34 @@
 import { SkillKey } from '@/types/progress';
 
-export type DecisionId = 'sell-all' | 'take-profit' | 'hold' | 'add-position';
+export type DecisionId =
+  | 'sell-all'
+  | 'take-profit'
+  | 'hold'
+  | 'add-position'
+  | 'do-not-chase'
+  | 'reduce-position-size'
+  | 'avoid-leverage'
+  | 'avoid-token'
+  | 'assess-thesis'
+  | 'wait-confirmation'
+  | 'skip-trade';
 
-export interface MarketMetric {
-  label: string;
-  value: string;
-  tone?: 'positive' | 'negative' | 'neutral';
+export interface MarketContext {
+  asset?: string;
+  price?: string;
+  entryPrice?: string;
+  pnl?: string;
+  rsi?: string;
+  volumeChange?: string;
+  fundingRate?: string;
+  liquidity?: string;
+  marketCap?: string;
+  leverage?: string;
+  socialSentiment?: string;
+  holderConcentration?: string;
+  liquidityLocked?: string;
+  timeHorizon?: string;
+  riskRewardRatio?: string;
 }
 
 export interface ScenarioOption {
@@ -16,16 +39,15 @@ export interface ScenarioOption {
 export interface TrainingScenario {
   id: string;
   title: string;
-  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
-  duration: string;
-  reward: number;
   skill: SkillKey;
-  market: string;
-  prompt: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  estimatedDuration: string;
+  xpReward: number;
+  marketContext: MarketContext;
+  description: string;
   question: string;
-  metrics: MarketMetric[];
   options: ScenarioOption[];
-  correctDecision: DecisionId;
+  correctOptionId: DecisionId;
   explanation: string;
 }
 
