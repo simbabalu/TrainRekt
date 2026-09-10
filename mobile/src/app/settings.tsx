@@ -4,13 +4,18 @@ import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { abbreviateWalletAddress } from '@/domain/wallet/abbreviateWalletAddress';
 import { difficultyOptions } from '@/types/settings';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
+import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
   const { settings, setDifficulty, setPreference, resetSettings } = useSettings();
   const { resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
+  const { status, wallet, error, connect, disconnect } = useWallet();
+  const isConnected = status === 'connected' && Boolean(wallet);
+  const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
 
   function confirmResetProgress() {
     Alert.alert('Reset training progress?', 'This will restore the default training score and history.', [
@@ -29,6 +34,19 @@ export default function SettingsScreen() {
   return (
     <Screen>
       <PageHeading eyebrow="SETTINGS" title="Make it yours" />
+      <SectionCard>
+        <Text style={styles.sectionTitle}>WALLET</Text>
+        <Text style={styles.walletStatus}>{walletStatusLabel}</Text>
+        {wallet?.address && <Text style={styles.walletAddress}>{abbreviateWalletAddress(wallet.address)}</Text>}
+        {error && <Text style={styles.walletError}>{error}</Text>}
+        <View style={styles.resetButtons}>
+          {isConnected ? (
+            <Pressable onPress={() => { void disconnect(); }} style={styles.walletButton}><Text style={styles.walletButtonLabel}>DISCONNECT</Text></Pressable>
+          ) : (
+            <Pressable onPress={() => { void connect(); }} disabled={status === 'connecting'} style={[styles.walletButton, status === 'connecting' && styles.walletButtonDisabled]}><Text style={styles.walletButtonLabel}>{status === 'connecting' ? 'CONNECTING...' : 'CONNECT WALLET'}</Text></Pressable>
+          )}
+        </View>
+      </SectionCard>
       <SectionCard>
         <Text style={styles.sectionTitle}>Training difficulty</Text>
         <View style={styles.segmented}>{difficultyOptions.map((option) => <Pressable key={option} onPress={() => setDifficulty(option)} style={[styles.segment, settings.difficulty === option && styles.selected]}><Text style={[styles.segmentLabel, settings.difficulty === option && styles.selectedLabel]}>{option}</Text></Pressable>)}</View>
@@ -75,6 +93,12 @@ const styles = StyleSheet.create({
   selected: { backgroundColor: Colors.accent },
   segmentLabel: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
   selectedLabel: { color: Colors.text },
+  walletStatus: { color: Colors.text, fontSize: Typography.body, fontWeight: '700', marginTop: Spacing.md },
+  walletAddress: { color: Colors.secondaryText, fontSize: Typography.body, marginTop: Spacing.xs },
+  walletError: { color: Colors.negative, fontSize: Typography.small, fontWeight: '600', marginTop: Spacing.md },
+  walletButton: { alignItems: 'center', borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: Spacing.md },
+  walletButtonDisabled: { opacity: 0.65 },
+  walletButtonLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '800' },
   settingRow: { alignItems: 'center', borderBottomColor: Colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 58 },
   settingLabel: { color: Colors.text, fontSize: Typography.body, fontWeight: '600' },
   about: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 23, marginTop: Spacing.md },

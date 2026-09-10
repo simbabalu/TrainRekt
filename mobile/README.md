@@ -1,6 +1,6 @@
 # TrainRekt Mobile
 
-TrainRekt is a local crypto decision-training simulator built with Expo, React Native, TypeScript, and Expo Router. It uses mock scenarios only: no real trades, wallet connections, backend, or persistent storage are included.
+TrainRekt is a local crypto decision-training simulator built with Expo, React Native, TypeScript, and Expo Router. It includes Android wallet connect/disconnect via Solana Mobile Wallet Adapter (MWA) for public-address identity only. Training simulations remain local and do not sign real transactions or messages.
 
 ## Run the app
 
@@ -8,10 +8,20 @@ From this directory:
 
 ```bash
 npm install
-npx expo start --android
+npx expo run:android --device
+npx expo start --dev-client --android --port 8081
 ```
 
-The Android command opens the app on a connected device or emulator. The project also supports Expo Go on Android.
+Expo Go is not sufficient for Android wallet functionality. Use an Android development build (`expo run:android`) and launch through `expo-dev-client`.
+
+JDK 17 is required for native Android builds in the current project setup:
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export ORG_GRADLE_JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+cd android
+./gradlew app:assembleDebug
+```
 
 ## App routes
 
@@ -29,11 +39,14 @@ The Android command opens the app on a connected device or emulator. The project
 - `src/domain/training/` also contains weakest-skill, adaptive scenario selection, and daily-goal/streak logic.
 - `src/domain/progress/` contains pure XP, level, streak, skill, and history calculations.
 - `src/context/` owns the persisted training progress and settings state.
+- `src/context/WalletContext.tsx` owns wallet lifecycle state (disconnected/connecting/connected/error) and keeps the MWA auth token in memory only.
 - `src/hooks/` contains stateful training behavior.
+- `src/hooks/useWallet.ts` is the only app-level hook for wallet actions.
 - `src/components/` contains reusable presentation components.
+- `src/services/wallet/` contains the wallet service boundary and platform-specific implementations.
 - `src/constants/theme.ts` contains shared colors, spacing, radii, and typography.
 
-The mock data boundary is intentional. It can later be replaced by API or persistent-storage adapters without moving business logic into screens.
+The wallet boundary is intentional: screens/components do not import MWA directly. Android native MWA calls stay behind `src/services/wallet/mobileWalletService`.
 
 ## Checks
 
@@ -59,7 +72,9 @@ npx expo export --platform android
 ## Current MVP limitations
 
 - Progress and settings persist locally through AsyncStorage and survive app restarts.
+- Wallet integration is limited to connect/disconnect and displaying a public address. There is no balance fetching, backend wallet session management, or transaction submission.
 - The daily training goal is fixed at 3 completed decisions with a one-time local-day completion bonus.
 - The catalog currently contains twelve scenarios. The next recommendation prioritizes weak skills, recent mistakes, selected difficulty, and scenario variety without immediately repeating the current scenario.
 - A `__DEV__`-only Settings control can simulate the previous local day to test daily rollover without changing the device clock. It is excluded from production builds.
-- There is no backend, wallet integration, Seed Vault integration, or real asset trading.
+- Signature Simulation SIGN/REJECT decisions are local training inputs only and do not call real wallet signing APIs.
+- There is no backend, Privy integration, direct Seed Vault API integration, or real asset trading.
