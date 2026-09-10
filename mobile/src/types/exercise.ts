@@ -2,7 +2,7 @@ import { TrainingScenario } from './scenario';
 import { SkillKey } from './progress';
 
 export type ExerciseDifficulty = 'Beginner' | 'Intermediate' | 'Advanced';
-export type ExerciseType = 'decision' | 'signature-simulation' | 'transaction-inspection';
+export type ExerciseType = 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge';
 
 export interface BaseTrainingExercise {
   id: string;
@@ -21,6 +21,15 @@ export interface DecisionExercise extends TrainingScenario {
 export type SignatureRequestType = 'message' | 'transaction' | 'authorization';
 export type SignatureDecision = 'sign' | 'reject';
 export type TransactionInspectionDecision = 'approve' | 'reject' | 'needs-review';
+export type PermissionChallengeDecision = 'allow' | 'reject' | 'needs-review';
+export type PermissionType = 'connect-wallet' | 'sign-message' | 'sign-transaction' | 'session-authorization' | 'unknown';
+
+export interface PermissionRequestItem {
+  label: string;
+  detail: string;
+  required: boolean;
+  scope: 'single-use' | 'session' | 'future-requests' | 'unknown';
+}
 
 export interface SignatureRiskIndicator {
   label: string;
@@ -90,7 +99,27 @@ export interface TransactionInspectionExercise extends BaseTrainingExercise {
   ruleToRemember?: string;
 }
 
-export type TrainingExercise = DecisionExercise | SignatureSimulationExercise | TransactionInspectionExercise;
+export interface PermissionChallengeExercise extends BaseTrainingExercise {
+  type: 'permission-challenge';
+  request: {
+    appName: string;
+    displayedDomain?: string;
+    requestedOrigin?: string;
+    permissionType: PermissionType;
+    permissions: PermissionRequestItem[];
+    contextualFacts?: string[];
+  };
+  expectedDecision: PermissionChallengeDecision;
+  postDecisionAnalysis: {
+    riskSignals?: string[];
+    reassuringSignals?: string[];
+  };
+  explanation: string;
+  learningPoints: string[];
+  ruleToRemember?: string;
+}
+
+export type TrainingExercise = DecisionExercise | SignatureSimulationExercise | TransactionInspectionExercise | PermissionChallengeExercise;
 
 export interface TransactionInspectionAnalysis {
   requestingApp?: string;
@@ -104,6 +133,18 @@ export interface TransactionInspectionAnalysis {
   ruleToRemember?: string;
 }
 
+export interface PermissionChallengeAnalysis {
+  appName: string;
+  displayedDomain?: string;
+  requestedOrigin?: string;
+  permissionType: PermissionType;
+  permissions: PermissionRequestItem[];
+  contextualFacts?: string[];
+  riskSignals?: string[];
+  reassuringSignals?: string[];
+  ruleToRemember?: string;
+}
+
 export interface TrainingExerciseResult {
   isCorrect: boolean;
   xpEarned: number;
@@ -113,4 +154,5 @@ export interface TrainingExerciseResult {
   riskIndicators?: SignatureRiskIndicator[];
   safeIndicators?: string[];
   transactionInspection?: TransactionInspectionAnalysis;
+  permissionChallenge?: PermissionChallengeAnalysis;
 }

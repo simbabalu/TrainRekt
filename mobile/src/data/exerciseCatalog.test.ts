@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
@@ -10,11 +11,13 @@ describe('exerciseCatalog', () => {
     const decisions = exerciseCatalog.filter((exercise) => exercise.type === 'decision');
     const signatures = exerciseCatalog.filter((exercise) => exercise.type === 'signature-simulation');
     const inspections = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
+    const permissionChallenges = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
 
-    expect(exerciseCatalog).toHaveLength(21);
+    expect(exerciseCatalog).toHaveLength(27);
     expect(decisions).toHaveLength(12);
     expect(signatures).toHaveLength(4);
     expect(inspections).toHaveLength(5);
+    expect(permissionChallenges).toHaveLength(6);
   });
 
   it('contains all decision exercises with type: decision', () => {
@@ -43,6 +46,17 @@ describe('exerciseCatalog', () => {
     inspections.forEach((inspection, index) => {
       expect(inspection.id).toBe(transactionInspectionCatalog[index].id);
       expect(inspection.skill).toBe('walletSafety');
+    });
+  });
+
+  it('contains all permission challenge exercises with type: permission-challenge', () => {
+    const permissionChallenges = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
+    expect(permissionChallenges).toHaveLength(permissionChallengeCatalog.length);
+    const runtimeIds = new Set(permissionChallenges.map((exercise) => exercise.id));
+    expect(runtimeIds).toEqual(new Set(permissionChallengeCatalog.map((exercise) => exercise.id)));
+    permissionChallenges.forEach((exercise, index) => {
+      expect(exercise.id).toBe(permissionChallengeCatalog[index].id);
+      expect(exercise.skill).toBe('walletSafety');
     });
   });
 
@@ -94,6 +108,21 @@ describe('exerciseCatalog', () => {
       expect(exercise.transaction.instructions.length).toBeGreaterThan(0);
       expect(exercise.transaction.programInvocations.length).toBeGreaterThan(0);
       expect(exercise.learningPoints.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('validates every permission challenge has typed request facts and post-decision analysis', () => {
+    const permissionChallenges = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
+    permissionChallenges.forEach((exercise) => {
+      expect(exercise).toHaveProperty('title');
+      expect(exercise).toHaveProperty('skill');
+      expect(exercise).toHaveProperty('difficulty');
+      expect(exercise).toHaveProperty('xpReward');
+      expect(exercise).toHaveProperty('description');
+      expect(['allow', 'reject', 'needs-review']).toContain(exercise.expectedDecision);
+      expect(exercise.request.permissions.length).toBeGreaterThan(0);
+      expect(exercise.learningPoints.length).toBeGreaterThan(0);
+      expect(exercise.postDecisionAnalysis).toBeDefined();
     });
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { mockProgress } from '@/data/mockProgress';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { calculateExerciseWeight, selectAdaptiveExercise } from './selectAdaptiveExercise';
@@ -96,6 +97,26 @@ describe('selectAdaptiveExercise', () => {
     expect(selected.type).toBe('transaction-inspection');
   });
 
+  it('can deterministically return a permission-challenge exercise in the real catalog flow', () => {
+    const permissionIdSet = new Set(permissionChallengeCatalog.map((exercise) => exercise.id));
+    const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
+    const currentExerciseId = signatureSimulationCatalog[0].id;
+    const candidatePool = exerciseCatalog.filter((exercise) => exercise.id !== currentExerciseId);
+    const sorted = candidatePool
+      .map((exercise) => ({ exercise, weight: calculateExerciseWeight(exercise, { exercises: exerciseCatalog, progress, difficulty: 'Intermediate', currentExerciseId }) }))
+      .sort((first, second) => second.weight - first.weight);
+    const totalWeight = sorted.reduce((sum, entry) => sum + entry.weight, 0);
+    const targetIndex = sorted.findIndex((entry) => permissionIdSet.has(entry.exercise.id));
+    if (targetIndex === -1) throw new Error('Expected permission challenge candidate in weighted pool.');
+
+    const cumulativeBefore = sorted.slice(0, targetIndex).reduce((sum, entry) => sum + entry.weight, 0);
+    const targetWeight = sorted[targetIndex].weight;
+    const randomValue = (cumulativeBefore + targetWeight / 2) / totalWeight;
+    const selected = selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: 'Intermediate', currentExerciseId }, () => randomValue);
+
+    expect(selected.type).toBe('permission-challenge');
+  });
+
   it('assigns finite positive weight to every eligible transaction-inspection exercise', () => {
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
 
@@ -128,7 +149,7 @@ describe('selectAdaptiveExercise', () => {
     expect(selected.id).not.toBe(firstInspection.id);
   });
 
-  it('can select all three exercise types under controlled inputs', () => {
+  it('can select all four exercise types under controlled inputs', () => {
     const customExercises: TrainingExercise[] = [
       {
         id: 'decision-only-test',
@@ -182,11 +203,32 @@ describe('selectAdaptiveExercise', () => {
         explanation: 'ok',
         learningPoints: ['Inspect instructions'],
       },
+      {
+        id: 'permission-only-test',
+        type: 'permission-challenge',
+        title: 'Permission Test',
+        skill: 'walletSafety',
+        difficulty: 'Beginner',
+        xpReward: 100,
+        description: 'Permission challenge test exercise',
+        request: {
+          appName: 'Test App',
+          displayedDomain: 'test.example',
+          requestedOrigin: 'test.example',
+          permissionType: 'connect-wallet',
+          permissions: [{ label: 'View address', detail: 'Read only', required: true, scope: 'session' }],
+        },
+        expectedDecision: 'allow',
+        postDecisionAnalysis: { reassuringSignals: ['Minimal scope'] },
+        explanation: 'ok',
+        learningPoints: ['Check origin and scope'],
+      },
     ];
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
 
     expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0).type).toBe('decision');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.5).type).toBe('signature-simulation');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.95).type).toBe('transaction-inspection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.4).type).toBe('signature-simulation');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.7).type).toBe('transaction-inspection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.95).type).toBe('permission-challenge');
   });
 });

@@ -10,6 +10,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { SignatureSimulationView } from '@/components/SignatureSimulationView';
 import { TransactionInspectionView } from '@/components/TransactionInspectionView';
+import { PermissionChallengeView } from '@/components/PermissionChallengeView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
 import { AppIcon } from '@/components/AppIcon';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -20,10 +21,11 @@ import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComple
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { SectionCard } from '@/components/SectionCard';
 import { DecisionId } from '@/types/scenario';
-import { SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
+import { PermissionChallengeDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
@@ -66,6 +68,8 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
 
   const firstDecision = exerciseCatalog.find((exercise) => exercise.type === 'decision');
   const firstSignature = exerciseCatalog.find((exercise) => exercise.type === 'signature-simulation');
+  const firstTransactionInspection = exerciseCatalog.find((exercise) => exercise.type === 'transaction-inspection');
+  const firstPermissionChallenge = exerciseCatalog.find((exercise) => exercise.type === 'permission-challenge');
 
   return (
     <Screen ref={scrollRef}>
@@ -96,8 +100,13 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
           <View style={styles.devButtons}>
             {firstDecision && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstDecision.id)}>Load decision</PrimaryButton>}
             {firstSignature && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstSignature.id)}>Load signature</PrimaryButton>}
+            {firstTransactionInspection && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstTransactionInspection.id)}>Load transaction inspection</PrimaryButton>}
+            {firstPermissionChallenge && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstPermissionChallenge.id)}>Load permission challenge</PrimaryButton>}
             {transactionInspectionCatalog.map((exercise) => (
-              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>{exercise.title}</PrimaryButton>
+              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>TX: {exercise.title}</PrimaryButton>
+            ))}
+            {permissionChallengeCatalog.map((exercise) => (
+              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>Permission: {exercise.title}</PrimaryButton>
             ))}
           </View>
         </SectionCard>
@@ -110,7 +119,7 @@ function renderExerciseByType(
   currentExercise: TrainingExercise,
   selectedAnswer: DecisionId | null,
   result: TrainingExerciseResult | null,
-  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision) => void,
+  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision) => void,
 ) {
   switch (currentExercise.type) {
     case 'decision':
@@ -136,6 +145,14 @@ function renderExerciseByType(
           exercise={currentExercise}
           disabled={Boolean(result)}
           onSelect={(decision: TransactionInspectionDecision) => submitAnswer(decision)}
+        />
+      );
+    case 'permission-challenge':
+      return (
+        <PermissionChallengeView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: PermissionChallengeDecision) => submitAnswer(decision)}
         />
       );
     default: {

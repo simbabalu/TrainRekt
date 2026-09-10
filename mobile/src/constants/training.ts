@@ -17,4 +17,5 @@ export const exerciseTypeLabels: Record<ExerciseType, string> = {
   decision: 'MARKET DECISION',
   'signature-simulation': 'WALLET SAFETY',
   'transaction-inspection': 'TRANSACTION INSPECTION',
+  'permission-challenge': 'PERMISSION CHECK',
 };

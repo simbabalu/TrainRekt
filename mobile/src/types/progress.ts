@@ -19,7 +19,7 @@ export interface HistoryEntry {
   skill: SkillKey;
   timestamp: string;
   xpEarned: number;
-  exerciseType?: 'decision' | 'signature-simulation' | 'transaction-inspection';
+  exerciseType?: 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge';
 }
 
 export interface DailyTrainingState {

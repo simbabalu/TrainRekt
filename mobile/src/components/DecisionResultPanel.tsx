@@ -50,6 +50,26 @@ export function DecisionResultPanel({ result, skill }: { result: TrainingExercis
           {result.transactionInspection.ruleToRemember && <Text style={styles.explanation}>{result.transactionInspection.ruleToRemember}</Text>}
         </View>
       )}
+      {result.permissionChallenge && (
+        <View style={styles.analysisBlock}>
+          <Text style={styles.lessonLabel}>PERMISSION ANALYSIS</Text>
+          <Text style={styles.analysisDetail}>App: {result.permissionChallenge.appName}</Text>
+          <Text style={styles.analysisDetail}>Permission type: {result.permissionChallenge.permissionType}</Text>
+          {result.permissionChallenge.riskSignals?.map((signal) => (
+            <View key={signal} style={styles.analysisRow}>
+              <View style={[styles.analysisMarker, styles.caution]} />
+              <Text style={styles.analysisDetail}>{signal}</Text>
+            </View>
+          ))}
+          {result.permissionChallenge.reassuringSignals?.map((signal) => (
+            <View key={signal} style={styles.analysisRow}>
+              <Text style={styles.safeMarker}>✓</Text>
+              <Text style={styles.analysisDetail}>{signal}</Text>
+            </View>
+          ))}
+          {result.permissionChallenge.ruleToRemember && <Text style={styles.explanation}>{result.permissionChallenge.ruleToRemember}</Text>}
+        </View>
+      )}
     </SectionCard>
   );
 }

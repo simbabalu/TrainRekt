@@ -17,6 +17,13 @@ describe('evaluateExercise', () => {
     expect(result.transactionInspection).toBeDefined();
   });
 
+  it('routes permission-challenge exercises to permission challenge evaluation', () => {
+    const exercise = exerciseCatalog.find((candidate) => candidate.type === 'permission-challenge')!;
+    const result = evaluateExercise(exercise, exercise.expectedDecision);
+    expect(result.isCorrect).toBe(true);
+    expect(result.permissionChallenge).toBeDefined();
+  });
+
   it('routes decision exercises to scenario evaluation', () => {
     const exercise = exerciseCatalog.find((candidate) => candidate.type === 'decision')!;
     const result = evaluateExercise(exercise, exercise.correctOptionId);
