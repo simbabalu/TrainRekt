@@ -15,11 +15,11 @@ function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
 
 function CustomTabList(props: TabListProps) {
   const insets = useSafeAreaInsets();
-  return <View {...props} style={[styles.tabList, { bottom: insets.bottom }]}>{props.children}</View>;
+  return <View {...props} style={[styles.tabList, { paddingBottom: Math.max(insets.bottom, Spacing.xl) }]}>{props.children}</View>;
 }
 
 const styles = StyleSheet.create({
-  tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, padding: 0, position: 'absolute', right: 0 },
+  tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 80, paddingHorizontal: 0, paddingTop: 0, position: 'absolute', right: 0 },
   tab: { alignItems: 'center', flex: 1, minHeight: 52, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.md },
   focused: { backgroundColor: Colors.secondaryCard },
   tabLabel: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' },
