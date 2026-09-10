@@ -24,7 +24,7 @@ export default function HomeScreen() {
       <PageHeading eyebrow="TRAINREKT" title="Train your crypto decisions" subtitle="Before they cost real money." />
       <LevelProgressCard summary={progress} totalXp={progress.totalXp} />
       <TrainingSummary progress={progress} />
-      <Link href={'/train' as Href} asChild><View><PrimaryButton onPress={() => undefined}>START TRAINING</PrimaryButton></View></Link>
+      <Link href={'/train' as Href} asChild><PrimaryButton onPress={() => undefined}>START TRAINING</PrimaryButton></Link>
       <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>TODAY&apos;S TRAINING</Text><Text style={styles.sectionHint}>One decision at a time</Text></View>
       <TodayTrainingCard scenario={trainingScenario} />
       <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>YOUR SKILLS</Text><Text style={styles.sectionHint}>Keep building</Text></View>
