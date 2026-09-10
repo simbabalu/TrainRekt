@@ -1,180 +1,65 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { PageHeading } from '@/components/PageHeading';
+import { ProgressBar } from '@/components/ProgressBar';
+import { Screen } from '@/components/Screen';
+import { SectionCard } from '@/components/SectionCard';
+import { Colors, Spacing, Typography } from '@/constants/theme';
+import { mockProgress } from '@/data/mockProgress';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
-  const theme = useTheme();
+const stats = [
+  ['Sessions', mockProgress.sessions],
+  ['Correct decisions', mockProgress.correctDecisions],
+  ['Wrong decisions', mockProgress.wrongDecisions],
+  ['Win rate', `${mockProgress.winRate}%`],
+  ['Best streak', mockProgress.bestStreak],
+] as const;
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+export default function ProgressScreen() {
+  const progressPercentage = (mockProgress.currentXp / mockProgress.nextLevelXp) * 100;
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <Screen>
+      <PageHeading eyebrow="PROGRESS" title={`Level ${mockProgress.level}`} />
+      <Text style={styles.xp}>{mockProgress.currentXp} XP <Text style={styles.xpMuted}>/ {mockProgress.nextLevelXp} XP</Text></Text>
+      <View style={styles.track}><View style={[styles.fill, { width: `${progressPercentage}%` }]} /></View>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+      <SectionCard>
+        <Text style={styles.sectionTitle}>Training stats</Text>
+        <View style={styles.stats}>
+          {stats.map(([label, value]) => <View key={label} style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>)}
+        </View>
+      </SectionCard>
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      <SectionCard>
+        <Text style={styles.sectionTitle}>Skills</Text>
+        <View style={styles.skills}>{mockProgress.skills.map((skill) => <ProgressBar key={skill.name} label={skill.name} percentage={skill.percentage} />)}</View>
+      </SectionCard>
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
-
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+      <SectionCard>
+        <Text style={styles.sectionTitle}>Recent history</Text>
+        <View style={styles.history}>{mockProgress.history.map((entry) => <View key={entry.scenarioTitle} style={styles.historyRow}><View><Text style={styles.historyTitle}>{entry.scenarioTitle}</Text><Text style={[styles.historyResult, entry.result === 'Correct' ? styles.positive : styles.negative]}>{entry.result}</Text></View><Text style={styles.historyXp}>+{entry.xpEarned} XP</Text></View>)}</View>
+      </SectionCard>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
-  },
+  xp: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
+  xpMuted: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '500' },
+  track: { backgroundColor: Colors.secondaryCard, borderRadius: 999, height: 8, overflow: 'hidden' },
+  fill: { backgroundColor: Colors.accent, borderRadius: 999, height: '100%' },
+  sectionTitle: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.lg, rowGap: Spacing.lg },
+  stat: { width: '33%' },
+  statValue: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
+  statLabel: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
+  skills: { gap: Spacing.lg, marginTop: Spacing.lg },
+  history: { gap: Spacing.lg, marginTop: Spacing.lg },
+  historyRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  historyTitle: { color: Colors.text, fontSize: Typography.body, fontWeight: '700' },
+  historyResult: { fontSize: Typography.small, fontWeight: '700', marginTop: Spacing.xs },
+  historyXp: { color: Colors.text, fontSize: Typography.body, fontWeight: '800' },
+  positive: { color: Colors.positive },
+  negative: { color: Colors.negative },
 });

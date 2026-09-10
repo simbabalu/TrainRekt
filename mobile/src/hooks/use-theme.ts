@@ -4,11 +4,15 @@
  */
 
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  return {
+    text: Colors.text,
+    background: Colors.background,
+    secondaryText: Colors.secondaryText,
+      textSecondary: Colors.secondaryText,
+      backgroundElement: Colors.card,
+      backgroundSelected: Colors.secondaryCard,
+    card: Colors.card,
+    accent: Colors.accent,
+  };
 }
