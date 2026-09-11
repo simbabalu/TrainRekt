@@ -6,6 +6,7 @@ import type { WalletInspectionCategorySummary, WalletInspectionSummary as Wallet
 interface WalletInspectionSummaryProps {
   summary: WalletInspectionSummaryModel;
   categorySummary: WalletInspectionCategorySummary;
+  showTechnicalBreakdown?: boolean;
 }
 
 function SummaryMetric({ label, value }: { label: string; value: number }) {
@@ -17,7 +18,7 @@ function SummaryMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function WalletInspectionSummary({ summary, categorySummary }: WalletInspectionSummaryProps) {
+export function WalletInspectionSummary({ summary, categorySummary, showTechnicalBreakdown = false }: WalletInspectionSummaryProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.reviewed}>{categorySummary.inspectedAccountCount} accounts inspected</Text>
@@ -27,13 +28,17 @@ export function WalletInspectionSummary({ summary, categorySummary }: WalletInsp
         <SummaryMetric label="NO REVIEW SIGNALS" value={categorySummary.noReviewSignalAccountCount} />
       </View>
       <Text style={styles.note}>Review categories are exclusive. Technical signals may overlap.</Text>
-      <Text style={styles.secondaryTitle}>Technical breakdown</Text>
-      <View style={styles.row}>
-        <SummaryMetric label="FROZEN" value={summary.frozenTokenAccounts} />
-        <SummaryMetric label="DELEGATED" value={summary.delegatedTokenAccounts} />
-        <SummaryMetric label="TOKEN-2022" value={summary.token2022TokenAccounts} />
-        <SummaryMetric label="EMPTY" value={summary.emptyTokenAccounts} />
-      </View>
+      {showTechnicalBreakdown && (
+        <>
+          <Text style={styles.secondaryTitle}>Technical breakdown</Text>
+          <View style={styles.row}>
+            <SummaryMetric label="FROZEN" value={summary.frozenTokenAccounts} />
+            <SummaryMetric label="DELEGATED" value={summary.delegatedTokenAccounts} />
+            <SummaryMetric label="TOKEN-2022" value={summary.token2022TokenAccounts} />
+            <SummaryMetric label="EMPTY" value={summary.emptyTokenAccounts} />
+          </View>
+        </>
+      )}
     </View>
   );
 }

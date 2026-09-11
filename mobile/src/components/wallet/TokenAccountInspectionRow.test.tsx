@@ -44,6 +44,7 @@ describe('TokenAccountInspectionRow', () => {
     });
 
     const collapsed = flattenText(renderer.toJSON());
+    expect(collapsed).toContain('Unknown Token');
     expect(collapsed).toContain('Mint:');
     expect(collapsed).toContain('DETAILS');
     expect(collapsed).toContain('TOKEN-2022');
@@ -62,6 +63,74 @@ describe('TokenAccountInspectionRow', () => {
     expect(expanded).toContain('STATE');
     expect(expanded).toContain('DELEGATE');
     expect(expanded).toContain('DELEGATED AMOUNT');
+    expect(expanded).toContain('canonical identifier');
+  });
+
+  it('shows token name and symbol when both are available', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAccountInspectionRow
+          account={account({ tokenDisplayMetadata: { mint: '7abcaP5gn3pW7N7fH9t9cY6wMxyuGvG3RkRkK4n4xYz', name: 'USD Coin', symbol: 'USDC' } })}
+        />,
+      );
+    });
+
+    const collapsed = flattenText(renderer.toJSON());
+    expect(collapsed).toContain('USD Coin');
+    expect(collapsed).toContain('USDC');
+    expect(collapsed).toContain('FROZEN');
+    expect(collapsed).toContain('DELEGATED');
+    expect(collapsed).not.toContain('Unknown Token');
+  });
+
+  it('shows token name only when symbol is unavailable', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAccountInspectionRow
+          account={account({ tokenDisplayMetadata: { mint: '7abcaP5gn3pW7N7fH9t9cY6wMxyuGvG3RkRkK4n4xYz', name: 'USD Coin', symbol: null } })}
+        />,
+      );
+    });
+
+    const collapsed = flattenText(renderer.toJSON());
+    expect(collapsed).toContain('USD Coin');
+    expect(collapsed).not.toContain('Unknown Token');
+  });
+
+  it('shows token symbol only when name is unavailable', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAccountInspectionRow
+          account={account({ tokenDisplayMetadata: { mint: '7abcaP5gn3pW7N7fH9t9cY6wMxyuGvG3RkRkK4n4xYz', name: null, symbol: 'USDC' } })}
+        />,
+      );
+    });
+
+    const collapsed = flattenText(renderer.toJSON());
+    expect(collapsed).toContain('USDC');
+    expect(collapsed).not.toContain('Unknown Token');
+  });
+
+  it('falls back to unknown token when metadata is missing or malformed', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAccountInspectionRow
+          account={account({ tokenDisplayMetadata: { mint: '7abcaP5gn3pW7N7fH9t9cY6wMxyuGvG3RkRkK4n4xYz', name: '   ', symbol: '' } })}
+        />,
+      );
+    });
+
+    const collapsed = flattenText(renderer.toJSON());
+    expect(collapsed).toContain('Unknown Token');
+    expect(collapsed).toContain('Mint:');
   });
 
   it('shows Unknown values for unknown state and unknown program', () => {

@@ -16,10 +16,13 @@ import { PermissionChallengeView } from '@/components/PermissionChallengeView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
 import { AppIcon } from '@/components/AppIcon';
 import { Colors, Spacing, Typography } from '@/constants/theme';
+import { DEV_EXERCISE_PICKER_ENABLED } from '@/constants/debug';
 import { exerciseTypeLabels } from '@/constants/training';
+import { getWalletLessonExerciseIds } from '@/data/walletLessonCatalog';
 import { calculateDailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
 import { getDailyTrainingStep } from '@/domain/training/getDailyTrainingStep';
 import { isDailyTrainingComplete } from '@/domain/training/isDailyTrainingComplete';
+import { getWalletTrainingTopicLabel } from '@/domain/wallet/recommendWalletTraining';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
@@ -31,16 +34,31 @@ import { SectionCard } from '@/components/SectionCard';
 import { DecisionId } from '@/types/scenario';
 import { PermissionChallengeDecision, RedFlagIdentificationAnswer, ScamDetectionDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
+import { isWalletTrainingTopic, WalletTrainingTopic } from '@/types/walletTraining';
 
-export default function TrainScreen() {
-  const params = useLocalSearchParams<{ mode?: string }>();
-  const mode = isTrainingMode(params.mode) ? params.mode : 'daily';
-  // Remount on mode change so a fresh exercise/result replaces any stale answered state.
-  return <TrainSession key={mode} mode={mode} />;
+function firstParam(value: string | string[] | undefined): string | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] : value;
 }
 
-function TrainSession({ mode }: { mode: TrainingMode }) {
-  const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise, debugSelectExercise } = useTrainingScenario(mode);
+export default function TrainScreen() {
+  const params = useLocalSearchParams<{ mode?: string | string[]; source?: string | string[]; topic?: string | string[]; exerciseId?: string | string[] }>();
+  const requestedMode = firstParam(params.mode);
+  const source = firstParam(params.source);
+  const requestedTopic = firstParam(params.topic);
+  const requestedExerciseId = firstParam(params.exerciseId);
+  const topic: WalletTrainingTopic | null = isWalletTrainingTopic(requestedTopic) ? requestedTopic : null;
+  const isWalletLesson = source === 'wallet';
+  const mode = isWalletLesson ? 'practice' : (isTrainingMode(requestedMode) ? requestedMode : 'daily');
+  const walletExerciseId = isWalletLesson
+    ? (requestedExerciseId || (topic ? getWalletLessonExerciseIds(topic)[0] : undefined))
+    : undefined;
+  // Remount on mode change so a fresh exercise/result replaces any stale answered state.
+  return <TrainSession key={`${mode}:${source ?? 'adaptive'}:${topic ?? ''}:${walletExerciseId ?? ''}`} mode={mode} source={isWalletLesson ? 'wallet' : 'adaptive'} topic={topic} initialExerciseId={walletExerciseId} />;
+}
+
+function TrainSession({ mode, source, topic, initialExerciseId }: { mode: TrainingMode; source: 'adaptive' | 'wallet'; topic: WalletTrainingTopic | null; initialExerciseId?: string }) {
+  const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise, debugSelectExercise } = useTrainingScenario(mode, { source, topic: topic ?? undefined, initialExerciseId });
   const { progress } = useTrainingProgress();
   const scrollRef = useRef<ScrollView>(null);
   const scrolledResultRef = useRef<typeof result>(null);
@@ -79,6 +97,12 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
 
   return (
     <Screen ref={scrollRef}>
+      {source === 'wallet' && topic ? (
+        <SectionCard>
+          <View style={styles.walletLessonHeader}><AppIcon accessibilityLabel="Wallet lesson" name={{ ios: 'shield.lefthalf.filled', android: 'shield', web: 'shield' }} size={16} /><Text style={styles.walletLessonEyebrow}>RECOMMENDED FROM WALLET</Text></View>
+          <Text style={styles.walletLessonTopic}>{getWalletTrainingTopicLabel(topic)}</Text>
+        </SectionCard>
+      ) : null}
       <TrainingModeHeader mode={mode} step={step} />
       <View style={styles.metadata}>
         <View style={styles.metadataItem}><AppIcon accessibilityLabel="Exercise type" name={{ ios: 'square.grid.2x2.fill', android: 'category', web: 'category' }} size={16} /><Text style={styles.exerciseTypeLabel}>{exerciseTypeLabels[currentExercise.type]}</Text></View>
@@ -99,7 +123,7 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
         </View>
       )}
 
-      {__DEV__ && (
+      {DEV_EXERCISE_PICKER_ENABLED && __DEV__ && (
         <SectionCard>
           <Text style={styles.devTitle}>DEV EXERCISE PICKER</Text>
           <Text style={styles.devSubtitle}>Loads the selected exercise through the normal Train session path.</Text>
@@ -200,4 +224,7 @@ const styles = StyleSheet.create({
   devTitle: { color: Colors.warning, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.1 },
   devSubtitle: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
   devButtons: { gap: Spacing.sm, marginTop: Spacing.md },
+  walletLessonHeader: { alignItems: 'center', flexDirection: 'row' },
+  walletLessonEyebrow: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1 },
+  walletLessonTopic: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', marginTop: Spacing.xs },
 });

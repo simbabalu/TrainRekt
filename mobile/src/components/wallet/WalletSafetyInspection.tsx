@@ -1,14 +1,18 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
+import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
 import { summarizeWalletInspection } from '@/domain/wallet/summarizeWalletInspection';
 import type { WalletSafetyInspection as WalletSafetyInspectionModel } from '@/types/walletInspection';
 import type { WalletInspectionStatus, WalletInspectionViewMode } from '@/hooks/useWalletSafetyInspection';
 import { TokenAccountInspectionRow } from './TokenAccountInspectionRow';
 import { WalletInspectionSummary } from './WalletInspectionSummary';
+import { WalletInspectionEducationDetails } from './WalletInspectionEducationDetails';
+import { WalletTrainingRecommendationCard } from './WalletTrainingRecommendationCard';
 
 interface WalletSafetyInspectionProps {
   connected: boolean;
@@ -29,10 +33,12 @@ function StatusText({ status, error, hasInspection }: { status: WalletInspection
 }
 
 export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh }: WalletSafetyInspectionProps) {
+  const router = useRouter();
   const tokenAccounts = inspection?.tokenAccounts ?? [];
   const summary = summarizeWalletInspection(tokenAccounts);
   const categorized = categorizeWalletInspectionAccounts(tokenAccounts);
   const categorySummary = categorized.summary;
+  const recommendations = recommendWalletTraining(tokenAccounts);
 
   const visibleAccounts = (() => {
     if (viewMode === 'all') return tokenAccounts;
@@ -74,7 +80,7 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   </View>
                 )}
 
-                <View style={styles.listSection}>
+                <View style={styles.findingsSection}>
                   <Text style={styles.sectionTitle}>{listTitle}</Text>
                   {viewMode === 'review' && categorized.reviewAccounts.length === 0 && (
                     <Text style={styles.info}>No review signals detected in the inspected token accounts.</Text>
@@ -89,16 +95,37 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   )}
                 </View>
 
-                <View style={styles.educationBox}>
-                  <Text style={styles.educationTitle}>WHY THIS MATTERS</Text>
-                  <Text style={styles.educationText}>
-                    Wallet permissions and token-account configuration are visible on-chain. Reviewing them can help you notice unexpected authorities or unusual account states.
-                  </Text>
-                  <Text style={styles.educationTitle}>REMEMBER</Text>
-                  <Text style={styles.educationText}>
-                    No review signals detected does not prove safety. These checks are educational prompts for closer inspection.
-                  </Text>
+                <View style={styles.lessonBox}>
+                  <Text style={styles.educationTitle}>LEARN FROM YOUR WALLET</Text>
+                  <Text style={styles.educationText}>Training topics based on public signals observed in this wallet.</Text>
+                  {recommendations.length === 0 ? (
+                    <Text style={styles.info}>No review signals found. You can still practice general wallet-safety lessons.</Text>
+                  ) : (
+                    <View style={styles.lessonList}>
+                      {recommendations.map((recommendation) => (
+                        <WalletTrainingRecommendationCard
+                          key={recommendation.topic}
+                          recommendation={recommendation}
+                          onStartLesson={(selectedRecommendation) => {
+                            const firstExerciseId = selectedRecommendation.recommendedExerciseIds[0];
+                            if (!firstExerciseId) return;
+                            router.push({
+                              pathname: '/train',
+                              params: {
+                                mode: 'practice',
+                                source: 'wallet',
+                                topic: selectedRecommendation.topic,
+                                exerciseId: firstExerciseId,
+                              },
+                            });
+                          }}
+                        />
+                      ))}
+                    </View>
+                  )}
                 </View>
+
+                <WalletInspectionEducationDetails summary={summary} />
 
                 <View style={styles.controlsBox}>
                   {categorySummary.informationalAccountCount > 0 && (
@@ -143,6 +170,10 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                     </PrimaryButton>
                   )}
                 </View>
+
+                <PrimaryButton onPress={onRefresh} disabled={status === 'loading'} variant="secondary">
+                  {status === 'loading' ? 'INSPECTING...' : status === 'unavailable' ? 'RETRY INSPECTION' : 'REFRESH INSPECTION'}
+                </PrimaryButton>
               </>
             )}
 
@@ -150,9 +181,11 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
               <Text style={styles.info}>Run inspection to load the latest public wallet-account signals.</Text>
             )}
 
-            <PrimaryButton onPress={onRefresh} disabled={status === 'loading'} variant="secondary">
-              {status === 'loading' ? 'INSPECTING...' : status === 'unavailable' ? 'RETRY INSPECTION' : 'REFRESH INSPECTION'}
-            </PrimaryButton>
+            {!canRenderInspection && (
+              <PrimaryButton onPress={onRefresh} disabled={status === 'loading'} variant="secondary">
+                {status === 'loading' ? 'INSPECTING...' : status === 'unavailable' ? 'RETRY INSPECTION' : 'REFRESH INSPECTION'}
+              </PrimaryButton>
+            )}
           </>
         )}
       </View>
@@ -198,14 +231,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.small,
     lineHeight: 18,
   },
-  educationBox: {
-    backgroundColor: Colors.secondaryCard,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: Spacing.sm,
-    padding: Spacing.md,
-  },
   educationTitle: {
     color: Colors.accent,
     fontSize: Typography.label,
@@ -217,7 +242,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.small,
     lineHeight: 20,
   },
-  listSection: {
+  findingsSection: {
     gap: Spacing.sm,
   },
   sectionTitle: {
@@ -228,6 +253,17 @@ const styles = StyleSheet.create({
   },
   controlsBox: {
     gap: Spacing.sm,
+  },
+  lessonBox: {
+    backgroundColor: Colors.secondaryCard,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: Spacing.sm,
+    padding: Spacing.md,
+  },
+  lessonList: {
+    gap: Spacing.md,
   },
   list: {
     gap: Spacing.sm,

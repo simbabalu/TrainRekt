@@ -4,6 +4,44 @@ import { describe, expect, it, vi } from 'vitest';
 import { WalletInspectionServiceError } from '@/types/walletInspection';
 import { WalletInspectionRpcService } from './walletInspectionService.impl';
 
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
+}
+
+function encodeBorshString(value: string): Uint8Array {
+  const text = new TextEncoder().encode(value);
+  const length = new Uint8Array(4);
+  new DataView(length.buffer).setUint32(0, text.length, true);
+  return concatBytes([length, text]);
+}
+
+function metadataAccountData(options: { mint: string; name: string; symbol: string }): Uint8Array {
+  const key = new Uint8Array([4]);
+  const updateAuthority = new Uint8Array(32);
+  const mint = new PublicKey(options.mint).toBytes();
+  return concatBytes([
+    key,
+    updateAuthority,
+    mint,
+    encodeBorshString(options.name),
+    encodeBorshString(options.symbol),
+  ]);
+}
+
+function createClient() {
+  return {
+    getParsedTokenAccountsByOwner: vi.fn(),
+    getMultipleAccountsInfo: vi.fn().mockResolvedValue([]),
+  };
+}
+
 function tokenAccountEntry(options: {
   tokenAccount: PublicKey;
   programOwner?: PublicKey | string;
@@ -43,12 +81,10 @@ function tokenAccountEntry(options: {
 describe('WalletInspectionRpcService', () => {
   it('returns empty inspection for wallet with zero token accounts', async () => {
     const owner = Keypair.generate().publicKey.toBase58();
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({ value: [] })
-        .mockResolvedValueOnce({ value: [] }),
-    };
+        .mockResolvedValueOnce({ value: [] });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -63,9 +99,8 @@ describe('WalletInspectionRpcService', () => {
     const mint = Keypair.generate().publicKey.toBase58();
     const tokenAccount = Keypair.generate().publicKey;
 
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -78,8 +113,7 @@ describe('WalletInspectionRpcService', () => {
             }),
           ],
         })
-        .mockResolvedValueOnce({ value: [] }),
-    };
+        .mockResolvedValueOnce({ value: [] });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -105,9 +139,8 @@ describe('WalletInspectionRpcService', () => {
     const mintB = Keypair.generate().publicKey.toBase58();
     const delegate = Keypair.generate().publicKey.toBase58();
 
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -133,8 +166,7 @@ describe('WalletInspectionRpcService', () => {
               state: 'initialized',
             }),
           ],
-        }),
-    };
+        });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -153,9 +185,8 @@ describe('WalletInspectionRpcService', () => {
 
   it('maps unsupported token-account state to unknown', async () => {
     const owner = Keypair.generate().publicKey.toBase58();
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -168,8 +199,7 @@ describe('WalletInspectionRpcService', () => {
             }),
           ],
         })
-        .mockResolvedValueOnce({ value: [] }),
-    };
+        .mockResolvedValueOnce({ value: [] });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -180,9 +210,8 @@ describe('WalletInspectionRpcService', () => {
   it('maps unexpected owner program to unknown program', async () => {
     const owner = Keypair.generate().publicKey.toBase58();
     const unknownProgram = Keypair.generate().publicKey;
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -196,8 +225,7 @@ describe('WalletInspectionRpcService', () => {
             }),
           ],
         })
-        .mockResolvedValueOnce({ value: [] }),
-    };
+        .mockResolvedValueOnce({ value: [] });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -209,9 +237,8 @@ describe('WalletInspectionRpcService', () => {
     const owner = Keypair.generate().publicKey.toBase58();
     const validTokenAccount = Keypair.generate().publicKey;
 
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             { pubkey: Keypair.generate().publicKey, account: { data: { parsed: { info: { mint: 'invalid', tokenAmount: { amount: 'x' } } } } } },
@@ -225,8 +252,7 @@ describe('WalletInspectionRpcService', () => {
             }),
           ],
         })
-        .mockResolvedValueOnce({ value: [] }),
-    };
+        .mockResolvedValueOnce({ value: [] });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -241,9 +267,8 @@ describe('WalletInspectionRpcService', () => {
     const duplicateTokenAccount = Keypair.generate().publicKey;
     const mint = Keypair.generate().publicKey.toBase58();
 
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -267,8 +292,7 @@ describe('WalletInspectionRpcService', () => {
               state: 'initialized',
             }),
           ],
-        }),
-    };
+        });
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -279,9 +303,8 @@ describe('WalletInspectionRpcService', () => {
 
   it('returns partial inspection when one token-program query fails', async () => {
     const owner = Keypair.generate().publicKey.toBase58();
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
         .mockResolvedValueOnce({
           value: [
             tokenAccountEntry({
@@ -294,8 +317,7 @@ describe('WalletInspectionRpcService', () => {
             }),
           ],
         })
-        .mockRejectedValueOnce(new Error('Token-2022 owner index unavailable')),
-    };
+        .mockRejectedValueOnce(new Error('Token-2022 owner index unavailable'));
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
     const inspection = await service.getInspection(owner);
@@ -306,12 +328,10 @@ describe('WalletInspectionRpcService', () => {
 
   it('fails inspection when both token-program queries fail', async () => {
     const owner = Keypair.generate().publicKey.toBase58();
-    const client = {
-      getParsedTokenAccountsByOwner: vi
-        .fn()
-        .mockRejectedValueOnce(new Error('fetch failed: timeout'))
-        .mockRejectedValueOnce(new Error('fetch failed: timeout')),
-    };
+    const client = createClient();
+    client.getParsedTokenAccountsByOwner
+      .mockRejectedValueOnce(new Error('fetch failed: timeout'))
+      .mockRejectedValueOnce(new Error('fetch failed: timeout'));
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
 
@@ -321,9 +341,7 @@ describe('WalletInspectionRpcService', () => {
   });
 
   it('maps invalid public wallet address errors', async () => {
-    const client = {
-      getParsedTokenAccountsByOwner: vi.fn(),
-    };
+    const client = createClient();
 
     const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
 
@@ -331,5 +349,191 @@ describe('WalletInspectionRpcService', () => {
       name: 'WalletInspectionServiceError',
       reason: 'invalid-address',
     });
+  });
+
+  it('enriches token account rows with metadata name and symbol by mint', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const mint = Keypair.generate().publicKey.toBase58();
+    const client = createClient();
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({
+            tokenAccount: Keypair.generate().publicKey,
+            mint,
+            rawAmount: '8',
+            decimals: 6,
+            uiAmount: 8,
+            state: 'initialized',
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ value: [] });
+
+    client.getMultipleAccountsInfo.mockResolvedValueOnce([
+      { data: metadataAccountData({ mint, name: 'USD Coin', symbol: 'USDC' }) },
+    ]);
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    const inspection = await service.getInspection(owner);
+
+    expect(inspection.tokenAccounts[0].tokenDisplayMetadata).toEqual({
+      mint,
+      name: 'USD Coin',
+      symbol: 'USDC',
+    });
+  });
+
+  it('uses metadata fallback when metadata payload is malformed', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const mint = Keypair.generate().publicKey.toBase58();
+    const client = createClient();
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({
+            tokenAccount: Keypair.generate().publicKey,
+            mint,
+            rawAmount: '1',
+            decimals: 0,
+            uiAmount: 1,
+            state: 'initialized',
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ value: [] });
+
+    client.getMultipleAccountsInfo.mockResolvedValueOnce([{ data: new Uint8Array([1, 2, 3]) }]);
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    const inspection = await service.getInspection(owner);
+
+    expect(inspection.tokenAccounts[0].tokenDisplayMetadata).toBeNull();
+  });
+
+  it('fails open when metadata lookup fails and still returns inspection signals', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const mint = Keypair.generate().publicKey.toBase58();
+    const delegate = Keypair.generate().publicKey.toBase58();
+    const client = createClient();
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({
+            tokenAccount: Keypair.generate().publicKey,
+            mint,
+            rawAmount: '0',
+            decimals: 6,
+            uiAmount: 0,
+            state: 'frozen',
+            delegate,
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ value: [] });
+
+    client.getMultipleAccountsInfo.mockRejectedValueOnce(new Error('metadata RPC failed'));
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    const inspection = await service.getInspection(owner);
+
+    expect(inspection.tokenAccounts).toHaveLength(1);
+    expect(inspection.tokenAccounts[0].state).toBe('frozen');
+    expect(inspection.tokenAccounts[0].delegateAddress).toBe(delegate);
+    expect(inspection.tokenAccounts[0].tokenDisplayMetadata).toBeNull();
+    expect(inspection.warnings).toContain('Token metadata lookup failed; showing canonical mint identifiers only.');
+  });
+
+  it('deduplicates metadata lookup work by mint and caches between refresh calls', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const mintA = Keypair.generate().publicKey.toBase58();
+    const mintB = Keypair.generate().publicKey.toBase58();
+    const client = createClient();
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({ tokenAccount: Keypair.generate().publicKey, mint: mintA, rawAmount: '2', decimals: 6, uiAmount: 2 }),
+          tokenAccountEntry({ tokenAccount: Keypair.generate().publicKey, mint: mintA, rawAmount: '3', decimals: 6, uiAmount: 3 }),
+          tokenAccountEntry({ tokenAccount: Keypair.generate().publicKey, mint: mintB, rawAmount: '4', decimals: 6, uiAmount: 4 }),
+        ],
+      })
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({ tokenAccount: Keypair.generate().publicKey, mint: mintA, rawAmount: '5', decimals: 6, uiAmount: 5 }),
+        ],
+      })
+      .mockResolvedValueOnce({ value: [] });
+
+    client.getMultipleAccountsInfo
+      .mockResolvedValueOnce([
+        { data: metadataAccountData({ mint: mintA, name: 'Token A', symbol: 'TKA' }) },
+        { data: metadataAccountData({ mint: mintB, name: 'Token B', symbol: 'TKB' }) },
+      ]);
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    const firstInspection = await service.getInspection(owner);
+    const secondInspection = await service.getInspection(owner);
+
+    expect(firstInspection.tokenAccounts).toHaveLength(3);
+    expect(secondInspection.tokenAccounts).toHaveLength(1);
+    expect(client.getMultipleAccountsInfo).toHaveBeenCalledTimes(1);
+    expect(client.getMultipleAccountsInfo.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it('resolves metadata for Token-2022 accounts through mint metadata PDA lookup', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const mint = Keypair.generate().publicKey.toBase58();
+    const client = createClient();
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({
+        value: [
+          tokenAccountEntry({
+            tokenAccount: Keypair.generate().publicKey,
+            mint,
+            rawAmount: '7',
+            decimals: 0,
+            uiAmount: 7,
+            state: 'initialized',
+          }),
+        ],
+      });
+
+    client.getMultipleAccountsInfo.mockResolvedValueOnce([
+      { data: metadataAccountData({ mint, name: 'Token Twenty Two', symbol: 'TT22' }) },
+    ]);
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    const inspection = await service.getInspection(owner);
+
+    expect(inspection.tokenAccounts[0].program).toBe('token-2022');
+    expect(inspection.tokenAccounts[0].tokenDisplayMetadata?.symbol).toBe('TT22');
+  });
+
+  it('never introduces signing or transaction calls in inspection flow', async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const signTransaction = vi.fn();
+    const sendTransaction = vi.fn();
+    const client = {
+      ...createClient(),
+      signTransaction,
+      sendTransaction,
+    };
+
+    client.getParsedTokenAccountsByOwner
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: [] });
+
+    const service = new WalletInspectionRpcService({ network: 'mainnet-beta', endpoint: 'https://rpc.test', client });
+    await service.getInspection(owner);
+
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(sendTransaction).not.toHaveBeenCalled();
   });
 });

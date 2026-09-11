@@ -32,6 +32,12 @@ function titleFromState(state: WalletTokenAccountInspection['state']): string {
   return 'Unknown';
 }
 
+function normalizeDisplayValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRowProps) {
   const [expanded, setExpanded] = useState(false);
   const signals = useMemo(
@@ -45,10 +51,16 @@ export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRow
     return 'normal';
   }, [signals]);
 
-  const reviewSignals = useMemo(
-    () => signals.filter((signal) => signal.category === 'review'),
-    [signals],
-  );
+  const tokenName = normalizeDisplayValue(account.tokenDisplayMetadata?.name);
+  const tokenSymbol = normalizeDisplayValue(account.tokenDisplayMetadata?.symbol);
+  const title = tokenName ?? tokenSymbol ?? 'Unknown Token';
+  const subtitle = tokenName && tokenSymbol
+    ? tokenSymbol
+    : tokenName
+      ? null
+      : tokenSymbol
+        ? null
+        : `Mint: ${abbreviateWalletAddress(account.mintAddress)}`;
 
   return (
     <Pressable
@@ -57,8 +69,8 @@ export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRow
     >
       <View style={styles.rowHeader}>
         <View style={styles.headerCopy}>
-          <Text style={styles.accountAddress}>{abbreviateWalletAddress(account.tokenAccountAddress)}</Text>
-          <Text style={styles.mintLine}>Mint: {abbreviateWalletAddress(account.mintAddress)}</Text>
+          <Text style={styles.tokenTitle}>{title}</Text>
+          {subtitle && <Text style={styles.tokenSubtitle}>{subtitle}</Text>}
         </View>
         <Text style={styles.expandLabel}>{expanded ? 'HIDE' : 'DETAILS'}</Text>
       </View>
@@ -71,21 +83,11 @@ export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRow
         </View>
       )}
 
-      {reviewSignals.length > 0 && (
-        <View style={styles.reviewNotes}>
-          {reviewSignals.map((signal) => (
-            <View key={`${account.tokenAccountAddress}:note:${signal.kind}`} style={styles.reviewNote}>
-              <Text style={styles.reviewNoteTitle}>{signal.title.toUpperCase()}</Text>
-              <Text style={styles.reviewNoteText}>{signal.educationalText}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
       {expanded && (
         <View style={styles.details}>
           <DetailRow label="TOKEN ACCOUNT" value={account.tokenAccountAddress} mono />
           <DetailRow label="MINT" value={account.mintAddress} mono />
+          <Text style={styles.detailHint}>Name/symbol are untrusted display metadata. Mint is the canonical identifier.</Text>
           <DetailRow label="PROGRAM" value={titleFromProgram(account.program)} />
           <DetailRow label="STATE" value={titleFromState(account.state)} />
           <DetailRow label="RAW AMOUNT" value={account.rawAmount} />
@@ -121,12 +123,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  accountAddress: {
+  tokenTitle: {
     color: Colors.text,
     fontSize: Typography.body,
     fontWeight: '800',
   },
-  mintLine: {
+  tokenSubtitle: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
   },
@@ -140,28 +142,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
-  },
-  reviewNotes: {
-    gap: Spacing.sm,
-  },
-  reviewNote: {
-    backgroundColor: Colors.card,
-    borderColor: Colors.border,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    gap: Spacing.half,
-    padding: Spacing.sm,
-  },
-  reviewNoteTitle: {
-    color: Colors.warning,
-    fontSize: Typography.label,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-  },
-  reviewNoteText: {
-    color: Colors.secondaryText,
-    fontSize: Typography.small,
-    lineHeight: 18,
   },
   details: {
     borderTopColor: Colors.border,
@@ -186,5 +166,10 @@ const styles = StyleSheet.create({
   },
   detailValueMono: {
     fontFamily: Fonts.mono,
+  },
+  detailHint: {
+    color: Colors.mutedText,
+    fontSize: Typography.small,
+    lineHeight: 18,
   },
 });

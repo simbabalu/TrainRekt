@@ -4,9 +4,16 @@ export type TokenAccountProgram = 'spl-token' | 'token-2022' | 'unknown';
 
 export type TokenAccountState = 'initialized' | 'frozen' | 'unknown';
 
+export interface TokenDisplayMetadata {
+  mint: string;
+  name: string | null;
+  symbol: string | null;
+}
+
 export interface WalletTokenAccountInspection {
   tokenAccountAddress: string;
   mintAddress: string;
+  tokenDisplayMetadata?: TokenDisplayMetadata | null;
   program: TokenAccountProgram;
   rawAmount: string;
   decimals: number;

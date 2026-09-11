@@ -1,20 +1,36 @@
 import { useRef, useState } from 'react';
 
 import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { evaluateExercise, ExerciseAnswer } from '@/domain/training/evaluateExercise';
 import { useRecommendedTraining } from '@/hooks/useRecommendedTraining';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { TrainingExerciseResult } from '@/types/exercise';
 import { TrainingMode } from '@/types/training';
+import type { WalletTrainingTopic } from '@/types/walletTraining';
 
-export function useTrainingScenario(mode: TrainingMode) {
+interface UseTrainingScenarioOptions {
+  source?: 'adaptive' | 'wallet';
+  topic?: WalletTrainingTopic;
+  initialExerciseId?: string;
+}
+
+function findExerciseById(exerciseId: string) {
+  return exerciseCatalog.find((exercise) => exercise.id === exerciseId)
+    ?? findWalletLessonExercise(exerciseId);
+}
+
+export function useTrainingScenario(mode: TrainingMode, options: UseTrainingScenarioOptions = {}) {
   const { recordTrainingResult } = useTrainingProgress();
   const recommendedExercise = useRecommendedTraining();
-  const [currentExerciseId, setCurrentExerciseId] = useState(recommendedExercise.id);
+  const initialExercise = options.initialExerciseId
+    ? findExerciseById(options.initialExerciseId)
+    : null;
+  const [currentExerciseId, setCurrentExerciseId] = useState(initialExercise?.id ?? recommendedExercise.id);
   const [selectedAnswer, setSelectedAnswer] = useState<ExerciseAnswer | null>(null);
   const [result, setResult] = useState<TrainingExerciseResult | null>(null);
   const answeredExerciseId = useRef<string | null>(null);
-  const currentExercise = exerciseCatalog.find((exercise) => exercise.id === currentExerciseId) ?? recommendedExercise;
+  const currentExercise = findExerciseById(currentExerciseId) ?? recommendedExercise;
   const nextRecommendation = useRecommendedTraining(currentExercise.id);
 
   function submitAnswer(answer: ExerciseAnswer) {
@@ -43,5 +59,16 @@ export function useTrainingScenario(mode: TrainingMode) {
     setResult(null);
   }
 
-  return { currentExercise, selectedAnswer, result, hasAnswered: Boolean(result), submitAnswer, nextExercise, debugSelectExercise };
+  return {
+    currentExercise,
+    selectedAnswer,
+    result,
+    hasAnswered: Boolean(result),
+    submitAnswer,
+    nextExercise,
+    debugSelectExercise,
+    source: options.source ?? 'adaptive',
+    topic: options.topic ?? null,
+    initialExerciseId: initialExercise?.id ?? null,
+  };
 }

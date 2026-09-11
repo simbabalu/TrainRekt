@@ -6,6 +6,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
+import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
 import { useWalletSafetyInspection } from '@/hooks/useWalletSafetyInspection';
 import { useWallet } from '@/hooks/useWallet';
 
@@ -16,6 +17,7 @@ export function HomeWalletSafetyCard() {
 
   const connected = walletStatus === 'connected' && Boolean(address);
   const categorySummary = inspection ? categorizeWalletInspectionAccounts(inspection.tokenAccounts).summary : null;
+  const recommendationCount = inspection ? recommendWalletTraining(inspection.tokenAccounts).length : 0;
 
   if (!connected) {
     return (
@@ -73,6 +75,9 @@ export function HomeWalletSafetyCard() {
           <Text style={styles.infoLabel}>INFORMATIONAL</Text>
         </View>
       </View>
+      {recommendationCount > 0 ? (
+        <Text style={styles.recommendationHint}>{recommendationCount} lesson{recommendationCount === 1 ? '' : 's'} recommended</Text>
+      ) : null}
       <PrimaryButton
         variant="secondary"
         onPress={() => {
@@ -141,5 +146,10 @@ const styles = StyleSheet.create({
     fontSize: Typography.label,
     fontWeight: '800',
     letterSpacing: 0.7,
+  },
+  recommendationHint: {
+    color: Colors.secondaryText,
+    fontSize: Typography.small,
+    marginBottom: Spacing.xs,
   },
 });

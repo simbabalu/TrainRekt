@@ -2,6 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
 import { SettingsProvider } from '@/context/SettingsContext';
+import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { mockProgress } from '@/data/mockProgress';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { ExerciseAnswer } from '@/domain/training/evaluateExercise';
@@ -87,5 +88,53 @@ describe('useTrainingScenario', () => {
     expect(progress.daily.todayCompletedDecisions).toBe(3);
     expect(progress.daily.dailyTrainingStreak).toBe(2);
     expect(progress.daily.dailyGoalCompleted).toBe(true);
+  });
+
+  it('loads a wallet-recommended lesson by exerciseId and records XP in practice mode without daily-goal increments', async () => {
+    const seededProgress = {
+      ...mockProgress,
+      daily: {
+        ...mockProgress.daily,
+        todayCompletedDecisions: 1,
+        dailyGoalCompleted: false,
+        dailyTrainingStreak: 2,
+      },
+    };
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 2, data: seededProgress }) : null));
+
+    let controller!: ScenarioController;
+    let progress!: TrainingProgressSnapshot;
+
+    function Harness() {
+      controller = useTrainingScenario('practice', {
+        source: 'wallet',
+        topic: 'token-account-state',
+        initialExerciseId: 'wallet-lesson-frozen-account-state',
+      });
+      progress = useTrainingProgress().progress;
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    const expectedExercise = findWalletLessonExercise('wallet-lesson-frozen-account-state');
+    expect(expectedExercise).toBeDefined();
+    expect(controller.currentExercise.id).toBe('wallet-lesson-frozen-account-state');
+
+    const initialXp = progress.totalXp;
+    const initialDailyCount = progress.daily.todayCompletedDecisions;
+    const initialDailyStreak = progress.daily.dailyTrainingStreak;
+
+    act(() => {
+      controller.submitAnswer(getCorrectAnswer(controller.currentExercise));
+    });
+
+    expect(progress.totalXp).toBe(initialXp + controller.currentExercise.xpReward);
+    expect(progress.daily.todayCompletedDecisions).toBe(initialDailyCount);
+    expect(progress.daily.dailyTrainingStreak).toBe(initialDailyStreak);
+    expect(progress.daily.dailyGoalCompleted).toBe(false);
   });
 });

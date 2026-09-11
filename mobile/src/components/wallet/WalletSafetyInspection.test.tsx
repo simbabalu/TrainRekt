@@ -5,12 +5,22 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WalletSafetyInspection as WalletSafetyInspectionModel } from '@/types/walletInspection';
 import { WalletSafetyInspection } from './WalletSafetyInspection';
 
+const pushMock = vi.hoisted(() => vi.fn());
+
+vi.mock('expo-router', () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
 vi.mock('@/components/PrimaryButton', () => ({
   PrimaryButton: ({ children, onPress, disabled }: { children: React.ReactNode; onPress: () => void; disabled?: boolean }) => React.createElement('Pressable', { onPress, disabled }, React.createElement('Text', null, children)),
 }));
 
 vi.mock('@/components/SectionCard', () => ({
   SectionCard: ({ children }: { children: React.ReactNode }) => React.createElement('View', null, children),
+}));
+
+vi.mock('@/components/AppIcon', () => ({
+  AppIcon: () => React.createElement('View', null),
 }));
 
 vi.mock('react-native', () => ({
@@ -24,6 +34,7 @@ function flattenText(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   if (Array.isArray(value)) return value.map(flattenText).join(' ');
   if (value && typeof value === 'object' && 'children' in value) return flattenText(value.children);
+  if (value && typeof value === 'object' && 'props' in value) return flattenText((value as { props?: { children?: unknown } }).props?.children);
   return '';
 }
 
@@ -95,7 +106,83 @@ describe('WalletSafetyInspection', () => {
     expect(text).toContain('FROZEN');
     expect(text).toContain('DELEGATED');
     expect(text).toContain('TOKEN-2022');
+    expect(text).toContain('LEARN FROM YOUR WALLET');
+    expect(text).toContain('TOKEN ACCOUNT STATES');
+    expect(text).toContain('DELEGATED AUTHORITY');
+    expect(/1\s+account\s+observed/.test(text)).toBe(true);
     expect(text).not.toContain('Signals found');
+  });
+
+  it('shows recommendations only for observed wallet signal topics', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      {
+        ...inspection.tokenAccounts[0],
+        tokenAccountAddress: 'only-token-2022',
+        state: 'initialized',
+        delegateAddress: null,
+        rawAmount: '10',
+      },
+    ];
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({ inspection }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('TOKEN-2022');
+    expect(text).not.toContain('DELEGATED AUTHORITY');
+    expect(text).not.toContain('TOKEN ACCOUNT STATES');
+    expect(text).not.toContain('EMPTY TOKEN ACCOUNTS');
+  });
+
+  it('routes START LESSON into Train practice mode with wallet source params', () => {
+    pushMock.mockReset();
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness());
+    });
+
+    const buttons = renderer.root.findAll((node) => String(node.type) === 'Pressable');
+    const startLessonButton = buttons.find((node) => flattenText(node).includes('START LESSON'));
+    expect(startLessonButton).toBeDefined();
+
+    act(() => {
+      startLessonButton?.props.onPress();
+    });
+
+    expect(pushMock).toHaveBeenCalledWith({
+      pathname: '/train',
+      params: expect.objectContaining({
+        mode: 'practice',
+        source: 'wallet',
+        topic: expect.any(String),
+        exerciseId: expect.any(String),
+      }),
+    });
+  });
+
+  it('renders neutral recommendation fallback when no wallet training topics are found', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      {
+        ...inspection.tokenAccounts[1],
+        tokenAccountAddress: 'normal-1',
+        program: 'spl-token',
+        rawAmount: '7',
+        state: 'initialized',
+        delegateAddress: null,
+      },
+    ];
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({ inspection }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('No review signals found. You can still practice general wallet-safety lessons.');
   });
 
   it('default view only lists accounts that need review', () => {
