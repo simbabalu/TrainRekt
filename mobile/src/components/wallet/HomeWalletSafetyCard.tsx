@@ -1,8 +1,10 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { AppIcon } from '@/components/AppIcon';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { SectionCard } from '@/components/SectionCard';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
 import { useWalletSafetyInspection } from '@/hooks/useWalletSafetyInspection';
 import { useWallet } from '@/hooks/useWallet';
@@ -17,8 +19,11 @@ export function HomeWalletSafetyCard() {
 
   if (!connected) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+      <SectionCard>
+        <View style={styles.heading}>
+          <AppIcon accessibilityLabel="Wallet safety" name={walletSafetyIcon} badge />
+          <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+        </View>
         <Text style={styles.description}>Inspect public on-chain wallet signals and learn what deserves attention.</Text>
         <PrimaryButton
           variant="secondary"
@@ -28,33 +33,36 @@ export function HomeWalletSafetyCard() {
         >
           CONNECT WALLET
         </PrimaryButton>
-      </View>
+      </SectionCard>
     );
   }
 
   if (!categorySummary) {
     return (
-      <Pressable
-        onPress={() => {
-          router.push('/wallet-safety');
-        }}
-        style={[styles.card, styles.compactCard]}
-      >
-        <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+      <SectionCard>
+        <View style={styles.heading}>
+          <AppIcon accessibilityLabel="Wallet safety" name={walletSafetyIcon} badge />
+          <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+        </View>
         <Text style={styles.connectedLabel}>Wallet connected</Text>
-        <Text style={styles.linkLabel}>CHECK WALLET {'>'}</Text>
-      </Pressable>
+        <PrimaryButton
+          variant="secondary"
+          onPress={() => {
+            router.push('/wallet-safety');
+          }}
+        >
+          CHECK WALLET
+        </PrimaryButton>
+      </SectionCard>
     );
   }
 
   return (
-    <Pressable
-      onPress={() => {
-        router.push('/wallet-safety');
-      }}
-      style={[styles.card, styles.compactCard]}
-    >
-      <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+    <SectionCard>
+      <View style={styles.heading}>
+        <AppIcon accessibilityLabel="Wallet safety" name={walletSafetyIcon} badge />
+        <Text style={styles.eyebrow}>WALLET SAFETY</Text>
+      </View>
       <View style={styles.metricRow}>
         <View style={styles.metricBlock}>
           <Text style={styles.reviewCount}>{categorySummary.reviewAccountCount}</Text>
@@ -65,22 +73,26 @@ export function HomeWalletSafetyCard() {
           <Text style={styles.infoLabel}>INFORMATIONAL</Text>
         </View>
       </View>
-      <Text style={styles.linkLabel}>Review your connected wallet {'>'}</Text>
-    </Pressable>
+      <PrimaryButton
+        variant="secondary"
+        onPress={() => {
+          router.push('/wallet-safety');
+        }}
+      >
+        REVIEW WALLET
+      </PrimaryButton>
+    </SectionCard>
   );
 }
 
+const walletSafetyIcon = { ios: 'shield.lefthalf.filled', android: 'shield', web: 'shield' } as const;
+
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.card,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
+  heading: {
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: Spacing.sm,
-    padding: Spacing.lg,
-  },
-  compactCard: {
-    paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
   },
   eyebrow: {
     color: Colors.text,
@@ -101,6 +113,7 @@ const styles = StyleSheet.create({
   metricRow: {
     flexDirection: 'row',
     gap: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   metricBlock: {
     gap: Spacing.half,
@@ -128,11 +141,5 @@ const styles = StyleSheet.create({
     fontSize: Typography.label,
     fontWeight: '800',
     letterSpacing: 0.7,
-  },
-  linkLabel: {
-    color: Colors.accent,
-    fontSize: Typography.small,
-    fontWeight: '800',
-    letterSpacing: 0.4,
   },
 });

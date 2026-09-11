@@ -33,6 +33,14 @@ vi.mock('@/components/PrimaryButton', () => ({
   PrimaryButton: ({ children, onPress, disabled }: { children: React.ReactNode; onPress: () => void; disabled?: boolean }) => React.createElement('Pressable', { onPress, disabled }, React.createElement('Text', null, children)),
 }));
 
+vi.mock('@/components/SectionCard', () => ({
+  SectionCard: ({ children }: { children: React.ReactNode }) => React.createElement('View', null, children),
+}));
+
+vi.mock('@/components/AppIcon', () => ({
+  AppIcon: () => React.createElement('View', null),
+}));
+
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   StyleSheet: { create: (styles: unknown) => styles },
@@ -228,7 +236,7 @@ describe('HomeWalletSafetyCard', () => {
     expect(text).toContain('1');
     expect(text).toContain('NEED REVIEW');
     expect(text).toContain('INFORMATIONAL');
-    expect(text).toContain('Review your connected wallet');
+    expect(text).toContain('REVIEW WALLET');
   });
 
   it('does not show balances, prices, account list, or technical breakdown on Home card', () => {

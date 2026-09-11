@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import ProgressScreen from '@/app/(tabs)/explore';
 
-const pushMock = vi.hoisted(() => vi.fn());
-
 vi.mock('@/components/Screen', () => ({
   Screen: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -20,7 +18,7 @@ vi.mock('@/components/PrimaryButton', () => ({
 }));
 
 vi.mock('expo-router', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
@@ -78,29 +76,19 @@ function renderedText(value: unknown): string {
   return '';
 }
 
-describe('Progress wallet safety entry', () => {
-  it('navigates to wallet safety route when CTA is pressed', () => {
+describe('Progress screen focus', () => {
+  it('does not render wallet-safety UI', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(<ProgressScreen />);
     });
 
     const text = renderedText(renderer.toJSON());
-    expect(text).toContain('WALLET SAFETY');
-    expect(text).toContain('READ ONLY');
-    expect(text).toContain('No signature required');
-    expect(text).toContain('OPEN WALLET SAFETY');
-
-    const buttonNode = renderer.root.findAll((node) => String(node.type) === 'Pressable')[0];
-
-    expect(buttonNode).toBeDefined();
-    expect(buttonNode.props.disabled).toBeFalsy();
-
-    act(() => {
-      buttonNode.props.onPress();
-    });
-
-    expect(pushMock).toHaveBeenCalledTimes(1);
-    expect(pushMock).toHaveBeenCalledWith('/wallet-safety');
+    expect(text).not.toContain('WALLET SAFETY');
+    expect(text).not.toContain('READ ONLY');
+    expect(text).not.toContain('OPEN WALLET SAFETY');
+    expect(text).toContain('TRAINING STATS');
+    expect(text).toContain('DAILY TRAINING');
+    expect(text).toContain('SKILLS');
   });
 });

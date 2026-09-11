@@ -1,9 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import { LevelProgressCard } from '@/components/LevelProgressCard';
 import { PageHeading } from '@/components/PageHeading';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
@@ -28,25 +26,14 @@ function SectionHeader({ title, iconName, iconLabel }: { title: string; iconName
 }
 
 export default function ProgressScreen() {
-  const router = useRouter();
   const { progress } = useTrainingProgress();
   const stats = [['Sessions', progress.sessionsCompleted], ['Correct', progress.correctDecisions], ['Wrong', progress.wrongDecisions], ['Accuracy', `${progress.winRate}%`], ['Best streak', progress.bestStreak]] as const;
   const dailyGoalProgress = calculateDailyGoalProgress(progress.daily);
-
-  function handleOpenWalletSafety() {
-    router.push('/wallet-safety');
-  }
 
   return (
     <Screen>
       <PageHeading eyebrow="PROGRESS" title="Your training progress" />
       <LevelProgressCard summary={progress} totalXp={progress.totalXp} />
-      <SectionCard>
-        <SectionHeader title="WALLET SAFETY" iconName={{ ios: 'shield.lefthalf.filled', android: 'shield', web: 'shield' }} iconLabel="Wallet safety" />
-        <Text style={styles.walletSafetyCopy}>Run a read-only snapshot using your connected public wallet address.</Text>
-        <Text style={styles.walletSafetyReadOnly}>READ ONLY • No signature required</Text>
-        <PrimaryButton onPress={handleOpenWalletSafety}>OPEN WALLET SAFETY</PrimaryButton>
-      </SectionCard>
       <SectionCard><SectionHeader title="TRAINING STATS" iconName={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }} iconLabel="Training stats" /><View style={styles.stats}>{stats.map(([label, value]) => <View key={label} style={styles.stat}><AppIcon accessibilityLabel={label} name={statIcons[label]} size={16} tintColor={Colors.mutedText} /><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>)}</View><Text style={styles.currentStreak}>Current streak: {progress.currentStreak} correct</Text></SectionCard>
       <SectionCard>
         <SectionHeader title="DAILY TRAINING" iconName={{ ios: 'calendar.badge.checkmark', android: 'event_available', web: 'event_available' }} iconLabel="Daily training" />
@@ -65,8 +52,6 @@ export default function ProgressScreen() {
 const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', gap: Spacing.md },
-  walletSafetyCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20, marginTop: Spacing.md },
-  walletSafetyReadOnly: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800', marginTop: Spacing.sm, marginBottom: Spacing.md },
   stats: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.md, rowGap: Spacing.md },
   stat: { width: '33%' },
   statValue: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
