@@ -22,10 +22,12 @@ const firstSignature = exerciseCatalog.find((exercise) => exercise.type === 'sig
 const inspectionExercises = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
 const permissionExercises = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
 const scamExercises = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
+const redFlagExercises = exerciseCatalog.filter((exercise) => exercise.type === 'red-flag-identification');
 const firstInspection = inspectionExercises[0]!;
 const secondInspection = inspectionExercises[1]!;
 const firstPermission = permissionExercises[0]!;
 const firstScam = scamExercises[0]!;
+const firstRedFlag = redFlagExercises[0]!;
 
 Object.defineProperty(globalThis, '__DEV__', {
   value: true,
@@ -34,6 +36,7 @@ Object.defineProperty(globalThis, '__DEV__', {
 
 function getCorrectAnswer(exercise: (typeof exerciseCatalog)[number]) {
   if (exercise.type === 'decision') return exercise.correctOptionId;
+  if (exercise.type === 'red-flag-identification') return { selectedRedFlagIds: exercise.expectedRedFlagIds };
   return exercise.expectedDecision;
 }
 
@@ -156,6 +159,30 @@ describe('useTrainingScenario NEXT flow', () => {
       controller.nextExercise();
     });
     expect(controller.currentExercise.type).toBe('decision');
+  });
+
+  it('transitions red-flag-identification -> another eligible exercise via NEXT', () => {
+    useRecommendedTrainingMock.mockImplementation((currentExerciseId?: string | null) => {
+      if (!currentExerciseId) return firstRedFlag;
+      if (currentExerciseId === firstRedFlag.id) return firstPermission;
+      return secondInspection;
+    });
+
+    let controller!: ScenarioController;
+    function Harness() {
+      controller = useTrainingScenario('practice');
+      return null;
+    }
+
+    act(() => {
+      create(<Harness />);
+    });
+    expect(controller.currentExercise.id).toBe(firstRedFlag.id);
+
+    act(() => {
+      controller.nextExercise();
+    });
+    expect(controller.currentExercise.type).toBe('permission-challenge');
   });
 
   it('clears answered state when NEXT loads a new exercise', () => {

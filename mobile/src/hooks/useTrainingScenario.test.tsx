@@ -21,6 +21,7 @@ type ScenarioController = ReturnType<typeof useTrainingScenario>;
 
 function getCorrectAnswer(exercise: TrainingExercise): ExerciseAnswer {
   if (exercise.type === 'decision') return exercise.correctOptionId;
+  if (exercise.type === 'red-flag-identification') return { selectedRedFlagIds: exercise.expectedRedFlagIds };
   return exercise.expectedDecision;
 }
 

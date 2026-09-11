@@ -87,4 +87,25 @@ describe('useRecommendedTraining', () => {
     const hasScamDetection = input.exercises.some((exercise) => exercise.type === 'scam-detection');
     expect(hasScamDetection).toBe(true);
   });
+
+  it('includes red-flag-identification exercises in the delegated runtime catalog input', () => {
+    useTrainingProgressMock.mockReturnValue({ progress: { ...mockProgress, level: 1, xpIntoCurrentLevel: 0, xpRequiredForNextLevel: 1000, xpToNextLevel: 1000, winRate: 50 } });
+    useSettingsMock.mockReturnValue({ settings: { difficulty: 'Beginner' } });
+    selectAdaptiveExerciseMock.mockReturnValue(exerciseCatalog[0]);
+
+    function Harness() {
+      useRecommendedTraining();
+      return null;
+    }
+
+    act(() => {
+      create(<Harness />);
+    });
+
+    const [input] = selectAdaptiveExerciseMock.mock.calls.at(-1) as [
+      { exercises: { type: string }[] },
+    ];
+    const hasRedFlagIdentification = input.exercises.some((exercise) => exercise.type === 'red-flag-identification');
+    expect(hasRedFlagIdentification).toBe(true);
+  });
 });

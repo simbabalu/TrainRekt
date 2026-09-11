@@ -1,11 +1,13 @@
 import { evaluateDecision } from './evaluateDecision';
 import { evaluatePermissionChallenge } from './evaluatePermissionChallenge';
+import { evaluateRedFlagIdentification } from './evaluateRedFlagIdentification';
 import { evaluateScamDetection } from './evaluateScamDetection';
 import { evaluateSignatureSimulation } from './evaluateSignatureSimulation';
 import { evaluateTransactionInspection } from './evaluateTransactionInspection';
 import { DecisionId } from '@/types/scenario';
 import {
   PermissionChallengeDecision,
+  RedFlagIdentificationAnswer,
   ScamDetectionDecision,
   SignatureDecision,
   TrainingExercise,
@@ -13,7 +15,13 @@ import {
   TransactionInspectionDecision,
 } from '@/types/exercise';
 
-export type ExerciseAnswer = DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision | ScamDetectionDecision;
+export type ExerciseAnswer =
+  | DecisionId
+  | SignatureDecision
+  | TransactionInspectionDecision
+  | PermissionChallengeDecision
+  | ScamDetectionDecision
+  | RedFlagIdentificationAnswer;
 
 // Single controlled dispatch point: no wallet, signing, or network calls happen here or downstream.
 export function evaluateExercise(exercise: TrainingExercise, answer: ExerciseAnswer): TrainingExerciseResult {
@@ -28,6 +36,9 @@ export function evaluateExercise(exercise: TrainingExercise, answer: ExerciseAns
   }
   if (exercise.type === 'scam-detection') {
     return evaluateScamDetection(exercise, answer as ScamDetectionDecision);
+  }
+  if (exercise.type === 'red-flag-identification') {
+    return evaluateRedFlagIdentification(exercise, answer as RedFlagIdentificationAnswer);
   }
   return evaluateDecision(exercise, answer as DecisionId);
 }

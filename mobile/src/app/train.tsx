@@ -10,6 +10,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { SignatureSimulationView } from '@/components/SignatureSimulationView';
 import { ScamDetectionView } from '@/components/ScamDetectionView';
+import { RedFlagIdentificationView } from '@/components/RedFlagIdentificationView';
 import { TransactionInspectionView } from '@/components/TransactionInspectionView';
 import { PermissionChallengeView } from '@/components/PermissionChallengeView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
@@ -23,11 +24,12 @@ import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { redFlagIdentificationCatalog } from '@/data/redFlagIdentificationCatalog';
 import { scamDetectionCatalog } from '@/data/scamDetectionCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { SectionCard } from '@/components/SectionCard';
 import { DecisionId } from '@/types/scenario';
-import { PermissionChallengeDecision, ScamDetectionDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
+import { PermissionChallengeDecision, RedFlagIdentificationAnswer, ScamDetectionDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
@@ -73,6 +75,7 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
   const firstTransactionInspection = exerciseCatalog.find((exercise) => exercise.type === 'transaction-inspection');
   const firstPermissionChallenge = exerciseCatalog.find((exercise) => exercise.type === 'permission-challenge');
   const firstScamDetection = exerciseCatalog.find((exercise) => exercise.type === 'scam-detection');
+  const firstRedFlagIdentification = exerciseCatalog.find((exercise) => exercise.type === 'red-flag-identification');
 
   return (
     <Screen ref={scrollRef}>
@@ -106,6 +109,7 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
             {firstTransactionInspection && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstTransactionInspection.id)}>Load transaction inspection</PrimaryButton>}
             {firstPermissionChallenge && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstPermissionChallenge.id)}>Load permission challenge</PrimaryButton>}
             {firstScamDetection && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstScamDetection.id)}>Load scam detection</PrimaryButton>}
+            {firstRedFlagIdentification && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstRedFlagIdentification.id)}>Load red flag identification</PrimaryButton>}
             {transactionInspectionCatalog.map((exercise) => (
               <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>TX: {exercise.title}</PrimaryButton>
             ))}
@@ -114,6 +118,9 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
             ))}
             {scamDetectionCatalog.map((exercise) => (
               <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>Scam: {exercise.title}</PrimaryButton>
+            ))}
+            {redFlagIdentificationCatalog.map((exercise) => (
+              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>Red Flags: {exercise.title}</PrimaryButton>
             ))}
           </View>
         </SectionCard>
@@ -126,7 +133,7 @@ function renderExerciseByType(
   currentExercise: TrainingExercise,
   selectedAnswer: DecisionId | null,
   result: TrainingExerciseResult | null,
-  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision | ScamDetectionDecision) => void,
+  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision | ScamDetectionDecision | RedFlagIdentificationAnswer) => void,
 ) {
   switch (currentExercise.type) {
     case 'decision':
@@ -168,6 +175,14 @@ function renderExerciseByType(
           exercise={currentExercise}
           disabled={Boolean(result)}
           onSelect={(decision: ScamDetectionDecision) => submitAnswer(decision)}
+        />
+      );
+    case 'red-flag-identification':
+      return (
+        <RedFlagIdentificationView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(answer: RedFlagIdentificationAnswer) => submitAnswer(answer)}
         />
       );
     default: {

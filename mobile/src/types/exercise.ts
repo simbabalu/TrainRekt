@@ -2,7 +2,13 @@ import { TrainingScenario } from './scenario';
 import { SkillKey } from './progress';
 
 export type ExerciseDifficulty = 'Beginner' | 'Intermediate' | 'Advanced';
-export type ExerciseType = 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge' | 'scam-detection';
+export type ExerciseType =
+  | 'decision'
+  | 'signature-simulation'
+  | 'transaction-inspection'
+  | 'permission-challenge'
+  | 'scam-detection'
+  | 'red-flag-identification';
 
 export interface BaseTrainingExercise {
   id: string;
@@ -23,7 +29,28 @@ export type SignatureDecision = 'sign' | 'reject';
 export type TransactionInspectionDecision = 'approve' | 'reject' | 'needs-review';
 export type PermissionChallengeDecision = 'allow' | 'reject' | 'needs-review';
 export type ScamDetectionDecision = 'safe' | 'suspicious' | 'scam';
+export interface RedFlagIdentificationAnswer {
+  selectedRedFlagIds: string[];
+}
 export type PermissionType = 'connect-wallet' | 'sign-message' | 'sign-transaction' | 'session-authorization' | 'unknown';
+
+export type RedFlagItemKind =
+  | 'domain'
+  | 'sender'
+  | 'message-text'
+  | 'urgency'
+  | 'permission'
+  | 'wallet-action'
+  | 'link'
+  | 'claim'
+  | 'other';
+
+export interface RedFlagItem {
+  id: string;
+  kind: RedFlagItemKind;
+  label: string;
+  detail: string;
+}
 
 export interface ScamDetectionSignal {
   label: string;
@@ -154,12 +181,42 @@ export interface ScamDetectionExercise extends BaseTrainingExercise {
   ruleToRemember?: string;
 }
 
+export interface RedFlagIdentificationExercise extends BaseTrainingExercise {
+  type: 'red-flag-identification';
+  scenario: {
+    sourceType:
+      | 'website'
+      | 'message'
+      | 'support-chat'
+      | 'airdrop'
+      | 'nft-claim'
+      | 'wallet-warning'
+      | 'social-post'
+      | 'other';
+    senderOrApp?: string;
+    displayedDomain?: string;
+    headline?: string;
+    body?: string;
+    observableItems: RedFlagItem[];
+  };
+  expectedRedFlagIds: string[];
+  postDecisionAnalysis: {
+    correctRedFlags: RedFlagItem[];
+    missedRedFlags: RedFlagItem[];
+    falsePositives?: RedFlagItem[];
+  };
+  explanation: string;
+  learningPoints: string[];
+  ruleToRemember?: string;
+}
+
 export type TrainingExercise =
   | DecisionExercise
   | SignatureSimulationExercise
   | TransactionInspectionExercise
   | PermissionChallengeExercise
-  | ScamDetectionExercise;
+  | ScamDetectionExercise
+  | RedFlagIdentificationExercise;
 
 export interface TransactionInspectionAnalysis {
   requestingApp?: string;
@@ -198,6 +255,17 @@ export interface ScamDetectionAnalysis {
   ruleToRemember?: string;
 }
 
+export interface RedFlagIdentificationAnalysis {
+  selectedCorrectCount: number;
+  missedCount: number;
+  falsePositiveCount: number;
+  accuracyPercent: number;
+  correctRedFlags: RedFlagItem[];
+  missedRedFlags: RedFlagItem[];
+  falsePositives: RedFlagItem[];
+  ruleToRemember?: string;
+}
+
 export interface TrainingExerciseResult {
   isCorrect: boolean;
   xpEarned: number;
@@ -209,4 +277,5 @@ export interface TrainingExerciseResult {
   transactionInspection?: TransactionInspectionAnalysis;
   permissionChallenge?: PermissionChallengeAnalysis;
   scamDetection?: ScamDetectionAnalysis;
+  redFlagIdentification?: RedFlagIdentificationAnalysis;
 }

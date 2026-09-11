@@ -31,6 +31,13 @@ describe('evaluateExercise', () => {
     expect(result.scamDetection).toBeDefined();
   });
 
+  it('routes red-flag-identification exercises to red flag evaluation', () => {
+    const exercise = exerciseCatalog.find((candidate) => candidate.type === 'red-flag-identification')!;
+    const result = evaluateExercise(exercise, { selectedRedFlagIds: exercise.expectedRedFlagIds });
+    expect(result.isCorrect).toBe(true);
+    expect(result.redFlagIdentification).toBeDefined();
+  });
+
   it('routes decision exercises to scenario evaluation', () => {
     const exercise = exerciseCatalog.find((candidate) => candidate.type === 'decision')!;
     const result = evaluateExercise(exercise, exercise.correctOptionId);

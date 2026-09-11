@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mockProgress } from '@/data/mockProgress';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { redFlagIdentificationCatalog } from '@/data/redFlagIdentificationCatalog';
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { calculateExerciseWeight, selectAdaptiveExercise } from './selectAdaptiveExercise';
@@ -32,7 +33,7 @@ describe('selectAdaptiveExercise', () => {
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 10 } };
     const exercise = selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: 'Beginner' }, zeroRandom);
 
-    expect(['signature-simulation', 'transaction-inspection', 'permission-challenge', 'scam-detection']).toContain(exercise.type);
+    expect(['signature-simulation', 'transaction-inspection', 'permission-challenge', 'scam-detection', 'red-flag-identification']).toContain(exercise.type);
     expect(exercise.skill).toBe('walletSafety');
   });
 
@@ -127,6 +128,36 @@ describe('selectAdaptiveExercise', () => {
     });
   });
 
+  it('assigns finite positive weight to every red-flag-identification exercise', () => {
+    const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
+
+    redFlagIdentificationCatalog.forEach((exercise) => {
+      const weight = calculateExerciseWeight(exercise, { exercises: exerciseCatalog, progress, difficulty: 'Intermediate' });
+      expect(Number.isFinite(weight)).toBe(true);
+      expect(weight).toBeGreaterThan(0);
+    });
+  });
+
+  it('can deterministically return a red-flag-identification exercise in the real catalog flow', () => {
+    const redFlagIdSet = new Set(redFlagIdentificationCatalog.map((exercise) => exercise.id));
+    const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
+    const currentExerciseId = signatureSimulationCatalog[0].id;
+    const candidatePool = exerciseCatalog.filter((exercise) => exercise.id !== currentExerciseId);
+    const sorted = candidatePool
+      .map((exercise) => ({ exercise, weight: calculateExerciseWeight(exercise, { exercises: exerciseCatalog, progress, difficulty: 'Intermediate', currentExerciseId }) }))
+      .sort((first, second) => second.weight - first.weight);
+    const totalWeight = sorted.reduce((sum, entry) => sum + entry.weight, 0);
+    const targetIndex = sorted.findIndex((entry) => redFlagIdSet.has(entry.exercise.id));
+    if (targetIndex === -1) throw new Error('Expected red-flag-identification candidate in weighted pool.');
+
+    const cumulativeBefore = sorted.slice(0, targetIndex).reduce((sum, entry) => sum + entry.weight, 0);
+    const targetWeight = sorted[targetIndex].weight;
+    const randomValue = (cumulativeBefore + targetWeight / 2) / totalWeight;
+    const selected = selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: 'Intermediate', currentExerciseId }, () => randomValue);
+
+    expect(selected.type).toBe('red-flag-identification');
+  });
+
   it('keeps transaction-inspection selectable even with recent-history penalties', () => {
     const firstInspection = transactionInspectionCatalog[0];
     const recentHistory = [
@@ -149,7 +180,7 @@ describe('selectAdaptiveExercise', () => {
     expect(selected.id).not.toBe(firstInspection.id);
   });
 
-  it('can select all five exercise types under controlled inputs', () => {
+  it('can select all six exercise types under controlled inputs', () => {
     const customExercises: TrainingExercise[] = [
       {
         id: 'decision-only-test',
@@ -241,13 +272,35 @@ describe('selectAdaptiveExercise', () => {
         explanation: 'ok',
         learningPoints: ['Pause and verify'],
       },
+      {
+        id: 'red-flag-only-test',
+        type: 'red-flag-identification',
+        title: 'Red Flag Test',
+        skill: 'walletSafety',
+        difficulty: 'Beginner',
+        xpReward: 100,
+        description: 'Red flag identification test exercise',
+        scenario: {
+          sourceType: 'website',
+          observableItems: [{ id: 'rf-1', kind: 'domain', label: 'Domain mismatch', detail: 'Different domain shown' }],
+        },
+        expectedRedFlagIds: ['rf-1'],
+        postDecisionAnalysis: {
+          correctRedFlags: [{ id: 'rf-1', kind: 'domain', label: 'Domain mismatch', detail: 'Different domain shown' }],
+          missedRedFlags: [],
+          falsePositives: [],
+        },
+        explanation: 'ok',
+        learningPoints: ['Inspect each item'],
+      },
     ];
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
 
     expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0).type).toBe('decision');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.3).type).toBe('signature-simulation');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.55).type).toBe('transaction-inspection');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.8).type).toBe('permission-challenge');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.95).type).toBe('scam-detection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.2).type).toBe('signature-simulation');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.38).type).toBe('transaction-inspection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.55).type).toBe('permission-challenge');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.72).type).toBe('scam-detection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.9).type).toBe('red-flag-identification');
   });
 });

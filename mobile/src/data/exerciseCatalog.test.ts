@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { redFlagIdentificationCatalog } from '@/data/redFlagIdentificationCatalog';
 import { scamDetectionCatalog } from '@/data/scamDetectionCatalog';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
@@ -14,13 +15,15 @@ describe('exerciseCatalog', () => {
     const inspections = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
     const permissionChallenges = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
     const scamDetections = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
+    const redFlagExercises = exerciseCatalog.filter((exercise) => exercise.type === 'red-flag-identification');
 
-    expect(exerciseCatalog).toHaveLength(35);
+    expect(exerciseCatalog).toHaveLength(41);
     expect(decisions).toHaveLength(12);
     expect(signatures).toHaveLength(4);
     expect(inspections).toHaveLength(5);
     expect(permissionChallenges).toHaveLength(6);
     expect(scamDetections).toHaveLength(8);
+    expect(redFlagExercises).toHaveLength(6);
   });
 
   it('contains all decision exercises with type: decision', () => {
@@ -70,6 +73,17 @@ describe('exerciseCatalog', () => {
     expect(runtimeIds).toEqual(new Set(scamDetectionCatalog.map((exercise) => exercise.id)));
     scamDetections.forEach((exercise, index) => {
       expect(exercise.id).toBe(scamDetectionCatalog[index].id);
+      expect(exercise.skill).toBe('walletSafety');
+    });
+  });
+
+  it('contains all red flag identification exercises with type: red-flag-identification', () => {
+    const redFlagExercises = exerciseCatalog.filter((exercise) => exercise.type === 'red-flag-identification');
+    expect(redFlagExercises).toHaveLength(redFlagIdentificationCatalog.length);
+    const runtimeIds = new Set(redFlagExercises.map((exercise) => exercise.id));
+    expect(runtimeIds).toEqual(new Set(redFlagIdentificationCatalog.map((exercise) => exercise.id)));
+    redFlagExercises.forEach((exercise, index) => {
+      expect(exercise.id).toBe(redFlagIdentificationCatalog[index].id);
       expect(exercise.skill).toBe('walletSafety');
     });
   });
@@ -153,5 +167,26 @@ describe('exerciseCatalog', () => {
       expect(exercise.postDecisionAnalysis).toBeDefined();
       expect(exercise.learningPoints.length).toBeGreaterThan(0);
     });
+  });
+
+  it('validates every red flag exercise has valid expected IDs and observable items', () => {
+    const redFlagExercises = exerciseCatalog.filter((exercise) => exercise.type === 'red-flag-identification');
+    redFlagExercises.forEach((exercise) => {
+      expect(exercise.scenario.observableItems.length).toBeGreaterThan(0);
+      const observableIds = new Set(exercise.scenario.observableItems.map((item) => item.id));
+      exercise.expectedRedFlagIds.forEach((id) => {
+        expect(observableIds.has(id)).toBe(true);
+      });
+    });
+  });
+
+  it('enforces red flag difficulty mix and pedagogical variety', () => {
+    const redFlagExercises = exerciseCatalog.filter((exercise) => exercise.type === 'red-flag-identification');
+    expect(redFlagExercises.filter((exercise) => exercise.difficulty === 'Beginner')).toHaveLength(2);
+    expect(redFlagExercises.filter((exercise) => exercise.difficulty === 'Intermediate')).toHaveLength(2);
+    expect(redFlagExercises.filter((exercise) => exercise.difficulty === 'Advanced')).toHaveLength(2);
+
+    expect(redFlagExercises.some((exercise) => exercise.expectedRedFlagIds.length === 0)).toBe(true);
+    expect(redFlagExercises.some((exercise) => exercise.expectedRedFlagIds.length < exercise.scenario.observableItems.length)).toBe(true);
   });
 });

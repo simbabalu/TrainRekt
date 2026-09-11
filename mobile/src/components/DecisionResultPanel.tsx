@@ -114,6 +114,53 @@ export function DecisionResultPanel({ result, skill }: { result: TrainingExercis
           {result.scamDetection.ruleToRemember ? <Text style={styles.explanation}>{result.scamDetection.ruleToRemember}</Text> : null}
         </View>
       ) : null}
+      {result.redFlagIdentification ? (
+        <View style={styles.analysisBlock}>
+          <Text style={styles.lessonLabel}>RED FLAG IDENTIFICATION</Text>
+          <Text style={styles.analysisDetail}>Accuracy: {result.redFlagIdentification.accuracyPercent}%</Text>
+          <Text style={styles.analysisDetail}>Correct selections: {result.redFlagIdentification.selectedCorrectCount}</Text>
+          <Text style={styles.analysisDetail}>Missed: {result.redFlagIdentification.missedCount}</Text>
+          <Text style={styles.analysisDetail}>False positives: {result.redFlagIdentification.falsePositiveCount}</Text>
+
+          <Text style={styles.lessonLabel}>CORRECT RED FLAGS</Text>
+          {result.redFlagIdentification.correctRedFlags.length === 0 ? (
+            <Text style={styles.analysisDetail}>None</Text>
+          ) : (
+            result.redFlagIdentification.correctRedFlags.map((item) => (
+              <View key={item.id} style={styles.analysisRow}>
+                <Text style={styles.bullet}>-</Text>
+                <Text style={styles.analysisDetail}><Text style={styles.analysisStrong}>{item.label}: </Text>{item.detail}</Text>
+              </View>
+            ))
+          )}
+
+          <Text style={styles.lessonLabel}>MISSED RED FLAGS</Text>
+          {result.redFlagIdentification.missedRedFlags.length === 0 ? (
+            <Text style={styles.analysisDetail}>None</Text>
+          ) : (
+            result.redFlagIdentification.missedRedFlags.map((item) => (
+              <View key={item.id} style={styles.analysisRow}>
+                <Text style={styles.bullet}>-</Text>
+                <Text style={styles.analysisDetail}><Text style={styles.analysisStrong}>{item.label}: </Text>{item.detail}</Text>
+              </View>
+            ))
+          )}
+
+          <Text style={styles.lessonLabel}>FALSE POSITIVES</Text>
+          {result.redFlagIdentification.falsePositives.length === 0 ? (
+            <Text style={styles.analysisDetail}>None</Text>
+          ) : (
+            result.redFlagIdentification.falsePositives.map((item) => (
+              <View key={item.id} style={styles.analysisRow}>
+                <Text style={styles.bullet}>-</Text>
+                <Text style={styles.analysisDetail}><Text style={styles.analysisStrong}>{item.label}: </Text>{item.detail}</Text>
+              </View>
+            ))
+          )}
+
+          {result.redFlagIdentification.ruleToRemember ? <Text style={styles.explanation}>{result.redFlagIdentification.ruleToRemember}</Text> : null}
+        </View>
+      ) : null}
     </SectionCard>
   );
 }

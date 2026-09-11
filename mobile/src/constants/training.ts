@@ -19,4 +19,5 @@ export const exerciseTypeLabels: Record<ExerciseType, string> = {
   'transaction-inspection': 'TRANSACTION INSPECTION',
   'permission-challenge': 'PERMISSION CHECK',
   'scam-detection': 'SCAM DETECTION',
+  'red-flag-identification': 'SPOT THE RED FLAGS',
 };

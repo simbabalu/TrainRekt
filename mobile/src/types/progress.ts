@@ -19,7 +19,13 @@ export interface HistoryEntry {
   skill: SkillKey;
   timestamp: string;
   xpEarned: number;
-  exerciseType?: 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge' | 'scam-detection';
+  exerciseType?:
+    | 'decision'
+    | 'signature-simulation'
+    | 'transaction-inspection'
+    | 'permission-challenge'
+    | 'scam-detection'
+    | 'red-flag-identification';
 }
 
 export interface DailyTrainingState {

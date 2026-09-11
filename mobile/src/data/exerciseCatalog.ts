@@ -2,6 +2,7 @@ import { scenarioCatalog } from './scenarioCatalog';
 import { signatureSimulationCatalog } from './signatureSimulationCatalog';
 import { transactionInspectionCatalog } from './transactionInspectionCatalog';
 import { permissionChallengeCatalog } from './permissionChallengeCatalog';
+import { redFlagIdentificationCatalog } from './redFlagIdentificationCatalog';
 import { scamDetectionCatalog } from './scamDetectionCatalog';
 import { TrainingExercise } from '@/types/exercise';
 
@@ -13,4 +14,5 @@ export const exerciseCatalog: TrainingExercise[] = [
   ...transactionInspectionCatalog,
   ...permissionChallengeCatalog,
   ...scamDetectionCatalog,
+  ...redFlagIdentificationCatalog,
 ];
