@@ -9,6 +9,7 @@ import { DecisionResultPanel } from '@/components/DecisionResultPanel';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { SignatureSimulationView } from '@/components/SignatureSimulationView';
+import { ScamDetectionView } from '@/components/ScamDetectionView';
 import { TransactionInspectionView } from '@/components/TransactionInspectionView';
 import { PermissionChallengeView } from '@/components/PermissionChallengeView';
 import { TrainingModeHeader } from '@/components/TrainingModeHeader';
@@ -22,10 +23,11 @@ import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useTrainingScenario } from '@/hooks/useTrainingScenario';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { scamDetectionCatalog } from '@/data/scamDetectionCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { SectionCard } from '@/components/SectionCard';
 import { DecisionId } from '@/types/scenario';
-import { PermissionChallengeDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
+import { PermissionChallengeDecision, ScamDetectionDecision, SignatureDecision, TransactionInspectionDecision, TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { isTrainingMode, TrainingMode } from '@/types/training';
 
 export default function TrainScreen() {
@@ -70,6 +72,7 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
   const firstSignature = exerciseCatalog.find((exercise) => exercise.type === 'signature-simulation');
   const firstTransactionInspection = exerciseCatalog.find((exercise) => exercise.type === 'transaction-inspection');
   const firstPermissionChallenge = exerciseCatalog.find((exercise) => exercise.type === 'permission-challenge');
+  const firstScamDetection = exerciseCatalog.find((exercise) => exercise.type === 'scam-detection');
 
   return (
     <Screen ref={scrollRef}>
@@ -102,11 +105,15 @@ function TrainSession({ mode }: { mode: TrainingMode }) {
             {firstSignature && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstSignature.id)}>Load signature</PrimaryButton>}
             {firstTransactionInspection && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstTransactionInspection.id)}>Load transaction inspection</PrimaryButton>}
             {firstPermissionChallenge && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstPermissionChallenge.id)}>Load permission challenge</PrimaryButton>}
+            {firstScamDetection && <PrimaryButton variant="secondary" onPress={() => handleDebugSelectExercise(firstScamDetection.id)}>Load scam detection</PrimaryButton>}
             {transactionInspectionCatalog.map((exercise) => (
               <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>TX: {exercise.title}</PrimaryButton>
             ))}
             {permissionChallengeCatalog.map((exercise) => (
               <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>Permission: {exercise.title}</PrimaryButton>
+            ))}
+            {scamDetectionCatalog.map((exercise) => (
+              <PrimaryButton key={exercise.id} variant="secondary" onPress={() => handleDebugSelectExercise(exercise.id)}>Scam: {exercise.title}</PrimaryButton>
             ))}
           </View>
         </SectionCard>
@@ -119,7 +126,7 @@ function renderExerciseByType(
   currentExercise: TrainingExercise,
   selectedAnswer: DecisionId | null,
   result: TrainingExerciseResult | null,
-  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision) => void,
+  submitAnswer: (decision: DecisionId | SignatureDecision | TransactionInspectionDecision | PermissionChallengeDecision | ScamDetectionDecision) => void,
 ) {
   switch (currentExercise.type) {
     case 'decision':
@@ -153,6 +160,14 @@ function renderExerciseByType(
           exercise={currentExercise}
           disabled={Boolean(result)}
           onSelect={(decision: PermissionChallengeDecision) => submitAnswer(decision)}
+        />
+      );
+    case 'scam-detection':
+      return (
+        <ScamDetectionView
+          exercise={currentExercise}
+          disabled={Boolean(result)}
+          onSelect={(decision: ScamDetectionDecision) => submitAnswer(decision)}
         />
       );
     default: {

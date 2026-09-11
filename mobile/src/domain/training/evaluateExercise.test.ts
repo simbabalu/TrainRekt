@@ -24,6 +24,13 @@ describe('evaluateExercise', () => {
     expect(result.permissionChallenge).toBeDefined();
   });
 
+  it('routes scam-detection exercises to scam detection evaluation', () => {
+    const exercise = exerciseCatalog.find((candidate) => candidate.type === 'scam-detection')!;
+    const result = evaluateExercise(exercise, exercise.expectedDecision);
+    expect(result.isCorrect).toBe(true);
+    expect(result.scamDetection).toBeDefined();
+  });
+
   it('routes decision exercises to scenario evaluation', () => {
     const exercise = exerciseCatalog.find((candidate) => candidate.type === 'decision')!;
     const result = evaluateExercise(exercise, exercise.correctOptionId);

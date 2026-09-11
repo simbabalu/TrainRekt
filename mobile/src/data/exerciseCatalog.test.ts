@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { scamDetectionCatalog } from '@/data/scamDetectionCatalog';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
@@ -12,12 +13,14 @@ describe('exerciseCatalog', () => {
     const signatures = exerciseCatalog.filter((exercise) => exercise.type === 'signature-simulation');
     const inspections = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
     const permissionChallenges = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
+    const scamDetections = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
 
-    expect(exerciseCatalog).toHaveLength(27);
+    expect(exerciseCatalog).toHaveLength(35);
     expect(decisions).toHaveLength(12);
     expect(signatures).toHaveLength(4);
     expect(inspections).toHaveLength(5);
     expect(permissionChallenges).toHaveLength(6);
+    expect(scamDetections).toHaveLength(8);
   });
 
   it('contains all decision exercises with type: decision', () => {
@@ -56,6 +59,17 @@ describe('exerciseCatalog', () => {
     expect(runtimeIds).toEqual(new Set(permissionChallengeCatalog.map((exercise) => exercise.id)));
     permissionChallenges.forEach((exercise, index) => {
       expect(exercise.id).toBe(permissionChallengeCatalog[index].id);
+      expect(exercise.skill).toBe('walletSafety');
+    });
+  });
+
+  it('contains all scam detection exercises with type: scam-detection', () => {
+    const scamDetections = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
+    expect(scamDetections).toHaveLength(scamDetectionCatalog.length);
+    const runtimeIds = new Set(scamDetections.map((exercise) => exercise.id));
+    expect(runtimeIds).toEqual(new Set(scamDetectionCatalog.map((exercise) => exercise.id)));
+    scamDetections.forEach((exercise, index) => {
+      expect(exercise.id).toBe(scamDetectionCatalog[index].id);
       expect(exercise.skill).toBe('walletSafety');
     });
   });
@@ -123,6 +137,21 @@ describe('exerciseCatalog', () => {
       expect(exercise.request.permissions.length).toBeGreaterThan(0);
       expect(exercise.learningPoints.length).toBeGreaterThan(0);
       expect(exercise.postDecisionAnalysis).toBeDefined();
+    });
+  });
+
+  it('validates every scam detection exercise has neutral facts and typed analysis', () => {
+    const scamDetections = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
+    scamDetections.forEach((exercise) => {
+      expect(exercise).toHaveProperty('title');
+      expect(exercise).toHaveProperty('skill');
+      expect(exercise).toHaveProperty('difficulty');
+      expect(exercise).toHaveProperty('xpReward');
+      expect(exercise).toHaveProperty('description');
+      expect(['safe', 'suspicious', 'scam']).toContain(exercise.expectedDecision);
+      expect(exercise.scenario.neutralFacts.length).toBeGreaterThan(0);
+      expect(exercise.postDecisionAnalysis).toBeDefined();
+      expect(exercise.learningPoints.length).toBeGreaterThan(0);
     });
   });
 });

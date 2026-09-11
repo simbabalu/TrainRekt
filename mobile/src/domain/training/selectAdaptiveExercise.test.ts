@@ -32,7 +32,7 @@ describe('selectAdaptiveExercise', () => {
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 10 } };
     const exercise = selectAdaptiveExercise({ exercises: exerciseCatalog, progress, difficulty: 'Beginner' }, zeroRandom);
 
-    expect(['signature-simulation', 'transaction-inspection']).toContain(exercise.type);
+    expect(['signature-simulation', 'transaction-inspection', 'permission-challenge', 'scam-detection']).toContain(exercise.type);
     expect(exercise.skill).toBe('walletSafety');
   });
 
@@ -149,7 +149,7 @@ describe('selectAdaptiveExercise', () => {
     expect(selected.id).not.toBe(firstInspection.id);
   });
 
-  it('can select all four exercise types under controlled inputs', () => {
+  it('can select all five exercise types under controlled inputs', () => {
     const customExercises: TrainingExercise[] = [
       {
         id: 'decision-only-test',
@@ -223,12 +223,31 @@ describe('selectAdaptiveExercise', () => {
         explanation: 'ok',
         learningPoints: ['Check origin and scope'],
       },
+      {
+        id: 'scam-only-test',
+        type: 'scam-detection',
+        title: 'Scam Test',
+        skill: 'walletSafety',
+        difficulty: 'Beginner',
+        xpReward: 100,
+        description: 'Scam detection test exercise',
+        scenario: {
+          sourceType: 'website',
+          senderOrApp: 'Test Source',
+          neutralFacts: ['Observed fact'],
+        },
+        expectedDecision: 'suspicious',
+        postDecisionAnalysis: { riskSignals: [{ label: 'Unclear context', detail: 'More verification needed' }] },
+        explanation: 'ok',
+        learningPoints: ['Pause and verify'],
+      },
     ];
     const progress = { ...snapshot, skillScores: { ...snapshot.skillScores, walletSafety: 0 }, recentTrainingHistory: [] };
 
     expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0).type).toBe('decision');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.4).type).toBe('signature-simulation');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.7).type).toBe('transaction-inspection');
-    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.95).type).toBe('permission-challenge');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.3).type).toBe('signature-simulation');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.55).type).toBe('transaction-inspection');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.8).type).toBe('permission-challenge');
+    expect(selectAdaptiveExercise({ exercises: customExercises, progress, difficulty: 'Beginner' }, () => 0.95).type).toBe('scam-detection');
   });
 });

@@ -66,4 +66,25 @@ describe('useRecommendedTraining', () => {
     const hasPermissionChallenge = input.exercises.some((exercise) => exercise.type === 'permission-challenge');
     expect(hasPermissionChallenge).toBe(true);
   });
+
+  it('includes scam-detection exercises in the delegated runtime catalog input', () => {
+    useTrainingProgressMock.mockReturnValue({ progress: { ...mockProgress, level: 1, xpIntoCurrentLevel: 0, xpRequiredForNextLevel: 1000, xpToNextLevel: 1000, winRate: 50 } });
+    useSettingsMock.mockReturnValue({ settings: { difficulty: 'Beginner' } });
+    selectAdaptiveExerciseMock.mockReturnValue(exerciseCatalog[0]);
+
+    function Harness() {
+      useRecommendedTraining();
+      return null;
+    }
+
+    act(() => {
+      create(<Harness />);
+    });
+
+    const [input] = selectAdaptiveExerciseMock.mock.calls.at(-1) as [
+      { exercises: { type: string }[] },
+    ];
+    const hasScamDetection = input.exercises.some((exercise) => exercise.type === 'scam-detection');
+    expect(hasScamDetection).toBe(true);
+  });
 });

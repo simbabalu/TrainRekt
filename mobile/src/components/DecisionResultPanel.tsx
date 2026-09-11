@@ -70,6 +70,50 @@ export function DecisionResultPanel({ result, skill }: { result: TrainingExercis
           {result.permissionChallenge.ruleToRemember && <Text style={styles.explanation}>{result.permissionChallenge.ruleToRemember}</Text>}
         </View>
       )}
+      {result.scamDetection ? (
+        <View style={styles.analysisBlock}>
+          <Text style={styles.lessonLabel}>SCAM DETECTION BREAKDOWN</Text>
+          <Text style={styles.analysisDetail}>Source: {result.scamDetection.sourceType}</Text>
+          {result.scamDetection.senderOrApp ? <Text style={styles.analysisDetail}>Sender/App: {result.scamDetection.senderOrApp}</Text> : null}
+          {result.scamDetection.displayedDomain ? <Text style={styles.analysisDetail}>Displayed domain: {result.scamDetection.displayedDomain}</Text> : null}
+          {result.scamDetection.destinationDomain ? <Text style={styles.analysisDetail}>Destination domain: {result.scamDetection.destinationDomain}</Text> : null}
+          {result.scamDetection.headline ? <Text style={styles.analysisDetail}>Headline: {result.scamDetection.headline}</Text> : null}
+
+          <Text style={styles.lessonLabel}>Observed Facts</Text>
+          {result.scamDetection.neutralFacts.map((fact) => (
+            <View key={fact} style={styles.analysisRow}>
+              <Text style={styles.bullet}>-</Text>
+              <Text style={styles.analysisDetail}>{fact}</Text>
+            </View>
+          ))}
+
+          {result.scamDetection.riskSignals && result.scamDetection.riskSignals.length > 0 ? (
+            <>
+              <Text style={styles.lessonLabel}>Risk Signals</Text>
+              {result.scamDetection.riskSignals.map((signal) => (
+                <View key={`${signal.label}-${signal.detail}`} style={styles.analysisRow}>
+                  <Text style={styles.bullet}>-</Text>
+                  <Text style={styles.analysisDetail}><Text style={styles.analysisStrong}>{signal.label}: </Text>{signal.detail}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          {result.scamDetection.reassuringSignals && result.scamDetection.reassuringSignals.length > 0 ? (
+            <>
+              <Text style={styles.lessonLabel}>Reassuring Signals</Text>
+              {result.scamDetection.reassuringSignals.map((signal) => (
+                <View key={`${signal.label}-${signal.detail}`} style={styles.analysisRow}>
+                  <Text style={styles.bullet}>-</Text>
+                  <Text style={styles.analysisDetail}><Text style={styles.analysisStrong}>{signal.label}: </Text>{signal.detail}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          {result.scamDetection.ruleToRemember ? <Text style={styles.explanation}>{result.scamDetection.ruleToRemember}</Text> : null}
+        </View>
+      ) : null}
     </SectionCard>
   );
 }
@@ -95,6 +139,8 @@ const styles = StyleSheet.create({
   analysisCopy: { flex: 1 },
   analysisLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '800' },
   analysisDetail: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: 20 },
+  analysisStrong: { color: Colors.text, fontWeight: '800' },
+  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
   positive: { color: Colors.positive },
   negative: { color: Colors.negative },
 });

@@ -2,7 +2,7 @@ import { TrainingScenario } from './scenario';
 import { SkillKey } from './progress';
 
 export type ExerciseDifficulty = 'Beginner' | 'Intermediate' | 'Advanced';
-export type ExerciseType = 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge';
+export type ExerciseType = 'decision' | 'signature-simulation' | 'transaction-inspection' | 'permission-challenge' | 'scam-detection';
 
 export interface BaseTrainingExercise {
   id: string;
@@ -22,7 +22,13 @@ export type SignatureRequestType = 'message' | 'transaction' | 'authorization';
 export type SignatureDecision = 'sign' | 'reject';
 export type TransactionInspectionDecision = 'approve' | 'reject' | 'needs-review';
 export type PermissionChallengeDecision = 'allow' | 'reject' | 'needs-review';
+export type ScamDetectionDecision = 'safe' | 'suspicious' | 'scam';
 export type PermissionType = 'connect-wallet' | 'sign-message' | 'sign-transaction' | 'session-authorization' | 'unknown';
+
+export interface ScamDetectionSignal {
+  label: string;
+  detail: string;
+}
 
 export interface PermissionRequestItem {
   label: string;
@@ -119,7 +125,41 @@ export interface PermissionChallengeExercise extends BaseTrainingExercise {
   ruleToRemember?: string;
 }
 
-export type TrainingExercise = DecisionExercise | SignatureSimulationExercise | TransactionInspectionExercise | PermissionChallengeExercise;
+export interface ScamDetectionExercise extends BaseTrainingExercise {
+  type: 'scam-detection';
+  scenario: {
+    sourceType:
+      | 'website'
+      | 'message'
+      | 'support-chat'
+      | 'airdrop'
+      | 'nft-claim'
+      | 'wallet-warning'
+      | 'social-post'
+      | 'other';
+    senderOrApp?: string;
+    displayedDomain?: string;
+    destinationDomain?: string;
+    headline?: string;
+    message?: string;
+    neutralFacts: string[];
+  };
+  expectedDecision: ScamDetectionDecision;
+  postDecisionAnalysis: {
+    riskSignals?: ScamDetectionSignal[];
+    reassuringSignals?: ScamDetectionSignal[];
+  };
+  explanation: string;
+  learningPoints: string[];
+  ruleToRemember?: string;
+}
+
+export type TrainingExercise =
+  | DecisionExercise
+  | SignatureSimulationExercise
+  | TransactionInspectionExercise
+  | PermissionChallengeExercise
+  | ScamDetectionExercise;
 
 export interface TransactionInspectionAnalysis {
   requestingApp?: string;
@@ -145,6 +185,19 @@ export interface PermissionChallengeAnalysis {
   ruleToRemember?: string;
 }
 
+export interface ScamDetectionAnalysis {
+  sourceType: ScamDetectionExercise['scenario']['sourceType'];
+  senderOrApp?: string;
+  displayedDomain?: string;
+  destinationDomain?: string;
+  headline?: string;
+  message?: string;
+  neutralFacts: string[];
+  riskSignals?: ScamDetectionSignal[];
+  reassuringSignals?: ScamDetectionSignal[];
+  ruleToRemember?: string;
+}
+
 export interface TrainingExerciseResult {
   isCorrect: boolean;
   xpEarned: number;
@@ -155,4 +208,5 @@ export interface TrainingExerciseResult {
   safeIndicators?: string[];
   transactionInspection?: TransactionInspectionAnalysis;
   permissionChallenge?: PermissionChallengeAnalysis;
+  scamDetection?: ScamDetectionAnalysis;
 }

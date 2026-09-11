@@ -21,9 +21,11 @@ const firstDecision = exerciseCatalog.find((exercise) => exercise.type === 'deci
 const firstSignature = exerciseCatalog.find((exercise) => exercise.type === 'signature-simulation')!;
 const inspectionExercises = exerciseCatalog.filter((exercise) => exercise.type === 'transaction-inspection');
 const permissionExercises = exerciseCatalog.filter((exercise) => exercise.type === 'permission-challenge');
+const scamExercises = exerciseCatalog.filter((exercise) => exercise.type === 'scam-detection');
 const firstInspection = inspectionExercises[0]!;
 const secondInspection = inspectionExercises[1]!;
 const firstPermission = permissionExercises[0]!;
+const firstScam = scamExercises[0]!;
 
 Object.defineProperty(globalThis, '__DEV__', {
   value: true,
@@ -130,6 +132,30 @@ describe('useTrainingScenario NEXT flow', () => {
       controller.nextExercise();
     });
     expect(controller.currentExercise.type).toBe('transaction-inspection');
+  });
+
+  it('transitions scam-detection -> another eligible exercise via NEXT', () => {
+    useRecommendedTrainingMock.mockImplementation((currentExerciseId?: string | null) => {
+      if (!currentExerciseId) return firstScam;
+      if (currentExerciseId === firstScam.id) return firstDecision;
+      return secondInspection;
+    });
+
+    let controller!: ScenarioController;
+    function Harness() {
+      controller = useTrainingScenario('practice');
+      return null;
+    }
+
+    act(() => {
+      create(<Harness />);
+    });
+    expect(controller.currentExercise.id).toBe(firstScam.id);
+
+    act(() => {
+      controller.nextExercise();
+    });
+    expect(controller.currentExercise.type).toBe('decision');
   });
 
   it('clears answered state when NEXT loads a new exercise', () => {
