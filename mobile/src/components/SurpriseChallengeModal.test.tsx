@@ -3,6 +3,7 @@ import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
 import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
+import { Colors } from '@/constants/theme';
 import { evaluateSurpriseChallengeCompletion } from '@/domain/surprise/evaluateSurpriseChallengeCompletion';
 import { SurpriseChallengeSession } from '@/hooks/useSurpriseChallengeEngine';
 import { SurpriseChallengeModal } from './SurpriseChallengeModal';
@@ -53,6 +54,23 @@ function makeSession(stage: SurpriseChallengeSession['stage'], firstDecision: 'r
 }
 
 describe('SurpriseChallengeModal', () => {
+  it('uses an opaque foreground card and a strong security challenge backdrop', () => {
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <SurpriseChallengeModal
+          session={makeSession('prompt')}
+          onChooseDecision={vi.fn()}
+          onCloseReveal={vi.fn()}
+        />,
+      );
+    });
+
+    const styledViews = renderer.root.findAll((node) => String(node.type) === 'View' && node.props.style);
+    expect(styledViews.some((node) => node.props.style.backgroundColor === Colors.securityChallengeBackdrop)).toBe(true);
+    expect(styledViews.some((node) => node.props.style.backgroundColor === Colors.card)).toBe(true);
+  });
+
   it('shows reward prompt actions without reveal leakage in initial state', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {

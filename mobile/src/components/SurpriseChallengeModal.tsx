@@ -199,7 +199,7 @@ function formatCountdown(seconds: number): string {
 const styles = StyleSheet.create({
   backdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(9, 11, 16, 0.78)',
+    backgroundColor: Colors.securityChallengeBackdrop,
     flex: 1,
     justifyContent: 'center',
     padding: Spacing.lg,

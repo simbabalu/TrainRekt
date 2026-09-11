@@ -17,6 +17,7 @@ export const Colors = {
   mutedText: '#8490A3',
   border: '#252B38',
   warning: '#FEC84B',
+  securityChallengeBackdrop: 'rgba(0, 0, 0, 0.86)',
 } as const;
 
 export const Spacing = {
