@@ -4,6 +4,7 @@ import { DailyGoalCard } from '@/components/DailyGoalCard';
 import { LevelProgressCard } from '@/components/LevelProgressCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
+import { HomeWalletSafetyCard } from '@/components/wallet/HomeWalletSafetyCard';
 import { calculateDailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
 import { getHomeTrainingCta } from '@/domain/training/getHomeTrainingCta';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
@@ -20,6 +21,7 @@ export default function HomeScreen() {
       <Link href={{ pathname: '/train', params: { mode: trainingCta.mode } } as Href} asChild>
         <PrimaryButton variant={trainingCta.mode === 'practice' ? 'secondary' : 'primary'} onPress={() => undefined}>{trainingCta.label}</PrimaryButton>
       </Link>
+      <HomeWalletSafetyCard />
     </Screen>
   );
 }

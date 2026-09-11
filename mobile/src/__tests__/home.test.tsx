@@ -30,6 +30,10 @@ vi.mock('@/components/PrimaryButton', () => ({
   PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Text', null, children),
 }));
 
+vi.mock('@/components/wallet/HomeWalletSafetyCard', () => ({
+  HomeWalletSafetyCard: () => React.createElement('Text', null, 'HOME WALLET SAFETY CARD'),
+}));
+
 vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   Text: 'Text',
@@ -101,6 +105,7 @@ describe('HomeScreen simplified layout', () => {
     expect(text).not.toContain('DAILY STREAK');
     expect(text).not.toContain('2240 XP total');
     expect(text).toContain('START TRAINING');
+    expect(text).toContain('HOME WALLET SAFETY CARD');
     expect(text).not.toContain("TODAY'S TRAINING");
     expect(text).not.toContain('YOUR SKILLS');
   });

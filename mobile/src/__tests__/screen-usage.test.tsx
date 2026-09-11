@@ -44,6 +44,7 @@ vi.mock('@/components/SectionCard', () => ({ SectionCard: ({ children }: { child
 vi.mock('@/components/PageHeading', () => ({ PageHeading: () => null }));
 vi.mock('@/components/ProgressBar', () => ({ ProgressBar: () => null }));
 vi.mock('@/components/AppIcon', () => ({ AppIcon: () => null }));
+vi.mock('@/components/wallet/HomeWalletSafetyCard', () => ({ HomeWalletSafetyCard: () => null }));
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
   useTrainingProgress: () => ({
