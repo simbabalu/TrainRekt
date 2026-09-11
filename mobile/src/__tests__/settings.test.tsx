@@ -85,8 +85,17 @@ describe('SettingsScreen wallet card', () => {
         address: '51SYwT7hXpnYccF6Uabvwp7mQkY6MoBVVqf3v83oJZ',
       },
       error: null,
+      realMessageSigningEnabled: false,
+      trainingSigningMessage: {
+        nonce: '001122334455',
+        displayMessage: 'TrainRekt Wallet Safety Training\n\nTraining nonce: 001122334455',
+        messageBytes: new Uint8Array([1, 2]),
+      },
+      signingStatus: 'idle',
+      signingError: null,
       connect: vi.fn(),
       disconnect: vi.fn(),
+      signTrainingMessage: vi.fn(),
     });
 
     let renderer!: ReturnType<typeof create>;
@@ -111,8 +120,17 @@ describe('SettingsScreen wallet card', () => {
         address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9Wq',
       },
       error: null,
+      realMessageSigningEnabled: false,
+      trainingSigningMessage: {
+        nonce: '001122334455',
+        displayMessage: 'TrainRekt Wallet Safety Training\n\nTraining nonce: 001122334455',
+        messageBytes: new Uint8Array([1, 2]),
+      },
+      signingStatus: 'idle',
+      signingError: null,
       connect: vi.fn(),
       disconnect: vi.fn(),
+      signTrainingMessage: vi.fn(),
     });
 
     let renderer!: ReturnType<typeof create>;
@@ -135,8 +153,17 @@ describe('SettingsScreen wallet card', () => {
         address: '51SYwT7hXpnYccF6Uabvwp7mQkY6MoBVVqf3v83oJZ',
       },
       error: null,
+      realMessageSigningEnabled: false,
+      trainingSigningMessage: {
+        nonce: '001122334455',
+        displayMessage: 'TrainRekt Wallet Safety Training\n\nTraining nonce: 001122334455',
+        messageBytes: new Uint8Array([1, 2]),
+      },
+      signingStatus: 'idle',
+      signingError: null,
       connect: vi.fn(),
       disconnect: vi.fn(),
+      signTrainingMessage: vi.fn(),
     });
 
     let renderer!: ReturnType<typeof create>;
@@ -156,6 +183,10 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('Reset');
     expect(text).toContain('Reset training progress');
     expect(text).toContain('Disconnect');
+    expect(text).toContain('Real wallet training');
+    expect(text).toContain('REAL SIGNING DISABLED');
+    expect(text).toContain('TrainRekt Wallet Safety Training');
+    expect(text).not.toContain('Sign with real wallet');
 
     const switches = renderer.root.findAll((node) => String(node.type) === 'Switch');
 

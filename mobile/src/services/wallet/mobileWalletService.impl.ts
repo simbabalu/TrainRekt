@@ -11,4 +11,11 @@ export const mobileWalletServiceImpl: MobileWalletService = {
   async disconnectWallet() {
     return { ok: true };
   },
+  async signMessage() {
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'Message signing is only available on Android development builds.',
+    };
+  },
 };

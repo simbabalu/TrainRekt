@@ -1,8 +1,8 @@
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
-import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
-import { SignatureSimulationView } from './SignatureSimulationView';
+import { scenarioCatalog } from '@/data/scenarioCatalog';
+import { DecisionExerciseView } from './DecisionExerciseView';
 
 const walletServiceMock = vi.hoisted(() => ({
   connectWallet: vi.fn(),
@@ -21,18 +21,26 @@ vi.mock('react-native', () => ({
   View: 'View',
 }));
 
-describe('SignatureSimulationView wallet isolation', () => {
-  it('SIGN and REJECT stay local and never invoke wallet service', () => {
-    const exercise = signatureSimulationCatalog.find((candidate) => candidate.type === 'signature-simulation');
-    if (!exercise || exercise.type !== 'signature-simulation') {
-      throw new Error('Expected signature simulation exercise.');
-    }
+vi.mock('./ScenarioMarketCard', () => ({
+  ScenarioMarketCard: () => null,
+}));
+
+describe('DecisionExerciseView wallet isolation', () => {
+  it('decision choices stay local and never invoke wallet message signing', () => {
+    const scenario = scenarioCatalog[0];
 
     const onSelect = vi.fn();
     let renderer!: ReturnType<typeof create>;
 
     act(() => {
-      renderer = create(<SignatureSimulationView exercise={exercise} disabled={false} onSelect={onSelect} />);
+      renderer = create(
+        <DecisionExerciseView
+          exercise={{ ...scenario, type: 'decision' }}
+          selectedAnswer={null}
+          result={null}
+          onSelect={onSelect}
+        />,
+      );
     });
 
     const presses = renderer.root.findAll((node) => String(node.type) === 'Pressable');
@@ -42,8 +50,7 @@ describe('SignatureSimulationView wallet isolation', () => {
       presses[1].props.onPress();
     });
 
-    expect(onSelect).toHaveBeenNthCalledWith(1, 'reject');
-    expect(onSelect).toHaveBeenNthCalledWith(2, 'sign');
+    expect(onSelect).toHaveBeenCalledTimes(2);
     expect(walletServiceMock.connectWallet).not.toHaveBeenCalled();
     expect(walletServiceMock.disconnectWallet).not.toHaveBeenCalled();
     expect(walletServiceMock.signMessage).not.toHaveBeenCalled();

@@ -1,8 +1,8 @@
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
-import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
-import { SignatureSimulationView } from './SignatureSimulationView';
+import { permissionChallengeCatalog } from '@/data/permissionChallengeCatalog';
+import { PermissionChallengeView } from './PermissionChallengeView';
 
 const walletServiceMock = vi.hoisted(() => ({
   connectWallet: vi.fn(),
@@ -14,6 +14,10 @@ vi.mock('@/services/wallet/mobileWalletService', () => ({
   mobileWalletService: walletServiceMock,
 }));
 
+vi.mock('expo-symbols', () => ({
+  SymbolView: 'SymbolView',
+}));
+
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   StyleSheet: { create: (styles: unknown) => styles },
@@ -21,18 +25,16 @@ vi.mock('react-native', () => ({
   View: 'View',
 }));
 
-describe('SignatureSimulationView wallet isolation', () => {
-  it('SIGN and REJECT stay local and never invoke wallet service', () => {
-    const exercise = signatureSimulationCatalog.find((candidate) => candidate.type === 'signature-simulation');
-    if (!exercise || exercise.type !== 'signature-simulation') {
-      throw new Error('Expected signature simulation exercise.');
-    }
+describe('PermissionChallengeView wallet isolation', () => {
+  it('actions stay local and never invoke wallet message signing', () => {
+    const exercise = permissionChallengeCatalog.find((candidate) => candidate.id === 'permission-wallet-connect-match');
+    if (!exercise) throw new Error('Expected permission challenge exercise.');
 
     const onSelect = vi.fn();
     let renderer!: ReturnType<typeof create>;
 
     act(() => {
-      renderer = create(<SignatureSimulationView exercise={exercise} disabled={false} onSelect={onSelect} />);
+      renderer = create(<PermissionChallengeView exercise={exercise} disabled={false} onSelect={onSelect} />);
     });
 
     const presses = renderer.root.findAll((node) => String(node.type) === 'Pressable');
@@ -40,10 +42,12 @@ describe('SignatureSimulationView wallet isolation', () => {
     act(() => {
       presses[0].props.onPress();
       presses[1].props.onPress();
+      presses[2].props.onPress();
     });
 
-    expect(onSelect).toHaveBeenNthCalledWith(1, 'reject');
-    expect(onSelect).toHaveBeenNthCalledWith(2, 'sign');
+    expect(onSelect).toHaveBeenNthCalledWith(1, 'allow');
+    expect(onSelect).toHaveBeenNthCalledWith(2, 'needs-review');
+    expect(onSelect).toHaveBeenNthCalledWith(3, 'reject');
     expect(walletServiceMock.connectWallet).not.toHaveBeenCalled();
     expect(walletServiceMock.disconnectWallet).not.toHaveBeenCalled();
     expect(walletServiceMock.signMessage).not.toHaveBeenCalled();

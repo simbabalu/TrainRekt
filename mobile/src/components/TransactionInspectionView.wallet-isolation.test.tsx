@@ -7,6 +7,7 @@ import { TransactionInspectionView } from './TransactionInspectionView';
 const walletServiceMock = vi.hoisted(() => ({
   connectWallet: vi.fn(),
   disconnectWallet: vi.fn(),
+  signMessage: vi.fn(),
 }));
 
 vi.mock('@/services/wallet/mobileWalletService', () => ({
@@ -45,5 +46,6 @@ describe('TransactionInspectionView wallet isolation', () => {
     expect(onSelect).toHaveBeenNthCalledWith(3, 'reject');
     expect(walletServiceMock.connectWallet).not.toHaveBeenCalled();
     expect(walletServiceMock.disconnectWallet).not.toHaveBeenCalled();
+    expect(walletServiceMock.signMessage).not.toHaveBeenCalled();
   });
 });

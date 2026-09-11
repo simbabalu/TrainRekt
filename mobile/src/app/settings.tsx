@@ -14,7 +14,7 @@ import { useWallet } from '@/hooks/useWallet';
 export default function SettingsScreen() {
   const { settings, setDifficulty, setPreference, resetSettings } = useSettings();
   const { resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
-  const { status, wallet, error, connect, disconnect } = useWallet();
+  const { status, wallet, error, connect, disconnect, realMessageSigningEnabled, trainingSigningMessage } = useWallet();
   const isConnected = status === 'connected' && Boolean(wallet);
   const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
   const walletDisplayIdentity = wallet ? getWalletDisplayIdentity(wallet) : null;
@@ -66,6 +66,30 @@ export default function SettingsScreen() {
         </View>
 
         {error && <Text style={styles.walletError}>{error}</Text>}
+      </SectionCard>
+      <SectionCard>
+        <SectionHeader
+          title="Real wallet training"
+          subtitle="Preview the exact message bytes used for local signing education."
+          iconName={{ ios: 'signature', android: 'draw', web: 'draw' }}
+          iconLabel="Real wallet training"
+        />
+        <View style={styles.trainingPreviewCard}>
+          <Text style={styles.trainingPreviewLabel}>Connected wallet</Text>
+          <Text style={styles.trainingPreviewValue}>{walletDisplayIdentity?.primary ?? 'No wallet connected'}</Text>
+          <Text style={styles.trainingPreviewLabel}>Training message (exact)</Text>
+          <Text style={styles.trainingMessage}>{trainingSigningMessage.displayMessage}</Text>
+          <Text style={styles.trainingSafetyCopy}>Message signing proves control of a key. It is not a transaction and does not move assets on its own.</Text>
+          <View style={styles.signingStateRow}>
+            <View style={[styles.signingStateDot, realMessageSigningEnabled ? styles.signingStateEnabled : styles.signingStateDisabled]} />
+            <Text style={[styles.signingStateLabel, realMessageSigningEnabled ? styles.signingStateLabelEnabled : styles.signingStateLabelDisabled]}>
+              {realMessageSigningEnabled ? 'REAL SIGNING ENABLED' : 'REAL SIGNING DISABLED'}
+            </Text>
+          </View>
+          {!realMessageSigningEnabled && (
+            <Text style={styles.trainingDisabledCopy}>Real wallet signing is disabled while TrainRekt is being validated.</Text>
+          )}
+        </View>
       </SectionCard>
       <SectionCard>
         <SectionHeader
@@ -214,6 +238,19 @@ const styles = StyleSheet.create({
   walletButton: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 44, justifyContent: 'center', minWidth: 122, paddingHorizontal: Spacing.md },
   walletButtonDisabled: { opacity: 0.65 },
   walletButtonLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '700' },
+  trainingPreviewCard: { backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.sm, marginTop: Spacing.md, padding: Spacing.md },
+  trainingPreviewLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
+  trainingPreviewValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '700' },
+  trainingMessage: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 20, marginTop: Spacing.xs },
+  trainingSafetyCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
+  signingStateRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
+  signingStateDot: { borderRadius: Radius.pill, height: 8, width: 8 },
+  signingStateEnabled: { backgroundColor: Colors.positive },
+  signingStateDisabled: { backgroundColor: Colors.mutedText },
+  signingStateLabel: { fontSize: Typography.small, fontWeight: '800', letterSpacing: 0.4 },
+  signingStateLabelEnabled: { color: Colors.positive },
+  signingStateLabelDisabled: { color: Colors.secondaryText },
+  trainingDisabledCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
   preferenceRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 64, paddingVertical: Spacing.xs },
   preferenceRowDivider: { borderBottomColor: Colors.border, borderBottomWidth: 1 },
   preferenceLeft: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: Spacing.md, marginRight: Spacing.md },

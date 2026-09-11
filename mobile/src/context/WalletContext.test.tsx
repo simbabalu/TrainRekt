@@ -11,6 +11,7 @@ function createMockService(): MobileWalletService {
   return {
     connectWallet: vi.fn(),
     disconnectWallet: vi.fn(),
+    signMessage: vi.fn(),
   };
 }
 
@@ -252,5 +253,71 @@ describe('WalletProvider', () => {
     });
 
     expect(wallet.status).toBe('connected');
+  });
+
+  it('does not call service.signMessage while real signing gate is disabled', async () => {
+    const service = createMockService();
+    vi.mocked(service.connectWallet).mockResolvedValue({
+      ok: true,
+      wallet: { address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9Wq' },
+      authToken: 'auth-1',
+    });
+    vi.mocked(service.signMessage).mockResolvedValue({ ok: true, signatureBytes: new Uint8Array(64) });
+
+    let wallet!: WalletController;
+
+    function Harness() {
+      wallet = useWallet();
+      return null;
+    }
+
+    await act(async () => {
+      create(<WalletProvider service={service}><Harness /></WalletProvider>);
+    });
+
+    await act(async () => {
+      await wallet.connect();
+    });
+
+    const result = await wallet.signTrainingMessage();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'disabled',
+      message: 'Real wallet signing is disabled while TrainRekt is being validated.',
+    });
+    expect(service.signMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps sign gate disabled even when running in DEV mode', async () => {
+    const service = createMockService();
+    const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+    Object.defineProperty(globalThis, '__DEV__', {
+      value: true,
+      configurable: true,
+    });
+
+    let wallet!: WalletController;
+    function Harness() {
+      wallet = useWallet();
+      return null;
+    }
+
+    await act(async () => {
+      create(<WalletProvider service={service}><Harness /></WalletProvider>);
+    });
+
+    const result = await wallet.signTrainingMessage();
+
+    expect(wallet.realMessageSigningEnabled).toBe(false);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected real signing to remain disabled.');
+    expect(result.reason).toBe('disabled');
+    expect(service.signMessage).not.toHaveBeenCalled();
+
+    Object.defineProperty(globalThis, '__DEV__', {
+      value: originalDev,
+      configurable: true,
+    });
   });
 });
