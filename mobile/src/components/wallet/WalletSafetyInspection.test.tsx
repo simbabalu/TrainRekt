@@ -188,6 +188,29 @@ describe('WalletSafetyInspection', () => {
     expect((text.match(/START LESSON/g) ?? []).length).toBe(2);
   });
 
+  it('shows the completed learning-path state while retaining passed cards', () => {
+    const inspection = createInspection();
+    const completedAt = '2026-09-11T12:00:00.000Z';
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({
+        inspection,
+        walletLessonProgress: {
+          'wallet-lesson-frozen-account-state': { passed: true, completedAt },
+          'wallet-lesson-delegated-authority': { passed: true, completedAt },
+          'wallet-lesson-token-2022-basics': { passed: true, completedAt },
+          'wallet-lesson-empty-token-account-context': { passed: true, completedAt },
+        },
+      }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('WALLET LESSONS COMPLETE');
+    expect((text.match(/PASSED/g) ?? []).length).toBe(4);
+    expect(text).not.toContain('NEXT RECOMMENDED LESSON');
+  });
+
   it('shows the latest wallet lesson result on the matching recommendation card', () => {
     const inspection = createInspection();
     inspection.tokenAccounts = [

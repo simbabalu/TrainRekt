@@ -7,6 +7,7 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
 import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
 import { getWalletLessonStatus } from '@/domain/wallet/getWalletLessonStatus';
+import { getNextWalletTrainingRecommendation, sortWalletTrainingRecommendations } from '@/domain/wallet/sortWalletTrainingRecommendations';
 import { summarizeWalletInspection } from '@/domain/wallet/summarizeWalletInspection';
 import type { WalletSafetyInspection as WalletSafetyInspectionModel } from '@/types/walletInspection';
 import type { WalletLessonProgress } from '@/types/progress';
@@ -48,6 +49,25 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
     recommendation,
     status: getWalletLessonStatus({ exerciseId: recommendation.recommendedExerciseIds[0], walletLessonProgress }),
   }));
+  const learningPath = sortWalletTrainingRecommendations(recommendationsWithStatus);
+  const nextRecommendation = getNextWalletTrainingRecommendation(learningPath);
+  const remainingRecommendations = nextRecommendation
+    ? learningPath.filter(({ recommendation }) => recommendation.topic !== nextRecommendation.recommendation.topic)
+    : learningPath;
+
+  function handleStartLesson(selectedRecommendation: typeof recommendations[number]) {
+    const firstExerciseId = selectedRecommendation.recommendedExerciseIds[0];
+    if (!firstExerciseId) return;
+    router.push({
+      pathname: '/train',
+      params: {
+        mode: 'practice',
+        source: 'wallet',
+        topic: selectedRecommendation.topic,
+        exerciseId: firstExerciseId,
+      },
+    });
+  }
 
   const visibleAccounts = (() => {
     if (viewMode === 'all') return tokenAccounts;
@@ -113,26 +133,25 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   <Text style={styles.educationText}>Training topics based on public signals observed in this wallet.</Text>
                   {recommendations.length === 0 ? (
                     <Text style={styles.info}>No review signals found. You can still practice general wallet-safety lessons.</Text>
-                  ) : (
+                  ) : nextRecommendation ? (
+                    <>
+                      <Text style={styles.nextLessonTitle}>NEXT RECOMMENDED LESSON</Text>
+                      <WalletTrainingRecommendationCard
+                        recommendation={nextRecommendation.recommendation}
+                        status={nextRecommendation.status}
+                        featured
+                        onStartLesson={handleStartLesson}
+                      />
+                    </>
+                  ) : <Text style={styles.completedLesson}>WALLET LESSONS COMPLETE{`\n`}You&apos;ve completed the lessons currently recommended from this wallet inspection.</Text>}
+                  {remainingRecommendations.length > 0 && (
                     <View style={styles.lessonList}>
-                      {recommendationsWithStatus.map(({ recommendation, status: lessonStatus }) => (
+                      {remainingRecommendations.map(({ recommendation, status: lessonStatus }) => (
                         <WalletTrainingRecommendationCard
                           key={recommendation.topic}
                           recommendation={recommendation}
                           status={lessonStatus}
-                          onStartLesson={(selectedRecommendation) => {
-                            const firstExerciseId = selectedRecommendation.recommendedExerciseIds[0];
-                            if (!firstExerciseId) return;
-                            router.push({
-                              pathname: '/train',
-                              params: {
-                                mode: 'practice',
-                                source: 'wallet',
-                                topic: selectedRecommendation.topic,
-                                exerciseId: firstExerciseId,
-                              },
-                            });
-                          }}
+                          onStartLesson={handleStartLesson}
                         />
                       ))}
                     </View>
@@ -249,6 +268,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.9,
   },
   educationText: {
+    color: Colors.secondaryText,
+    fontSize: Typography.small,
+    lineHeight: 20,
+  },
+  nextLessonTitle: {
+    color: Colors.accent,
+    fontSize: Typography.label,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+  },
+  completedLesson: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
     lineHeight: 20,

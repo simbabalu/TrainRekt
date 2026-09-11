@@ -11,6 +11,7 @@ import type { WalletSafetySignalKind } from '@/types/walletInspection';
 interface WalletTrainingRecommendationCardProps {
   recommendation: WalletTrainingRecommendation;
   status: WalletLessonStatus;
+  featured?: boolean;
   onStartLesson: (recommendation: WalletTrainingRecommendation) => void;
 }
 
@@ -32,11 +33,11 @@ const lessonIconBySignal: Record<WalletSafetySignalKind, { ios: string; android:
   'token-2022-group-member-pointer': { ios: 'person.2', android: 'group', web: 'group' },
 };
 
-export function WalletTrainingRecommendationCard({ recommendation, status, onStartLesson }: WalletTrainingRecommendationCardProps) {
-  const completed = status !== 'not-started';
+export function WalletTrainingRecommendationCard({ recommendation, status, featured = false, onStartLesson }: WalletTrainingRecommendationCardProps) {
+  const completed = status === 'passed';
   const statusLabel = status === 'passed' ? 'PASSED' : status === 'failed' ? 'FAILED' : null;
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, featured && styles.featuredContainer]}>
       <View style={styles.header}>
         <AppIcon
           accessibilityLabel={getWalletTrainingTopicLabel(recommendation.topic)}
@@ -71,6 +72,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: Spacing.xs,
     padding: Spacing.sm,
+  },
+  featuredContainer: {
+    borderColor: Colors.accent,
+    borderWidth: 2,
   },
   header: {
     alignItems: 'center',
