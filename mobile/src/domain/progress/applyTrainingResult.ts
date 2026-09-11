@@ -8,6 +8,7 @@ export interface TrainingCompletionMetadata {
   historyId: string;
   timestamp: string;
   mode: TrainingMode;
+  source?: 'adaptive' | 'wallet';
 }
 
 export function applyTrainingResult(
@@ -27,6 +28,20 @@ export function applyTrainingResult(
     xpEarned: result.xpEarned,
     exerciseType: exercise.type,
   }, ...progress.recentTrainingHistory].slice(0, Training.maxHistoryEntries);
+  const shouldClaimWalletReward = metadata.source === 'wallet'
+    && !progress.walletLessonRewards.claimedExerciseIds.includes(exercise.id);
+  const walletLessonRewards = shouldClaimWalletReward
+    ? { claimedExerciseIds: [...progress.walletLessonRewards.claimedExerciseIds, exercise.id] }
+    : progress.walletLessonRewards;
+  const walletLessonProgress = metadata.source === 'wallet'
+    ? {
+      ...progress.walletLessonProgress,
+      [exercise.id]: {
+        passed: result.isCorrect,
+        completedAt: metadata.timestamp,
+      },
+    }
+    : progress.walletLessonProgress;
 
   const dailyResult = applyDailyTrainingCompletion(progress.daily, metadata.mode, new Date(metadata.timestamp));
 
@@ -40,6 +55,8 @@ export function applyTrainingResult(
     bestStreak: Math.max(progress.bestStreak, currentStreak),
     skillScores: updateSkillScore(progress.skillScores, exercise.skill, result.isCorrect),
     recentTrainingHistory: updatedHistory,
+    walletLessonRewards,
+    walletLessonProgress,
     daily: dailyResult.daily,
   };
 }

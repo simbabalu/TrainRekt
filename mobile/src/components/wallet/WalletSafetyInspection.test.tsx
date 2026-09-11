@@ -111,6 +111,7 @@ describe('WalletSafetyInspection', () => {
     expect(text).toContain('DELEGATED AUTHORITY');
     expect(/1\s+account\s+observed/.test(text)).toBe(true);
     expect(text).not.toContain('Signals found');
+    expect(text).not.toContain('WHY THIS MATTERS');
   });
 
   it('shows recommendations only for observed wallet signal topics', () => {
@@ -135,6 +136,64 @@ describe('WalletSafetyInspection', () => {
     expect(text).not.toContain('DELEGATED AUTHORITY');
     expect(text).not.toContain('TOKEN ACCOUNT STATES');
     expect(text).not.toContain('EMPTY TOKEN ACCOUNTS');
+  });
+
+  it('shows the latest wallet lesson result on the matching recommendation card', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      { ...inspection.tokenAccounts[0], state: 'frozen', delegateAddress: null },
+    ];
+    const walletLessonProgress = {
+      'wallet-lesson-frozen-account-state': {
+        passed: true,
+        completedAt: '2026-09-11T11:00:00.000Z',
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({ inspection, walletLessonProgress }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('PASSED');
+    expect(text).toContain('Completed');
+    expect(text).toContain('RETRY LESSON');
+    expect((text.match(/START LESSON/g) ?? []).length).toBe(2);
+  });
+
+  it('keeps FAILED/PASSED recommendation status independent from bounded recent history', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [{ ...inspection.tokenAccounts[0], state: 'frozen', delegateAddress: null }];
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({
+        inspection,
+        walletLessonProgress: {
+          'wallet-lesson-frozen-account-state': {
+            passed: false,
+            completedAt: '2026-09-11T09:00:00.000Z',
+          },
+        },
+      }));
+    });
+
+    expect(flattenText(renderer.toJSON())).toContain('FAILED');
+
+    act(() => {
+      renderer.update(createHarness({
+        inspection,
+        walletLessonProgress: {
+          'wallet-lesson-frozen-account-state': {
+            passed: true,
+            completedAt: '2026-09-11T10:00:00.000Z',
+          },
+        },
+      }));
+    });
+
+    expect(flattenText(renderer.toJSON())).toContain('PASSED');
   });
 
   it('routes START LESSON into Train practice mode with wallet source params', () => {
@@ -196,6 +255,7 @@ describe('WalletSafetyInspection', () => {
     expect(text).toContain('NEEDS REVIEW (1)');
     expect(text).toContain('FROZEN');
     expect(text).not.toContain('9YpkJ2nA3Nf3u7Ggx5dFjoW7kTZJtZsU6GLkQW2gQx3m');
+    expect(text).not.toContain('REFRESH INSPECTION');
   });
 
   it('shows explicit no-review message when there are zero review accounts', () => {
@@ -267,7 +327,76 @@ describe('WalletSafetyInspection', () => {
     const text = flattenText(renderer.toJSON());
     expect(text).toContain('INFORMATIONAL (2)');
     expect(text).toContain('Token-2022 is informational. Token-2022 itself is not a warning.');
+    expect((text.match(/DETAILS/g) ?? []).length).toBe(2);
     expect(text).not.toContain('No review signals detected in the inspected token accounts.');
+  });
+
+  it('collapses informational accounts back to review-only mode', () => {
+    const onViewModeChange = vi.fn();
+    const inspection = createInspection();
+    inspection.tokenAccounts = [{
+      ...inspection.tokenAccounts[1],
+      tokenAccountAddress: 'informational-only',
+      program: 'token-2022',
+    }];
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ inspection, viewMode: 'informational', onViewModeChange }));
+    });
+
+    const hideButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')
+      .find((node) => flattenText(node).includes('HIDE INFORMATIONAL'));
+    expect(hideButton).toBeDefined();
+    act(() => hideButton?.props.onPress());
+    expect(onViewModeChange).toHaveBeenCalledWith('review');
+  });
+
+  it('places wallet lessons before secondary account disclosures', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      { ...inspection.tokenAccounts[0], tokenAccountAddress: 'review-account' },
+      { ...inspection.tokenAccounts[1], tokenAccountAddress: 'informational-account', program: 'token-2022' },
+    ];
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ inspection }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text.indexOf('LEARN FROM YOUR WALLET')).toBeGreaterThan(-1);
+    expect(text.indexOf('LEARN FROM YOUR WALLET')).toBeLessThan(text.indexOf('SHOW INFORMATIONAL'));
+    expect((text.match(/DETAILS/g) ?? []).length).toBe(1);
+  });
+
+  it('uses explicit disclosure transitions without rendering duplicate account rows', () => {
+    const onViewModeChange = vi.fn();
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      { ...inspection.tokenAccounts[0], tokenAccountAddress: 'review-account' },
+      { ...inspection.tokenAccounts[1], tokenAccountAddress: 'normal-account' },
+      { ...inspection.tokenAccounts[1], tokenAccountAddress: 'informational-account', program: 'token-2022' },
+    ];
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({ inspection, onViewModeChange }));
+    });
+
+    const initialText = flattenText(renderer.toJSON());
+    expect((initialText.match(/DETAILS/g) ?? []).length).toBe(1);
+    expect(initialText).not.toContain('normal-account');
+    expect(initialText).not.toContain('informational-account');
+
+    const buttons = renderer.root.findAll((node) => String(node.type) === 'Pressable');
+    const informationalButton = buttons.find((node) => flattenText(node).includes('SHOW INFORMATIONAL'));
+    const allButton = buttons.find((node) => flattenText(node).includes('SHOW ALL'));
+
+    act(() => informationalButton?.props.onPress());
+    expect(onViewModeChange).toHaveBeenCalledWith('informational');
+    act(() => allButton?.props.onPress());
+    expect(onViewModeChange).toHaveBeenCalledWith('all');
   });
 
   it('renders all accounts without duplicate rows in all mode', () => {

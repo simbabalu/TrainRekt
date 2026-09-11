@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { mockProgress } from '@/data/mockProgress';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
+import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { applyTrainingResult } from './applyTrainingResult';
 import { calculateLevel, calculateProgressPercentage, createProgressSnapshot, calculateWinRate } from './calculateLevel';
 import { formatPercentage } from './formatPercentage';
 import { evaluateDecision } from '@/domain/training/evaluateDecision';
-import { DecisionExercise } from '@/types/exercise';
+import { DecisionExercise, TrainingExerciseResult } from '@/types/exercise';
 
 const scenario: DecisionExercise = { ...scenarioCatalog[0], type: 'decision' };
+const walletExercise = findWalletLessonExercise('wallet-lesson-frozen-account-state')!;
 const metadata = { historyId: 'test-history', timestamp: '2026-09-10T12:00:00.000Z', mode: 'daily' as const };
 
 describe('progress calculations', () => {
@@ -80,6 +82,104 @@ describe('progress calculations', () => {
     expect(updated.recentTrainingHistory[0].id).toBe(metadata.historyId);
     expect(updated.recentTrainingHistory.some((entry) => entry.id === 'existing-0')).toBe(true);
     expect(updated.recentTrainingHistory.some((entry) => entry.id === 'existing-9')).toBe(false);
+  });
+
+  it('claims a wallet lesson reward on the first wallet-origin completion', () => {
+    const initial = { ...mockProgress, walletLessonRewards: { claimedExerciseIds: [] } };
+    const result: TrainingExerciseResult = {
+      isCorrect: false,
+      xpEarned: 8,
+      title: 'Incorrect',
+      explanation: 'First wallet lesson attempt consumes the one-time reward claim.',
+    };
+    const updated = applyTrainingResult(initial, walletExercise, result, {
+      historyId: 'wallet-h1',
+      timestamp: '2026-09-11T12:00:00.000Z',
+      mode: 'practice',
+      source: 'wallet',
+    });
+
+    expect(updated.walletLessonRewards.claimedExerciseIds).toContain(walletExercise.id);
+  });
+
+  it('does not duplicate an existing wallet lesson reward claim', () => {
+    const initial = {
+      ...mockProgress,
+      walletLessonRewards: { claimedExerciseIds: [walletExercise.id] },
+    };
+    const result: TrainingExerciseResult = {
+      isCorrect: true,
+      xpEarned: 0,
+      title: 'Correct',
+      explanation: 'Retry remains zero XP after reward claim.',
+    };
+    const updated = applyTrainingResult(initial, walletExercise, result, {
+      historyId: 'wallet-h2',
+      timestamp: '2026-09-11T12:00:10.000Z',
+      mode: 'practice',
+      source: 'wallet',
+    });
+
+    expect(updated.walletLessonRewards.claimedExerciseIds).toEqual([walletExercise.id]);
+  });
+
+  it('updates walletLessonProgress on every wallet-origin attempt and keeps only the latest result', () => {
+    const failed: TrainingExerciseResult = {
+      isCorrect: false,
+      xpEarned: 8,
+      title: 'Incorrect',
+      explanation: 'Needs review.',
+    };
+    const passed: TrainingExerciseResult = {
+      isCorrect: true,
+      xpEarned: 0,
+      title: 'Correct',
+      explanation: 'Good choice.',
+    };
+
+    const afterFirst = applyTrainingResult(mockProgress, walletExercise, failed, {
+      historyId: 'wallet-progress-1',
+      timestamp: '2026-09-11T12:00:00.000Z',
+      mode: 'practice',
+      source: 'wallet',
+    });
+    expect(afterFirst.walletLessonProgress[walletExercise.id]).toEqual({ passed: false, completedAt: '2026-09-11T12:00:00.000Z' });
+
+    const afterSecond = applyTrainingResult(afterFirst, walletExercise, passed, {
+      historyId: 'wallet-progress-2',
+      timestamp: '2026-09-11T12:01:00.000Z',
+      mode: 'practice',
+      source: 'wallet',
+    });
+    expect(afterSecond.walletLessonProgress[walletExercise.id]).toEqual({ passed: true, completedAt: '2026-09-11T12:01:00.000Z' });
+
+    const afterThird = applyTrainingResult(afterSecond, walletExercise, failed, {
+      historyId: 'wallet-progress-3',
+      timestamp: '2026-09-11T12:02:00.000Z',
+      mode: 'practice',
+      source: 'wallet',
+    });
+    expect(afterThird.walletLessonProgress[walletExercise.id]).toEqual({ passed: false, completedAt: '2026-09-11T12:02:00.000Z' });
+  });
+
+  it('does not update walletLessonProgress for non-wallet training attempts', () => {
+    const initial = {
+      ...mockProgress,
+      walletLessonProgress: {
+        [walletExercise.id]: {
+          passed: false,
+          completedAt: '2026-09-11T08:00:00.000Z',
+        },
+      },
+    };
+    const updated = applyTrainingResult(initial, scenario, evaluateDecision(scenario, scenario.correctOptionId), {
+      historyId: 'non-wallet',
+      timestamp: '2026-09-11T13:00:00.000Z',
+      mode: 'practice',
+      source: 'adaptive',
+    });
+
+    expect(updated.walletLessonProgress).toEqual(initial.walletLessonProgress);
   });
 
   it('derives the complete progress snapshot without storing duplicate calculations', () => {

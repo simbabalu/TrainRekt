@@ -7,7 +7,7 @@ import { TrainingExerciseResult } from '@/types/exercise';
 import { TrainingMode } from '@/types/training';
 import { SectionCard } from './SectionCard';
 
-export function DecisionResultPanel({ result, skill, mode = 'daily' }: { result: TrainingExerciseResult; skill: SkillKey; mode?: TrainingMode }) {
+export function DecisionResultPanel({ result, skill, mode = 'daily', isWalletRetry = false }: { result: TrainingExerciseResult; skill: SkillKey; mode?: TrainingMode; isWalletRetry?: boolean }) {
   return (
     <SectionCard>
       <Text style={[styles.title, result.isCorrect ? styles.positive : styles.negative]}>{result.title}</Text>
@@ -15,6 +15,7 @@ export function DecisionResultPanel({ result, skill, mode = 'daily' }: { result:
         <View>
           <Text style={styles.xp}>+{result.xpEarned} XP</Text>
           {mode === 'practice' && <Text style={styles.practiceLabel}>PRACTICE XP</Text>}
+          {isWalletRetry && <Text style={styles.retryLabel}>RETRY - NO ADDITIONAL XP</Text>}
         </View>
         <Text style={styles.skill}>{skillLabels[skill]} {result.isCorrect ? '+2' : '-1'}</Text>
       </View>
@@ -174,6 +175,7 @@ const styles = StyleSheet.create({
   rewardRow: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.md },
   xp: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
   practiceLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1 },
+  retryLabel: { color: Colors.secondaryText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   explanation: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22, marginTop: Spacing.sm },
   skill: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800' },
   lessonLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2, marginTop: Spacing.lg },

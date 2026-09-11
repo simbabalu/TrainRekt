@@ -1,12 +1,13 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import WalletSafetyScreen from '@/app/wallet-safety';
+import WalletSafetyScreen from '@/app/(tabs)/wallet-safety';
 
 const useWalletMock = vi.hoisted(() => vi.fn());
 const useWalletSnapshotMock = vi.hoisted(() => vi.fn());
 const useWalletSafetyInspectionMock = vi.hoisted(() => vi.fn());
+const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useWallet', () => ({
   useWallet: useWalletMock,
@@ -20,6 +21,10 @@ vi.mock('@/hooks/useWalletSafetyInspection', () => ({
   useWalletSafetyInspection: useWalletSafetyInspectionMock,
 }));
 
+vi.mock('@/hooks/useTrainingProgress', () => ({
+  useTrainingProgress: useTrainingProgressMock,
+}));
+
 vi.mock('@/components/Screen', () => ({
   Screen: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -29,7 +34,7 @@ vi.mock('@/components/PageHeading', () => ({
 }));
 
 vi.mock('@/components/WalletSafetySnapshotCard', () => ({
-  WalletSafetySnapshotCard: ({ connected, status, network }: { connected: boolean; status: string; network: string }) => React.createElement('Text', null, `CARD connected=${connected} status=${status} network=${network}`),
+  WalletSafetySnapshotCard: ({ connected, status, network, onRefresh }: { connected: boolean; status: string; network: string; onRefresh: () => void }) => React.createElement('Text', { onPress: onRefresh }, `CARD connected=${connected} status=${status} network=${network}`),
 }));
 
 vi.mock('@/components/wallet/WalletSafetyInspection', () => ({
@@ -49,6 +54,10 @@ function renderedText(value: unknown): string {
 }
 
 describe('WalletSafetyScreen', () => {
+  beforeEach(() => {
+    useTrainingProgressMock.mockReturnValue({ progress: { recentTrainingHistory: [], walletLessonProgress: {} } });
+  });
+
   it('renders dedicated screen heading and snapshot card', () => {
     useWalletMock.mockReturnValue({
       wallet: null,
@@ -127,5 +136,40 @@ describe('WalletSafetyScreen', () => {
     const text = renderedText(renderer.toJSON());
     expect(text).toContain('CARD connected=true status=success network=mainnet-beta');
     expect(text).toContain('INSPECTION status=unavailable error=Wallet inspection is temporarily unavailable. Please try again.');
+  });
+
+  it('uses the single snapshot refresh action for both read-only data surfaces', () => {
+    const refreshSnapshot = vi.fn().mockResolvedValue(true);
+    const refreshInspection = vi.fn().mockResolvedValue(true);
+    useWalletMock.mockReturnValue({ wallet: null, connect: vi.fn() });
+    useWalletSnapshotMock.mockReturnValue({
+      isConnected: false,
+      status: 'idle',
+      snapshot: null,
+      error: null,
+      network: 'mainnet-beta',
+      refresh: refreshSnapshot,
+    });
+    useWalletSafetyInspectionMock.mockReturnValue({
+      isConnected: false,
+      status: 'idle',
+      viewMode: 'review',
+      inspection: null,
+      error: null,
+      setViewMode: vi.fn(),
+      refresh: refreshInspection,
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<WalletSafetyScreen />);
+    });
+
+    act(() => {
+      renderer.root.findAll((node) => String(node.type) === 'Text')[1].props.onPress();
+    });
+
+    expect(refreshSnapshot).toHaveBeenCalledTimes(1);
+    expect(refreshInspection).toHaveBeenCalledTimes(1);
   });
 });

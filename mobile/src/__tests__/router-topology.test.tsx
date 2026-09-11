@@ -80,7 +80,7 @@ function flattenText(value: unknown): string {
 }
 
 describe('Router topology', () => {
-  it('mounts a root stack with tabs group plus wallet-safety detail route', () => {
+  it('mounts the root stack with the shared tabs shell', () => {
     let renderer!: ReturnType<typeof create>;
 
     act(() => {
@@ -88,9 +88,8 @@ describe('Router topology', () => {
     });
 
     const stackScreens = renderer.root.findAll((node) => String(node.type) === 'StackScreen');
-    expect(stackScreens).toHaveLength(2);
+    expect(stackScreens).toHaveLength(1);
     expect(stackScreens[0].props.name).toBe('(tabs)');
-    expect(stackScreens[1].props.name).toBe('wallet-safety');
   });
 
   it('keeps each global provider single-mounted in root layout', () => {

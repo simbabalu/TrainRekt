@@ -8,9 +8,11 @@ import { Colors, Typography } from '@/constants/theme';
 import { useWalletSnapshot } from '@/hooks/useWalletSnapshot';
 import { useWalletSafetyInspection } from '@/hooks/useWalletSafetyInspection';
 import { useWallet } from '@/hooks/useWallet';
+import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
 export default function WalletSafetyScreen() {
   const { wallet, connect } = useWallet();
+  const { progress } = useTrainingProgress();
   const { isConnected, status, snapshot, error, network, refresh } = useWalletSnapshot();
   const {
     status: inspectionStatus,
@@ -20,6 +22,9 @@ export default function WalletSafetyScreen() {
     setViewMode: setInspectionViewMode,
     refresh: refreshInspection,
   } = useWalletSafetyInspection();
+  const refreshWalletData = () => {
+    void Promise.all([refresh(), refreshInspection()]);
+  };
 
   return (
     <Screen>
@@ -39,7 +44,7 @@ export default function WalletSafetyScreen() {
           void connect();
         }}
         onRefresh={() => {
-          void refresh();
+          refreshWalletData();
         }}
       />
       <WalletSafetyInspection
@@ -50,8 +55,9 @@ export default function WalletSafetyScreen() {
         error={inspectionError}
         onViewModeChange={setInspectionViewMode}
         onRefresh={() => {
-          void refreshInspection();
+          refreshWalletData();
         }}
+        walletLessonProgress={progress.walletLessonProgress}
       />
       <Text style={styles.footer}>This snapshot is informational and does not classify assets as safe or unsafe.</Text>
     </Screen>

@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { LayoutChangeEvent, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -78,6 +78,7 @@ function CompletedDailyTrainingScreen() {
 function TrainSession({ mode, source, topic, initialExerciseId }: { mode: TrainingMode; source: 'adaptive' | 'wallet'; topic: WalletTrainingTopic | null; initialExerciseId?: string }) {
   const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise, debugSelectExercise } = useTrainingScenario(mode, { source, topic: topic ?? undefined, initialExerciseId });
   const { progress } = useTrainingProgress();
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const scrolledResultRef = useRef<typeof result>(null);
   const step = getDailyTrainingStep(progress.daily);
@@ -99,6 +100,14 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
   function handleNextExercise() {
     nextExercise();
     scrollToTopAfterExerciseChange();
+  }
+
+  function handleResultAction() {
+    if (source === 'wallet') {
+      router.replace('/wallet-safety');
+      return;
+    }
+    handleNextExercise();
   }
 
   function handleDebugSelectExercise(exerciseId: string) {
@@ -131,12 +140,14 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
 
       {result && (
         <View onLayout={handleResultAnchorLayout}>
-          <DecisionResultPanel result={result} skill={currentExercise.skill} mode={mode} />
+          <DecisionResultPanel result={result} skill={currentExercise.skill} mode={mode} isWalletRetry={source === 'wallet' && result.xpEarned === 0} />
           {mode === 'daily' && !sessionComplete && <DailyGoalInlineStatus goalProgress={dailyGoalProgress} />}
           {sessionComplete ? (
             <DailyTrainingCompleteCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
           ) : (
-            <PrimaryButton onPress={handleNextExercise} variant="secondary">NEXT EXERCISE</PrimaryButton>
+            <PrimaryButton onPress={handleResultAction} variant="secondary">
+              {source === 'wallet' ? 'BACK TO WALLET SAFETY' : 'NEXT EXERCISE'}
+            </PrimaryButton>
           )}
         </View>
       )}

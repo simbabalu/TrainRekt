@@ -40,6 +40,17 @@ export interface DailyTrainingState {
   bestDailyTrainingStreak: number;
 }
 
+export interface WalletLessonRewards {
+  claimedExerciseIds: string[];
+}
+
+export interface WalletLessonProgressEntry {
+  passed: boolean;
+  completedAt: string;
+}
+
+export type WalletLessonProgress = Record<string, WalletLessonProgressEntry>;
+
 export interface TrainingProgress {
   totalXp: number;
   sessionsCompleted: number;
@@ -49,6 +60,8 @@ export interface TrainingProgress {
   bestStreak: number;
   skillScores: SkillScores;
   recentTrainingHistory: HistoryEntry[];
+  walletLessonRewards: WalletLessonRewards;
+  walletLessonProgress: WalletLessonProgress;
   daily: DailyTrainingState;
   surpriseChallenges: SurpriseChallengeProgress;
   badges: BadgeProgress;

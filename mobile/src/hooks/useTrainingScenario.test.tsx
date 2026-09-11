@@ -6,7 +6,7 @@ import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { mockProgress } from '@/data/mockProgress';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { ExerciseAnswer } from '@/domain/training/evaluateExercise';
-import { TrainingExercise } from '@/types/exercise';
+import { TrainingExercise, TransactionInspectionDecision } from '@/types/exercise';
 import { useTrainingProgress } from './useTrainingProgress';
 import { useTrainingScenario } from './useTrainingScenario';
 
@@ -24,6 +24,12 @@ function getCorrectAnswer(exercise: TrainingExercise): ExerciseAnswer {
   if (exercise.type === 'decision') return exercise.correctOptionId;
   if (exercise.type === 'red-flag-identification') return { selectedRedFlagIds: exercise.expectedRedFlagIds };
   return exercise.expectedDecision;
+}
+
+function getIncorrectWalletInspectionAnswer(exercise: TrainingExercise): TransactionInspectionDecision {
+  if (exercise.type !== 'transaction-inspection') throw new Error('Expected transaction inspection exercise');
+  const fallbackDecisions: TransactionInspectionDecision[] = ['approve', 'reject', 'needs-review'];
+  return fallbackDecisions.find((decision) => decision !== exercise.expectedDecision) ?? 'reject';
 }
 
 describe('useTrainingScenario', () => {
@@ -62,7 +68,7 @@ describe('useTrainingScenario', () => {
 
   it('awards normal XP in practice mode without touching the daily counter, streak, or completion', async () => {
     const completedProgress = { ...mockProgress, daily: { ...mockProgress.daily, todayCompletedDecisions: 3, dailyGoalCompleted: true, dailyTrainingStreak: 2, bestDailyTrainingStreak: 2 } };
-    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 2, data: completedProgress }) : null));
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: completedProgress }) : null));
 
     let controller!: ScenarioController;
     let progress!: TrainingProgressSnapshot;
@@ -103,7 +109,7 @@ describe('useTrainingScenario', () => {
         dailyTrainingStreak: 2,
       },
     };
-    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 2, data: seededProgress }) : null));
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: seededProgress }) : null));
 
     let controller!: ScenarioController;
     let progress!: TrainingProgressSnapshot;
@@ -140,5 +146,200 @@ describe('useTrainingScenario', () => {
     expect(progress.daily.todayCompletedDecisions).toBe(initialDailyCount);
     expect(progress.daily.dailyTrainingStreak).toBe(initialDailyStreak);
     expect(progress.daily.dailyGoalCompleted).toBe(false);
+  });
+
+  it('records wallet retries with zero XP while preserving Daily state and history', async () => {
+    const exerciseId = 'wallet-lesson-frozen-account-state';
+    const seededProgress = {
+      ...mockProgress,
+      totalXp: 30,
+      recentTrainingHistory: [],
+      walletLessonRewards: { claimedExerciseIds: [exerciseId] },
+      walletLessonProgress: {
+        [exerciseId]: {
+          passed: false,
+          completedAt: '2026-09-11T10:00:00.000Z',
+        },
+      },
+      daily: { ...mockProgress.daily, todayCompletedDecisions: 1, dailyTrainingStreak: 2, dailyGoalCompleted: false },
+    };
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: seededProgress }) : null));
+
+    let controller!: ScenarioController;
+    let progress!: TrainingProgressSnapshot;
+    function Harness() {
+      controller = useTrainingScenario('practice', { source: 'wallet', topic: 'token-account-state', initialExerciseId: exerciseId });
+      progress = useTrainingProgress().progress;
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    const initialHistoryLength = progress.recentTrainingHistory.length;
+    const initialDaily = progress.daily;
+    act(() => controller.submitAnswer(getCorrectAnswer(controller.currentExercise)));
+
+    expect(controller.result?.xpEarned).toBe(0);
+    expect(progress.totalXp).toBe(30);
+    expect(progress.recentTrainingHistory).toHaveLength(initialHistoryLength + 1);
+    expect(progress.recentTrainingHistory[0].scenarioId).toBe(exerciseId);
+    expect(progress.walletLessonProgress[exerciseId]?.passed).toBe(true);
+    expect(progress.daily.todayCompletedDecisions).toBe(initialDaily.todayCompletedDecisions);
+    expect(progress.daily.dailyTrainingStreak).toBe(initialDaily.dailyTrainingStreak);
+  });
+
+  it('consumes wallet reward eligibility on first incorrect attempt and keeps retries at zero after restart', async () => {
+    const exerciseId = 'wallet-lesson-frozen-account-state';
+    const initialProgress = {
+      ...mockProgress,
+      totalXp: 0,
+      recentTrainingHistory: [],
+      walletLessonRewards: { claimedExerciseIds: [] },
+      walletLessonProgress: {},
+      daily: { ...mockProgress.daily, todayCompletedDecisions: 0, dailyGoalCompleted: false },
+    };
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: initialProgress }) : null));
+
+    let firstController!: ScenarioController;
+    let firstProgress!: TrainingProgressSnapshot;
+
+    function FirstHarness() {
+      firstController = useTrainingScenario('practice', { source: 'wallet', topic: 'token-account-state', initialExerciseId: exerciseId });
+      firstProgress = useTrainingProgress().progress;
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><FirstHarness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      firstController.submitAnswer(getIncorrectWalletInspectionAnswer(firstController.currentExercise));
+    });
+
+    expect(firstController.result?.isCorrect).toBe(false);
+    expect(firstController.result?.xpEarned).toBeGreaterThan(0);
+    expect(firstProgress.walletLessonRewards.claimedExerciseIds).toContain(exerciseId);
+    expect(firstProgress.walletLessonProgress[exerciseId]).toEqual({
+      passed: false,
+      completedAt: firstProgress.walletLessonProgress[exerciseId]?.completedAt,
+    });
+
+    const savedTrainingCalls = storage.setItem.mock.calls.filter(([key]) => key === '@trainrekt/training-progress');
+    const saved = savedTrainingCalls[savedTrainingCalls.length - 1]?.[1];
+    expect(typeof saved).toBe('string');
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? (saved as string) : null));
+
+    let retryController!: ScenarioController;
+    function RetryHarness() {
+      retryController = useTrainingScenario('practice', { source: 'wallet', topic: 'token-account-state', initialExerciseId: exerciseId });
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><RetryHarness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      retryController.submitAnswer(getCorrectAnswer(retryController.currentExercise));
+    });
+
+    expect(retryController.result?.isCorrect).toBe(true);
+    expect(retryController.result?.xpEarned).toBe(0);
+  });
+
+  it('keeps wallet retry XP at zero even after the original attempt is evicted from recent history', async () => {
+    const exerciseId = 'wallet-lesson-frozen-account-state';
+    const filledHistory = Array.from({ length: 10 }, (_, index) => ({
+      id: `history-${index}`,
+      scenarioId: `other-exercise-${index}`,
+      scenarioTitle: `Other Exercise ${index}`,
+      correct: true,
+      skill: 'riskManagement' as const,
+      timestamp: `2026-09-10T08:00:${String(index).padStart(2, '0')}.000Z`,
+      xpEarned: 25,
+      exerciseType: 'decision' as const,
+    }));
+    const seededProgress = {
+      ...mockProgress,
+      totalXp: 250,
+      recentTrainingHistory: filledHistory,
+      walletLessonRewards: { claimedExerciseIds: [exerciseId] },
+      walletLessonProgress: {
+        [exerciseId]: {
+          passed: false,
+          completedAt: '2026-09-11T09:00:00.000Z',
+        },
+      },
+    };
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: seededProgress }) : null));
+
+    let controller!: ScenarioController;
+    let progress!: TrainingProgressSnapshot;
+    function Harness() {
+      controller = useTrainingScenario('practice', { source: 'wallet', topic: 'token-account-state', initialExerciseId: exerciseId });
+      progress = useTrainingProgress().progress;
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      controller.submitAnswer(getCorrectAnswer(controller.currentExercise));
+    });
+
+    expect(controller.result?.xpEarned).toBe(0);
+    expect(progress.walletLessonRewards.claimedExerciseIds).toContain(exerciseId);
+    expect(progress.walletLessonProgress[exerciseId]?.passed).toBe(true);
+    expect(progress.recentTrainingHistory).toHaveLength(10);
+  });
+
+  it('grants one-time wallet reward independently per stable exercise ID', async () => {
+    const seededProgress = {
+      ...mockProgress,
+      totalXp: 30,
+      recentTrainingHistory: [],
+      walletLessonRewards: { claimedExerciseIds: ['wallet-lesson-frozen-account-state'] },
+      walletLessonProgress: {
+        'wallet-lesson-frozen-account-state': {
+          passed: true,
+          completedAt: '2026-09-11T09:00:00.000Z',
+        },
+      },
+      daily: { ...mockProgress.daily, todayCompletedDecisions: 0, dailyGoalCompleted: false },
+    };
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: seededProgress }) : null));
+
+    let controller!: ScenarioController;
+    let progress!: TrainingProgressSnapshot;
+    function Harness() {
+      controller = useTrainingScenario('practice', { source: 'wallet', topic: 'empty-token-account', initialExerciseId: 'wallet-lesson-empty-token-account-context' });
+      progress = useTrainingProgress().progress;
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    const expectedXp = Math.round(controller.currentExercise.xpReward * 0.25);
+    const initialXp = progress.totalXp;
+    act(() => {
+      controller.submitAnswer(getCorrectAnswer(controller.currentExercise));
+    });
+
+    expect(controller.result?.xpEarned).toBe(expectedXp);
+    expect(progress.totalXp).toBe(initialXp + expectedXp);
+    expect(progress.walletLessonRewards.claimedExerciseIds).toContain('wallet-lesson-empty-token-account-context');
+    expect(progress.walletLessonProgress['wallet-lesson-empty-token-account-context']?.passed).toBe(true);
   });
 });

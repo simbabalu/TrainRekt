@@ -30,7 +30,7 @@ describe('training progress storage', () => {
   it('serializes authoritative progress without derived values', () => {
     const parsed = JSON.parse(serializeTrainingProgress(mockProgress)) as { version: number; data: Record<string, unknown> };
 
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(4);
     expect(parsed.data.totalXp).toBe(mockProgress.totalXp);
     expect(parsed.data).not.toHaveProperty('level');
     expect(parsed.data).not.toHaveProperty('winRate');
@@ -62,12 +62,16 @@ describe('training progress storage', () => {
     delete legacyData.daily;
     delete legacyData.surpriseChallenges;
     delete legacyData.badges;
+    delete legacyData.walletLessonRewards;
+    delete legacyData.walletLessonProgress;
     storage.getItem.mockResolvedValue(JSON.stringify({ version: 1, data: legacyData }));
 
     const loaded = await loadTrainingProgress();
 
     expect(loaded.totalXp).toBe(mockProgress.totalXp);
     expect(loaded.recentTrainingHistory).toEqual(mockProgress.recentTrainingHistory);
+    expect(loaded.walletLessonRewards).toEqual({ claimedExerciseIds: [] });
+    expect(loaded.walletLessonProgress).toEqual({});
     expect(loaded.daily.dailyGoal).toBe(3);
     expect(loaded.daily.todayCompletedDecisions).toBe(0);
     expect(loaded.daily.dailyGoalCompleted).toBe(false);
@@ -106,6 +110,127 @@ describe('training progress storage', () => {
     await saveTrainingProgress(progressWithDailyProgress);
 
     await expect(loadTrainingProgress()).resolves.toEqual(progressWithDailyProgress);
+  });
+
+  it('normalizes wallet lesson reward claims from persisted progress', async () => {
+    const persisted = {
+      ...mockProgress,
+      walletLessonRewards: {
+        claimedExerciseIds: ['wallet-lesson-frozen-account-state', 42, 'wallet-lesson-frozen-account-state'],
+      },
+    };
+    storage.getItem.mockResolvedValue(JSON.stringify({ version: 4, data: persisted }));
+
+    const loaded = await loadTrainingProgress();
+
+    expect(loaded.walletLessonRewards).toEqual({ claimedExerciseIds: ['wallet-lesson-frozen-account-state'] });
+  });
+
+  it('hydrates persisted wallet lesson progress and removes unknown entries', async () => {
+    const persisted = {
+      ...mockProgress,
+      walletLessonProgress: {
+        'wallet-lesson-frozen-account-state': {
+          passed: true,
+          completedAt: '2026-09-11T10:00:00.000Z',
+        },
+        'not-a-wallet-lesson': {
+          passed: false,
+          completedAt: '2026-09-11T10:00:00.000Z',
+        },
+      },
+    };
+    storage.getItem.mockResolvedValue(JSON.stringify({ version: 4, data: persisted }));
+
+    const loaded = await loadTrainingProgress();
+
+    expect(loaded.walletLessonProgress).toEqual({
+      'wallet-lesson-frozen-account-state': {
+        passed: true,
+        completedAt: '2026-09-11T10:00:00.000Z',
+      },
+    });
+  });
+
+  it('persists and restores PASSED/FAILED wallet lesson outcomes across restarts', async () => {
+    const persisted = {
+      ...mockProgress,
+      walletLessonProgress: {
+        'wallet-lesson-frozen-account-state': {
+          passed: true,
+          completedAt: '2026-09-11T10:00:00.000Z',
+        },
+        'wallet-lesson-empty-token-account-context': {
+          passed: false,
+          completedAt: '2026-09-11T11:00:00.000Z',
+        },
+      },
+    };
+    storage.getItem.mockResolvedValue(JSON.stringify({ version: 4, data: persisted }));
+
+    const loaded = await loadTrainingProgress();
+
+    expect(loaded.walletLessonProgress).toEqual({
+      'wallet-lesson-frozen-account-state': {
+        passed: true,
+        completedAt: '2026-09-11T10:00:00.000Z',
+      },
+      'wallet-lesson-empty-token-account-context': {
+        passed: false,
+        completedAt: '2026-09-11T11:00:00.000Z',
+      },
+    });
+  });
+
+  it('migrates wallet lesson progress from deterministic history when progress map is missing', async () => {
+    const persisted = {
+      ...mockProgress,
+      recentTrainingHistory: [
+        {
+          id: 'history-1',
+          scenarioId: 'wallet-lesson-frozen-account-state',
+          scenarioTitle: 'Token Account State',
+          correct: false,
+          skill: 'walletSafety' as const,
+          timestamp: '2026-09-11T09:00:00.000Z',
+          xpEarned: 8,
+          exerciseType: 'transaction-inspection' as const,
+        },
+        {
+          id: 'history-2',
+          scenarioId: 'wallet-lesson-frozen-account-state',
+          scenarioTitle: 'Token Account State',
+          correct: true,
+          skill: 'walletSafety' as const,
+          timestamp: '2026-09-11T10:00:00.000Z',
+          xpEarned: 0,
+          exerciseType: 'transaction-inspection' as const,
+        },
+        {
+          id: 'history-3',
+          scenarioId: 'sol-momentum-trap',
+          scenarioTitle: 'SOL Momentum Trap',
+          correct: true,
+          skill: 'profitTaking' as const,
+          timestamp: '2026-09-11T11:00:00.000Z',
+          xpEarned: 120,
+          exerciseType: 'decision' as const,
+        },
+      ],
+      walletLessonRewards: { claimedExerciseIds: ['wallet-lesson-frozen-account-state'] },
+    };
+    delete (persisted as { walletLessonProgress?: unknown }).walletLessonProgress;
+    storage.getItem.mockResolvedValue(JSON.stringify({ version: 3, data: persisted }));
+
+    const loaded = await loadTrainingProgress();
+
+    expect(loaded.walletLessonRewards.claimedExerciseIds).toEqual(['wallet-lesson-frozen-account-state']);
+    expect(loaded.walletLessonProgress).toEqual({
+      'wallet-lesson-frozen-account-state': {
+        passed: true,
+        completedAt: '2026-09-11T10:00:00.000Z',
+      },
+    });
   });
 });
 

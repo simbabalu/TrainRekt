@@ -75,4 +75,23 @@ describe('DecisionResultPanel red-flag-identification', () => {
     expect(text).toContain('PRACTICE XP');
     expect(text).not.toContain('+120 XP');
   });
+
+  it('explains zero XP for a wallet lesson retry using the actual awarded amount', () => {
+    const result: TrainingExerciseResult = {
+      isCorrect: true,
+      xpEarned: 0,
+      title: 'Correct',
+      explanation: 'Good decision.',
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<DecisionResultPanel result={result} skill="walletSafety" mode="practice" isWalletRetry />);
+    });
+
+    const text = renderedText(renderer.toJSON()).replace(/\s+/g, ' ');
+    expect(/\+\s*0 XP/.test(text)).toBe(true);
+    expect(text).toContain('PRACTICE XP');
+    expect(text).toContain('RETRY - NO ADDITIONAL XP');
+  });
 });

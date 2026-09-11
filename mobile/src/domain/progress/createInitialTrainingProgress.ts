@@ -26,6 +26,8 @@ export function createInitialTrainingProgress(): TrainingProgress {
     bestStreak: 0,
     skillScores,
     recentTrainingHistory: [],
+    walletLessonRewards: { claimedExerciseIds: [] },
+    walletLessonProgress: {},
     daily: createDefaultDailyTrainingState(),
     surpriseChallenges: { completed: {} },
     badges: { earned: {} },

@@ -6,8 +6,10 @@ import { SectionCard } from '@/components/SectionCard';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
 import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
+import { getWalletLessonStatus } from '@/domain/wallet/getWalletLessonStatus';
 import { summarizeWalletInspection } from '@/domain/wallet/summarizeWalletInspection';
 import type { WalletSafetyInspection as WalletSafetyInspectionModel } from '@/types/walletInspection';
+import type { WalletLessonProgress } from '@/types/progress';
 import type { WalletInspectionStatus, WalletInspectionViewMode } from '@/hooks/useWalletSafetyInspection';
 import { TokenAccountInspectionRow } from './TokenAccountInspectionRow';
 import { WalletInspectionSummary } from './WalletInspectionSummary';
@@ -22,6 +24,7 @@ interface WalletSafetyInspectionProps {
   error: string | null;
   onViewModeChange: (mode: WalletInspectionViewMode) => void;
   onRefresh: () => void;
+  walletLessonProgress?: Readonly<WalletLessonProgress>;
 }
 
 function StatusText({ status, error, hasInspection }: { status: WalletInspectionStatus; error: string | null; hasInspection: boolean }) {
@@ -32,13 +35,17 @@ function StatusText({ status, error, hasInspection }: { status: WalletInspection
   return null;
 }
 
-export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh }: WalletSafetyInspectionProps) {
+export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh, walletLessonProgress = {} }: WalletSafetyInspectionProps) {
   const router = useRouter();
   const tokenAccounts = inspection?.tokenAccounts ?? [];
   const summary = summarizeWalletInspection(tokenAccounts);
   const categorized = categorizeWalletInspectionAccounts(tokenAccounts);
   const categorySummary = categorized.summary;
   const recommendations = recommendWalletTraining(tokenAccounts);
+  const recommendationsWithStatus = recommendations.map((recommendation) => ({
+    recommendation,
+    status: getWalletLessonStatus({ exerciseId: recommendation.recommendedExerciseIds[0], walletLessonProgress }),
+  }));
 
   const visibleAccounts = (() => {
     if (viewMode === 'all') return tokenAccounts;
@@ -102,10 +109,11 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                     <Text style={styles.info}>No review signals found. You can still practice general wallet-safety lessons.</Text>
                   ) : (
                     <View style={styles.lessonList}>
-                      {recommendations.map((recommendation) => (
+                      {recommendationsWithStatus.map(({ recommendation, status: lessonStatus }) => (
                         <WalletTrainingRecommendationCard
                           key={recommendation.topic}
                           recommendation={recommendation}
+                          status={lessonStatus}
                           onStartLesson={(selectedRecommendation) => {
                             const firstExerciseId = selectedRecommendation.recommendedExerciseIds[0];
                             if (!firstExerciseId) return;
@@ -171,9 +179,6 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   )}
                 </View>
 
-                <PrimaryButton onPress={onRefresh} disabled={status === 'loading'} variant="secondary">
-                  {status === 'loading' ? 'INSPECTING...' : status === 'unavailable' ? 'RETRY INSPECTION' : 'REFRESH INSPECTION'}
-                </PrimaryButton>
               </>
             )}
 

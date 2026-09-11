@@ -22,7 +22,7 @@ function findExerciseById(exerciseId: string) {
 }
 
 export function useTrainingScenario(mode: TrainingMode, options: UseTrainingScenarioOptions = {}) {
-  const { recordTrainingResult } = useTrainingProgress();
+  const { progress, recordTrainingResult } = useTrainingProgress();
   const recommendedExercise = useRecommendedTraining();
   const initialExercise = options.initialExerciseId
     ? findExerciseById(options.initialExerciseId)
@@ -38,13 +38,20 @@ export function useTrainingScenario(mode: TrainingMode, options: UseTrainingScen
     if (answeredExerciseId.current === currentExercise.id) return;
     answeredExerciseId.current = currentExercise.id;
     const evaluatedResult = evaluateExercise(currentExercise, answer);
+    const walletRewardAlreadyClaimed = options.source === 'wallet'
+      && Boolean(progress?.walletLessonRewards.claimedExerciseIds.includes(currentExercise.id));
     const exerciseResult = {
       ...evaluatedResult,
-      xpEarned: calculateAwardedExerciseXp({ baseXp: evaluatedResult.xpEarned, mode }),
+      xpEarned: calculateAwardedExerciseXp({
+        baseXp: evaluatedResult.xpEarned,
+        mode,
+        source: options.source,
+        walletRewardAlreadyClaimed,
+      }),
     };
     setSelectedAnswer(answer);
     setResult(exerciseResult);
-    recordTrainingResult(currentExercise, exerciseResult, mode);
+    recordTrainingResult(currentExercise, exerciseResult, mode, options.source ?? 'adaptive');
   }
 
   function nextExercise() {

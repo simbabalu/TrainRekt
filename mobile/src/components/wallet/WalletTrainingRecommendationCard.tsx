@@ -4,11 +4,13 @@ import { AppIcon } from '@/components/AppIcon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { getWalletTrainingTopicLabel } from '@/domain/wallet/recommendWalletTraining';
+import type { WalletLessonStatus } from '@/domain/wallet/getWalletLessonStatus';
 import type { WalletTrainingRecommendation } from '@/types/walletTraining';
 import type { WalletSafetySignalKind } from '@/types/walletInspection';
 
 interface WalletTrainingRecommendationCardProps {
   recommendation: WalletTrainingRecommendation;
+  status: WalletLessonStatus;
   onStartLesson: (recommendation: WalletTrainingRecommendation) => void;
 }
 
@@ -19,7 +21,9 @@ const lessonIconBySignal: Record<WalletSafetySignalKind, { ios: string; android:
   'empty-token-account': { ios: 'tray', android: 'inventory_2', web: 'inventory_2' },
 };
 
-export function WalletTrainingRecommendationCard({ recommendation, onStartLesson }: WalletTrainingRecommendationCardProps) {
+export function WalletTrainingRecommendationCard({ recommendation, status, onStartLesson }: WalletTrainingRecommendationCardProps) {
+  const completed = status !== 'not-started';
+  const statusLabel = status === 'passed' ? 'PASSED' : status === 'failed' ? 'FAILED' : null;
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -29,11 +33,13 @@ export function WalletTrainingRecommendationCard({ recommendation, onStartLesson
           size={16}
         />
         <Text style={styles.title}>{getWalletTrainingTopicLabel(recommendation.topic)}</Text>
+        {statusLabel && <Text style={[styles.status, status === 'passed' ? styles.statusPassed : styles.statusFailed]}>{statusLabel}</Text>}
       </View>
       <Text style={styles.count}>{recommendation.observedAccountCount} account{recommendation.observedAccountCount === 1 ? '' : 's'} observed</Text>
       <Text style={styles.reason}>{compactReason[recommendation.topic]}</Text>
+      {completed && <Text style={styles.completed}>Completed</Text>}
       <PrimaryButton variant="secondary" onPress={() => onStartLesson(recommendation)}>
-        START LESSON
+        {completed ? 'RETRY LESSON' : 'START LESSON'}
       </PrimaryButton>
     </View>
   );
@@ -67,6 +73,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.5,
   },
+  status: {
+    fontSize: Typography.label,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    marginLeft: 'auto',
+  },
+  statusPassed: { color: Colors.positive },
+  statusFailed: { color: Colors.negative },
   count: {
     color: Colors.accent,
     fontSize: Typography.small,
@@ -77,5 +91,9 @@ const styles = StyleSheet.create({
     fontSize: Typography.small,
     lineHeight: 18,
     marginBottom: Spacing.xs,
+  },
+  completed: {
+    color: Colors.secondaryText,
+    fontSize: Typography.label,
   },
 });

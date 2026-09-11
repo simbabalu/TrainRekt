@@ -17,7 +17,7 @@ function HydratedApp() {
   const { isHydrated: progressHydrated } = useTrainingProgress();
   const { isHydrated: settingsHydrated } = useSettings();
   if (!progressHydrated || !settingsHydrated) return <View style={styles.loading}><ActivityIndicator color={Colors.accent} /></View>;
-  return <Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="wallet-safety" /></Stack>;
+  return <Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /></Stack>;
 }
 
 const styles = StyleSheet.create({ loading: { alignItems: 'center', backgroundColor: Colors.background, flex: 1, justifyContent: 'center' } });

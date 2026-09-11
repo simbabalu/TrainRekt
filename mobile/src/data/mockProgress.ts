@@ -24,6 +24,8 @@ export const mockProgress: TrainingProgress = {
     { id: 'history-btc-panic-sell', scenarioId: 'btc-panic-sell', scenarioTitle: 'BTC Panic Sell', correct: false, skill: 'riskManagement', timestamp: '2026-09-09T08:00:00.000Z', xpEarned: 30 },
     { id: 'history-memecoin-fomo', scenarioId: 'memecoin-fomo', scenarioTitle: 'Memecoin FOMO', correct: true, skill: 'fomoResistance', timestamp: '2026-09-08T08:00:00.000Z', xpEarned: 100 },
   ],
+  walletLessonRewards: { claimedExerciseIds: [] },
+  walletLessonProgress: {},
   daily: createDefaultDailyTrainingState(),
   surpriseChallenges: { completed: {} },
   badges: { earned: {} },

@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
 import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
-import { DailyTrainingState, SkillKey, SkillScores, TrainingProgress } from '@/types/progress';
+import { walletLessonCatalog } from '@/data/walletLessonCatalog';
+import { DailyTrainingState, HistoryEntry, SkillKey, SkillScores, TrainingProgress, WalletLessonProgress, WalletLessonRewards } from '@/types/progress';
 import { BadgeProgress, SurpriseChallengeDecision, SurpriseChallengeFinalDecision, SurpriseChallengeProgress } from '@/types/surpriseChallenge';
 import { storageKeys, storageSchemaVersion } from './storageKeys';
 
@@ -13,6 +14,7 @@ interface StoredProgress {
 
 const skillKeys: SkillKey[] = ['riskManagement', 'profitTaking', 'fomoResistance', 'positionSizing', 'scamAwareness', 'leverageRisk', 'panicSelling', 'marketInterpretation', 'walletSafety'];
 const defaultSkillScore = 50;
+const walletLessonExerciseIds = new Set(walletLessonCatalog.map((lesson) => lesson.id));
 
 export function serializeTrainingProgress(progress: TrainingProgress): string {
   return JSON.stringify({ version: storageSchemaVersion, data: progress });
@@ -27,6 +29,8 @@ export function deserializeTrainingProgress(value: string | null): TrainingProgr
     return {
       ...base,
       skillScores: normalizeStoredSkillScores(parsed.data.skillScores),
+      walletLessonRewards: normalizeStoredWalletLessonRewards(parsed.data.walletLessonRewards),
+      walletLessonProgress: normalizeStoredWalletLessonProgress(parsed.data.walletLessonProgress, base.recentTrainingHistory),
       daily: normalizeStoredDaily(parsed.data.daily),
       surpriseChallenges: normalizeStoredSurpriseChallenges(parsed.data.surpriseChallenges),
       badges: normalizeStoredBadges(parsed.data.badges),
@@ -85,13 +89,46 @@ function normalizeStoredSkillScores(value: unknown): SkillScores {
   return normalized;
 }
 
+function normalizeStoredWalletLessonRewards(value: unknown): WalletLessonRewards {
+  if (!isRecord(value) || !Array.isArray(value.claimedExerciseIds)) return { claimedExerciseIds: [] };
+  const claimedExerciseIds = value.claimedExerciseIds.filter((entry): entry is string => typeof entry === 'string');
+  return { claimedExerciseIds: Array.from(new Set(claimedExerciseIds)) };
+}
+
+function normalizeStoredWalletLessonProgress(value: unknown, trainingHistory: readonly HistoryEntry[]): WalletLessonProgress {
+  if (!isRecord(value)) return buildWalletLessonProgressFromHistory(trainingHistory);
+  const normalized: WalletLessonProgress = {};
+  Object.entries(value).forEach(([exerciseId, entry]) => {
+    if (!walletLessonExerciseIds.has(exerciseId) || !isRecord(entry)) return;
+    if (typeof entry.passed !== 'boolean' || typeof entry.completedAt !== 'string') return;
+    normalized[exerciseId] = { passed: entry.passed, completedAt: entry.completedAt };
+  });
+  if (Object.keys(normalized).length > 0) return normalized;
+  return buildWalletLessonProgressFromHistory(trainingHistory);
+}
+
+function buildWalletLessonProgressFromHistory(trainingHistory: readonly HistoryEntry[]): WalletLessonProgress {
+  const progress: WalletLessonProgress = {};
+  trainingHistory.forEach((entry) => {
+    if (!walletLessonExerciseIds.has(entry.scenarioId)) return;
+    const existing = progress[entry.scenarioId];
+    if (!existing || entry.timestamp > existing.completedAt) {
+      progress[entry.scenarioId] = {
+        passed: entry.correct,
+        completedAt: entry.timestamp,
+      };
+    }
+  });
+  return progress;
+}
+
 function isValidDailyState(value: unknown): value is DailyTrainingState {
   if (!isRecord(value)) return false;
   return isNonNegativeNumber(value.dailyGoal) && isNonNegativeNumber(value.todayCompletedDecisions) && typeof value.todayDateKey === 'string' && typeof value.dailyGoalCompleted === 'boolean' && (value.lastDailyCompletionDate === null || typeof value.lastDailyCompletionDate === 'string') && isNonNegativeNumber(value.dailyTrainingStreak) && isNonNegativeNumber(value.bestDailyTrainingStreak);
 }
 
 function isHistory(value: unknown): value is TrainingProgress['recentTrainingHistory'] {
-  return Array.isArray(value) && value.length <= 10 && value.every((entry) => isRecord(entry) && typeof entry.id === 'string' && typeof entry.scenarioId === 'string' && typeof entry.scenarioTitle === 'string' && typeof entry.correct === 'boolean' && skillKeys.includes(entry.skill as SkillKey) && typeof entry.timestamp === 'string' && isNonNegativeNumber(entry.xpEarned));
+  return Array.isArray(value) && value.every((entry) => isRecord(entry) && typeof entry.id === 'string' && typeof entry.scenarioId === 'string' && typeof entry.scenarioTitle === 'string' && typeof entry.correct === 'boolean' && skillKeys.includes(entry.skill as SkillKey) && typeof entry.timestamp === 'string' && isNonNegativeNumber(entry.xpEarned));
 }
 
 function normalizeStoredSurpriseChallenges(value: unknown): SurpriseChallengeProgress {

@@ -19,4 +19,19 @@ describe('calculateAwardedExerciseXp', () => {
     expect(calculateAwardedExerciseXp({ baseXp: -120, mode: 'practice' })).toBe(0);
     expect(calculateAwardedExerciseXp({ baseXp: Number.NaN, mode: 'daily' })).toBe(0);
   });
+
+  it('awards wallet Practice XP only for the first stable exercise attempt', () => {
+    expect(calculateAwardedExerciseXp({ baseXp: 120, mode: 'practice', source: 'wallet', walletRewardAlreadyClaimed: false })).toBe(30);
+    expect(calculateAwardedExerciseXp({
+      baseXp: 120,
+      mode: 'practice',
+      source: 'wallet',
+      walletRewardAlreadyClaimed: true,
+    })).toBe(0);
+  });
+
+  it('does not suppress first attempts for another exercise or ordinary practice', () => {
+    expect(calculateAwardedExerciseXp({ baseXp: 120, mode: 'practice', source: 'wallet', walletRewardAlreadyClaimed: false })).toBe(30);
+    expect(calculateAwardedExerciseXp({ baseXp: 120, mode: 'practice', walletRewardAlreadyClaimed: true })).toBe(30);
+  });
 });

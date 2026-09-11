@@ -17,6 +17,7 @@ interface ApplyResultAction {
   exercise: TrainingExercise;
   result: TrainingExerciseResult;
   mode: TrainingMode;
+  source: 'adaptive' | 'wallet';
   historyId: string;
   timestamp: string;
 }
@@ -40,7 +41,7 @@ type ProgressAction = ApplyResultAction | HydrateAction | DebugShiftDailyDateAct
 interface TrainingProgressContextValue {
   progress: TrainingProgressSnapshot;
   isHydrated: boolean;
-  recordTrainingResult: (exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode) => void;
+  recordTrainingResult: (exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode, source?: 'adaptive' | 'wallet') => void;
   recordSurpriseChallengeCompletion: (completion: SurpriseChallengeCompletionInput) => void;
   resetProgress: () => Promise<void>;
   debugSimulatePreviousDay: () => void;
@@ -62,6 +63,7 @@ function progressReducer(progress: TrainingProgress, action: ProgressAction): Tr
     historyId: action.historyId,
     timestamp: action.timestamp,
     mode: action.mode,
+    source: action.source,
   });
 }
 
@@ -91,7 +93,7 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
     void saveTrainingProgress(progressState);
   }, [isHydrated, progressState]);
 
-  function recordTrainingResult(exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode) {
+  function recordTrainingResult(exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode, source: 'adaptive' | 'wallet' = 'adaptive') {
     if (!isHydrated) return;
     historySequence.current += 1;
     dispatch({
@@ -99,6 +101,7 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
       exercise,
       result,
       mode,
+      source,
       historyId: `training-${Date.now()}-${historySequence.current}`,
       timestamp: new Date().toISOString(),
     });

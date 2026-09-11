@@ -121,15 +121,9 @@ describe('WalletSafetyInspection wallet isolation', () => {
       renderer = create(
         <WalletSafetyInspection
           connected
-          status="success"
+          status="unavailable"
           viewMode="review"
-          inspection={{
-            address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9WqP1FfGS6db5CwPH',
-            network: 'mainnet-beta',
-            inspectedAt: new Date().toISOString(),
-            warnings: [],
-            tokenAccounts: [],
-          }}
+          inspection={null}
           error={null}
           onViewModeChange={vi.fn()}
           onRefresh={onRefresh}
@@ -137,8 +131,7 @@ describe('WalletSafetyInspection wallet isolation', () => {
       );
     });
 
-    const pressables = renderer.root.findAll((node) => String(node.type) === 'Pressable');
-    const refreshButton = pressables[pressables.length - 1];
+    const refreshButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')[0];
 
     expect(refreshButton).toBeDefined();
     act(() => {

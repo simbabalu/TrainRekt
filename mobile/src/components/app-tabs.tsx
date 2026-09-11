@@ -14,7 +14,7 @@ const tabIcons: Record<string, AppIconName> = {
 };
 
 export default function AppTabs() {
-  return <Tabs><TabSlot style={{ height: '100%' }} /><TabList asChild><CustomTabList><TabTrigger name="home" href="/" asChild><TabButton>Home</TabButton></TabTrigger><TabTrigger name="train" href={'/train' as Href} asChild><TabButton>Train</TabButton></TabTrigger><TabTrigger name="progress" href="/explore" asChild><TabButton>Progress</TabButton></TabTrigger><TabTrigger name="settings" href={'/settings' as Href} asChild><TabButton>Settings</TabButton></TabTrigger></CustomTabList></TabList></Tabs>;
+  return <Tabs><TabSlot style={{ height: '100%' }} /><TabList asChild><CustomTabList><TabTrigger name="home" href="/" asChild><TabButton>Home</TabButton></TabTrigger><TabTrigger name="train" href={'/train' as Href} asChild><TabButton>Train</TabButton></TabTrigger><TabTrigger name="progress" href="/explore" asChild><TabButton>Progress</TabButton></TabTrigger><TabTrigger name="settings" href={'/settings' as Href} asChild><TabButton>Settings</TabButton></TabTrigger><TabTrigger name="wallet-safety" href={'/wallet-safety' as Href} asChild><Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.hiddenTab} /></TabTrigger></CustomTabList></TabList></Tabs>;
 }
 
 function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
@@ -30,6 +30,7 @@ function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 80, paddingHorizontal: 0, paddingTop: 0, position: 'absolute', right: 0 },
   tab: { alignItems: 'center', flex: 1, minHeight: 64, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.sm },
+  hiddenTab: { display: 'none' },
   focused: { backgroundColor: Colors.secondaryCard },
   tabLabel: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' },
   focusedLabel: { color: Colors.text },

@@ -135,6 +135,8 @@ describe('TrainingProgressProvider hydration', () => {
     expect(context.progress.currentStreak).toBe(0);
     expect(context.progress.bestStreak).toBe(0);
     expect(context.progress.recentTrainingHistory).toEqual([]);
+    expect(context.progress.walletLessonRewards.claimedExerciseIds).toEqual([]);
+    expect(context.progress.walletLessonProgress).toEqual({});
     expect(Object.values(context.progress.skillScores)).toEqual(Array(9).fill(50));
     expect(context.progress.daily.dailyGoal).toBe(3);
     expect(context.progress.daily.todayCompletedDecisions).toBe(0);

@@ -87,6 +87,10 @@ export function useWalletSafetyInspection({
         return false;
       }
 
+      setViewModeByAddress((current) => {
+        if (current[targetAddress] === 'review' || current[targetAddress] === undefined) return current;
+        return { ...current, [targetAddress]: 'review' };
+      });
       saveInspection(nextInspection);
       setStatus(nextInspection.warnings.length > 0 ? 'partial' : 'success');
       return true;

@@ -128,6 +128,13 @@ describe('useWalletSafetyInspection', () => {
     });
 
     expect(latest.viewMode).toBe('informational');
+
+    await act(async () => {
+      await latest.refresh();
+      await flushMicrotasks();
+    });
+
+    expect(latest.viewMode).toBe('review');
   });
 
   it('loads inspection for connected wallet', async () => {
