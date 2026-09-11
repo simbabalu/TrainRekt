@@ -38,10 +38,12 @@ function StatusText({ status, error, hasInspection }: { status: WalletInspection
 export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh, walletLessonProgress = {} }: WalletSafetyInspectionProps) {
   const router = useRouter();
   const tokenAccounts = inspection?.tokenAccounts ?? [];
+  const mintInspections = inspection?.mintInspections ?? [];
+  const mintByAddress = new Map(mintInspections.map((mintInspection) => [mintInspection.mintAddress, mintInspection]));
   const summary = summarizeWalletInspection(tokenAccounts);
-  const categorized = categorizeWalletInspectionAccounts(tokenAccounts);
+  const categorized = categorizeWalletInspectionAccounts(tokenAccounts, mintInspections);
   const categorySummary = categorized.summary;
-  const recommendations = recommendWalletTraining(tokenAccounts);
+  const recommendations = recommendWalletTraining(tokenAccounts, mintInspections);
   const recommendationsWithStatus = recommendations.map((recommendation) => ({
     recommendation,
     status: getWalletLessonStatus({ exerciseId: recommendation.recommendedExerciseIds[0], walletLessonProgress }),
@@ -96,7 +98,11 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   {visibleAccounts.length > 0 && (
                     <View style={styles.list}>
                       {visibleAccounts.map((account) => (
-                        <TokenAccountInspectionRow key={account.tokenAccountAddress} account={account} />
+                        <TokenAccountInspectionRow
+                          key={account.tokenAccountAddress}
+                          account={account}
+                          mintInspection={mintByAddress.get(account.mintAddress) ?? null}
+                        />
                       ))}
                     </View>
                   )}

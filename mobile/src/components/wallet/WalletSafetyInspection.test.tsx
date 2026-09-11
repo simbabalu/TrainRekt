@@ -44,6 +44,7 @@ function createInspection(): WalletSafetyInspectionModel {
     network: 'mainnet-beta',
     inspectedAt: new Date().toISOString(),
     warnings: [],
+    mintInspections: [],
     tokenAccounts: [
       {
         tokenAccountAddress: '8hKg4KTFW4v8gQ4wmAq9g8cz7L1w3Q2k4Cm6GxYJ9QaP',
@@ -136,6 +137,55 @@ describe('WalletSafetyInspection', () => {
     expect(text).not.toContain('DELEGATED AUTHORITY');
     expect(text).not.toContain('TOKEN ACCOUNT STATES');
     expect(text).not.toContain('EMPTY TOKEN ACCOUNTS');
+  });
+
+  it('renders mixed Token-2022 extension recommendations without crashing', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      {
+        ...inspection.tokenAccounts[0],
+        tokenAccountAddress: 'token-2022-mixed-1',
+        mintAddress: 'mint-mixed-1',
+        program: 'token-2022',
+        state: 'initialized',
+        delegateAddress: null,
+        rawAmount: '5',
+        uiAmount: 5,
+      },
+      {
+        ...inspection.tokenAccounts[0],
+        tokenAccountAddress: 'token-2022-mixed-2',
+        mintAddress: 'mint-mixed-1',
+        program: 'token-2022',
+        state: 'initialized',
+        delegateAddress: null,
+        rawAmount: '7',
+        uiAmount: 7,
+      },
+    ];
+    inspection.mintInspections = [{
+      mintAddress: 'mint-mixed-1',
+      program: 'token-2022',
+      decimals: 6,
+      supplyRaw: '1000',
+      mintAuthorityState: 'revoked',
+      mintAuthorityAddress: null,
+      freezeAuthorityState: 'revoked',
+      freezeAuthorityAddress: null,
+      token2022Extensions: ['transfer-fee-config', 'transfer-hook', 'default-account-state', 'permanent-delegate'],
+      defaultAccountState: 'initialized',
+      unavailableReason: null,
+    }];
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(createHarness({ inspection }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('TOKEN-2022');
+    expect(text).toContain('TOKEN ACCOUNT STATES');
+    expect((text.match(/START LESSON/g) ?? []).length).toBe(2);
   });
 
   it('shows the latest wallet lesson result on the matching recommendation card', () => {

@@ -1,7 +1,8 @@
-import { deriveWalletSafetySignals } from './deriveWalletSafetySignals';
+import { deriveWalletSafetySignalsWithMints } from './deriveWalletSafetySignals';
 import type {
   CategorizedWalletInspectionAccounts,
   WalletInspectionAccountPrimaryCategory,
+  WalletMintInspection,
   WalletSafetySignalCategory,
   WalletTokenAccountInspection,
 } from '@/types/walletInspection';
@@ -17,8 +18,11 @@ const SIGNAL_TO_PRIMARY_CATEGORY: Record<WalletSafetySignalCategory, WalletInspe
   informational: 'informational',
 };
 
-function resolvePrimaryCategory(account: WalletTokenAccountInspection): WalletInspectionAccountPrimaryCategory {
-  const signals = deriveWalletSafetySignals([account]);
+function resolvePrimaryCategory(
+  account: WalletTokenAccountInspection,
+  mintInspections: WalletMintInspection[] = [],
+): WalletInspectionAccountPrimaryCategory {
+  const signals = deriveWalletSafetySignalsWithMints([account], mintInspections);
   const matchedPrimaryCategories = new Set<WalletInspectionAccountPrimaryCategory>(
     signals.map((signal) => SIGNAL_TO_PRIMARY_CATEGORY[signal.category]),
   );
@@ -33,13 +37,14 @@ function resolvePrimaryCategory(account: WalletTokenAccountInspection): WalletIn
 
 export function categorizeWalletInspectionAccounts(
   accounts: WalletTokenAccountInspection[],
+  mintInspections: WalletMintInspection[] = [],
 ): CategorizedWalletInspectionAccounts {
   const reviewAccounts: WalletTokenAccountInspection[] = [];
   const informationalAccounts: WalletTokenAccountInspection[] = [];
   const normalAccounts: WalletTokenAccountInspection[] = [];
 
   for (const account of accounts) {
-    const category = resolvePrimaryCategory(account);
+    const category = resolvePrimaryCategory(account, mintInspections);
     if (category === 'review') {
       reviewAccounts.push(account);
       continue;

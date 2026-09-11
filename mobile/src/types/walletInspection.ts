@@ -24,7 +24,51 @@ export interface WalletTokenAccountInspection {
   closeAuthorityAddress: string | null;
 }
 
-export type WalletSafetySignalKind = 'delegated-account' | 'frozen-account' | 'token-2022-account' | 'empty-token-account';
+export type MintAuthorityState = 'active' | 'revoked' | 'unknown';
+
+export type Token2022ExtensionKind =
+  | 'permanent-delegate'
+  | 'transfer-fee-config'
+  | 'transfer-hook'
+  | 'non-transferable'
+  | 'default-account-state'
+  | 'interest-bearing-config'
+  | 'metadata-pointer'
+  | 'group-pointer'
+  | 'group-member-pointer';
+
+export type DefaultAccountStateValue = 'uninitialized' | 'initialized' | 'frozen' | 'unknown';
+
+export interface WalletMintInspection {
+  mintAddress: string;
+  program: TokenAccountProgram;
+  decimals: number | null;
+  supplyRaw: string | null;
+  mintAuthorityState: MintAuthorityState;
+  mintAuthorityAddress: string | null;
+  freezeAuthorityState: MintAuthorityState;
+  freezeAuthorityAddress: string | null;
+  token2022Extensions: Token2022ExtensionKind[];
+  defaultAccountState: DefaultAccountStateValue | null;
+  unavailableReason: string | null;
+}
+
+export type WalletSafetySignalKind =
+  | 'delegated-account'
+  | 'frozen-account'
+  | 'token-2022-account'
+  | 'empty-token-account'
+  | 'mint-authority-active'
+  | 'freeze-authority-active'
+  | 'token-2022-permanent-delegate'
+  | 'token-2022-transfer-fee-config'
+  | 'token-2022-transfer-hook'
+  | 'token-2022-non-transferable'
+  | 'token-2022-default-account-state'
+  | 'token-2022-interest-bearing-config'
+  | 'token-2022-metadata-pointer'
+  | 'token-2022-group-pointer'
+  | 'token-2022-group-member-pointer';
 
 export type WalletSafetySignalCategory = 'review' | 'informational';
 
@@ -66,6 +110,7 @@ export interface WalletSafetyInspection {
   address: string;
   network: SolanaNetwork;
   tokenAccounts: WalletTokenAccountInspection[];
+  mintInspections: WalletMintInspection[];
   inspectedAt: string;
   warnings: string[];
 }

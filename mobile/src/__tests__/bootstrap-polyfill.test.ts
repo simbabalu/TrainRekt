@@ -19,10 +19,13 @@ describe('bootstrap entry', () => {
     const entryFile = fs.readFileSync(entryFilePath, 'utf8');
 
     const polyfillRequireIndex = entryFile.indexOf("require('react-native-get-random-values')");
+    const bufferPolyfillRequireIndex = entryFile.indexOf("require('./src/polyfills')");
     const routerRequireIndex = entryFile.indexOf("require('expo-router/entry')");
 
     expect(polyfillRequireIndex).toBeGreaterThanOrEqual(0);
+    expect(bufferPolyfillRequireIndex).toBeGreaterThanOrEqual(0);
     expect(routerRequireIndex).toBeGreaterThanOrEqual(0);
     expect(polyfillRequireIndex).toBeLessThan(routerRequireIndex);
+    expect(bufferPolyfillRequireIndex).toBeLessThan(routerRequireIndex);
   });
 });

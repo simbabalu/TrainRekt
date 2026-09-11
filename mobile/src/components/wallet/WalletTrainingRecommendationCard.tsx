@@ -19,6 +19,17 @@ const lessonIconBySignal: Record<WalletSafetySignalKind, { ios: string; android:
   'delegated-account': { ios: 'person.badge.key.fill', android: 'key', web: 'key' },
   'token-2022-account': { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
   'empty-token-account': { ios: 'tray', android: 'inventory_2', web: 'inventory_2' },
+  'mint-authority-active': { ios: 'plus.circle', android: 'add_circle', web: 'add_circle' },
+  'freeze-authority-active': { ios: 'snowflake', android: 'ac_unit', web: 'ac_unit' },
+  'token-2022-permanent-delegate': { ios: 'person.badge.key.fill', android: 'key', web: 'key' },
+  'token-2022-transfer-fee-config': { ios: 'percent', android: 'percent', web: 'percent' },
+  'token-2022-transfer-hook': { ios: 'link.badge.plus', android: 'link', web: 'link' },
+  'token-2022-non-transferable': { ios: 'arrow.left.and.right.slash', android: 'swap_horiz', web: 'swap_horiz' },
+  'token-2022-default-account-state': { ios: 'list.bullet.rectangle.portrait', android: 'view_list', web: 'view_list' },
+  'token-2022-interest-bearing-config': { ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', web: 'trending_up' },
+  'token-2022-metadata-pointer': { ios: 'doc.text.magnifyingglass', android: 'description', web: 'description' },
+  'token-2022-group-pointer': { ios: 'person.3', android: 'groups', web: 'groups' },
+  'token-2022-group-member-pointer': { ios: 'person.2', android: 'group', web: 'group' },
 };
 
 export function WalletTrainingRecommendationCard({ recommendation, status, onStartLesson }: WalletTrainingRecommendationCardProps) {

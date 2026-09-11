@@ -16,8 +16,12 @@ export function HomeWalletSafetyCard() {
   const { inspection, address } = useWalletSafetyInspection({ autoFetch: false });
 
   const connected = walletStatus === 'connected' && Boolean(address);
-  const categorySummary = inspection ? categorizeWalletInspectionAccounts(inspection.tokenAccounts).summary : null;
-  const recommendationCount = inspection ? recommendWalletTraining(inspection.tokenAccounts).length : 0;
+  const categorySummary = inspection
+    ? categorizeWalletInspectionAccounts(inspection.tokenAccounts, inspection.mintInspections).summary
+    : null;
+  const recommendationCount = inspection
+    ? recommendWalletTraining(inspection.tokenAccounts, inspection.mintInspections).length
+    : 0;
 
   if (!connected) {
     return (

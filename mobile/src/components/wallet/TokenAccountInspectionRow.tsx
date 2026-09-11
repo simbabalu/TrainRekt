@@ -3,12 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts, Radius, Spacing, Typography } from '@/constants/theme';
 import { abbreviateWalletAddress } from '@/domain/wallet/abbreviateWalletAddress';
-import { deriveWalletSafetySignals } from '@/domain/wallet/deriveWalletSafetySignals';
-import type { WalletTokenAccountInspection } from '@/types/walletInspection';
+import { deriveWalletSafetySignalsWithMints } from '@/domain/wallet/deriveWalletSafetySignals';
+import type { WalletMintInspection, WalletTokenAccountInspection } from '@/types/walletInspection';
 import { WalletSafetySignalBadge } from './WalletSafetySignalBadge';
 
 interface TokenAccountInspectionRowProps {
   account: WalletTokenAccountInspection;
+  mintInspection?: WalletMintInspection | null;
 }
 
 function DetailRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -38,11 +39,29 @@ function normalizeDisplayValue(value: string | null | undefined): string | null 
   return trimmed || null;
 }
 
-export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRowProps) {
+function authorityStateLabel(state: WalletMintInspection['mintAuthorityState']): string {
+  if (state === 'active') return 'ACTIVE';
+  if (state === 'revoked') return 'REVOKED';
+  return 'UNKNOWN';
+}
+
+function extensionLabel(kind: WalletMintInspection['token2022Extensions'][number]): string {
+  if (kind === 'permanent-delegate') return 'Permanent Delegate';
+  if (kind === 'transfer-fee-config') return 'Transfer Fee';
+  if (kind === 'transfer-hook') return 'Transfer Hook';
+  if (kind === 'non-transferable') return 'NonTransferable';
+  if (kind === 'default-account-state') return 'Default Account State';
+  if (kind === 'interest-bearing-config') return 'Interest Bearing';
+  if (kind === 'metadata-pointer') return 'Metadata Pointer';
+  if (kind === 'group-pointer') return 'Group Pointer';
+  return 'Group Member Pointer';
+}
+
+export function TokenAccountInspectionRow({ account, mintInspection = null }: TokenAccountInspectionRowProps) {
   const [expanded, setExpanded] = useState(false);
   const signals = useMemo(
-    () => deriveWalletSafetySignals([account]),
-    [account],
+    () => deriveWalletSafetySignalsWithMints([account], mintInspection ? [mintInspection] : []),
+    [account, mintInspection],
   );
 
   const primaryCategory = useMemo(() => {
@@ -89,6 +108,16 @@ export function TokenAccountInspectionRow({ account }: TokenAccountInspectionRow
           <DetailRow label="MINT" value={account.mintAddress} mono />
           <Text style={styles.detailHint}>Name/symbol are untrusted display metadata. Mint is the canonical identifier.</Text>
           <DetailRow label="PROGRAM" value={titleFromProgram(account.program)} />
+          {mintInspection && <DetailRow label="MINT PROGRAM" value={titleFromProgram(mintInspection.program)} />}
+          {mintInspection && <DetailRow label="MINT AUTHORITY" value={authorityStateLabel(mintInspection.mintAuthorityState)} />}
+          {mintInspection && <DetailRow label="FREEZE AUTHORITY" value={authorityStateLabel(mintInspection.freezeAuthorityState)} />}
+          {mintInspection && <DetailRow label="MINT DECIMALS" value={mintInspection.decimals == null ? 'Unknown' : String(mintInspection.decimals)} />}
+          {mintInspection && <DetailRow label="MINT SUPPLY" value={mintInspection.supplyRaw ?? 'Unknown'} />}
+          {mintInspection?.defaultAccountState && <DetailRow label="DEFAULT ACCOUNT STATE" value={mintInspection.defaultAccountState.toUpperCase()} />}
+          {mintInspection && mintInspection.token2022Extensions.length > 0 && (
+            <DetailRow label="EXTENSIONS" value={mintInspection.token2022Extensions.map((kind) => extensionLabel(kind)).join(', ')} />
+          )}
+          {mintInspection?.unavailableReason && <Text style={styles.detailHint}>{mintInspection.unavailableReason}</Text>}
           <DetailRow label="STATE" value={titleFromState(account.state)} />
           <DetailRow label="RAW AMOUNT" value={account.rawAmount} />
           <DetailRow label="DECIMALS" value={String(account.decimals)} />

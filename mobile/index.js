@@ -1,4 +1,5 @@
 require('react-native-get-random-values');
+require('./src/polyfills');
 
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
 	const bootstrapCrypto = globalThis.crypto;

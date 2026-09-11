@@ -61,6 +61,7 @@ function createInspection(accounts: WalletSafetyInspection['tokenAccounts']): Wa
     network: 'mainnet-beta',
     inspectedAt: new Date().toISOString(),
     warnings: [],
+    mintInspections: [],
     tokenAccounts: accounts,
   };
 }

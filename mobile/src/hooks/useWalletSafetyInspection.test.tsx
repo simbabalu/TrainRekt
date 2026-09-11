@@ -27,6 +27,7 @@ function createInspection(address: string, warnings: string[] = []): WalletSafet
     network: 'mainnet-beta',
     inspectedAt: '2026-09-11T10:00:00.000Z',
     warnings,
+    mintInspections: [],
     tokenAccounts: [],
   };
 }

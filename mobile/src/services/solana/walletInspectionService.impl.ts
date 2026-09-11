@@ -1,13 +1,35 @@
 import { Connection, PublicKey } from '@solana/web3.js';
+import { Buffer } from 'buffer';
+import {
+  AccountState,
+  getDefaultAccountState,
+  getGroupMemberPointerState,
+  getGroupPointerState,
+  getInterestBearingMintConfigState,
+  getMetadataPointerState,
+  getNonTransferable,
+  getPermanentDelegate,
+  getTransferFeeConfig,
+  getTransferHook,
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+  unpackMint,
+} from '@solana/spl-token';
 
 import type { SolanaNetwork } from '@/types/walletSnapshot';
-import type { TokenDisplayMetadata, WalletSafetyInspection, WalletTokenAccountInspection } from '@/types/walletInspection';
+import type {
+  DefaultAccountStateValue,
+  MintAuthorityState,
+  Token2022ExtensionKind,
+  TokenDisplayMetadata,
+  WalletMintInspection,
+  WalletSafetyInspection,
+  WalletTokenAccountInspection,
+} from '@/types/walletInspection';
 import { WalletInspectionServiceError } from '@/types/walletInspection';
 import { getSolanaRpcConfig } from './solanaRpcConfig';
 import type { WalletInspectionService } from './walletInspectionService';
 
-const SPL_TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 const MULTIPLE_ACCOUNTS_BATCH_SIZE = 100;
 
@@ -29,6 +51,10 @@ interface ParsedTokenAccountResponse {
 
 interface AccountInfoLike {
   data: Uint8Array;
+  owner: PublicKey | string;
+  executable?: boolean;
+  lamports?: number;
+  rentEpoch?: number;
 }
 
 interface BorshStringReadResult {
@@ -43,6 +69,18 @@ interface SolanaReadClient {
 
 type ProgramKind = WalletTokenAccountInspection['program'];
 
+const SUPPORTED_TOKEN_2022_EXTENSIONS: readonly Token2022ExtensionKind[] = [
+  'permanent-delegate',
+  'transfer-fee-config',
+  'transfer-hook',
+  'non-transferable',
+  'default-account-state',
+  'interest-bearing-config',
+  'metadata-pointer',
+  'group-pointer',
+  'group-member-pointer',
+];
+
 function mapInspectionError(error: unknown): WalletInspectionServiceError {
   if (error instanceof WalletInspectionServiceError) return error;
   if (error instanceof Error && /(fetch|network|timeout|429|503|unavailable|rate limit|failed to get)/i.test(error.message)) {
@@ -54,13 +92,13 @@ function mapInspectionError(error: unknown): WalletInspectionServiceError {
 function parseProgramKindFromOwner(owner: unknown, fallback: ProgramKind): ProgramKind {
   if (owner instanceof PublicKey) {
     const ownerAddress = owner.toBase58();
-    if (ownerAddress === SPL_TOKEN_PROGRAM_ID.toBase58()) return 'spl-token';
+    if (ownerAddress === TOKEN_PROGRAM_ID.toBase58()) return 'spl-token';
     if (ownerAddress === TOKEN_2022_PROGRAM_ID.toBase58()) return 'token-2022';
     return 'unknown';
   }
 
   if (typeof owner === 'string' && owner.trim()) {
-    if (owner === SPL_TOKEN_PROGRAM_ID.toBase58()) return 'spl-token';
+    if (owner === TOKEN_PROGRAM_ID.toBase58()) return 'spl-token';
     if (owner === TOKEN_2022_PROGRAM_ID.toBase58()) return 'token-2022';
     return 'unknown';
   }
@@ -274,6 +312,64 @@ async function getAccountsByProgram(
   return await client.getParsedTokenAccountsByOwner(owner, { programId });
 }
 
+function deriveMintAuthorityState(authority: PublicKey | null): MintAuthorityState {
+  return authority ? 'active' : 'revoked';
+}
+
+function mapAccountState(state: number): DefaultAccountStateValue {
+  if (state === AccountState.Uninitialized) return 'uninitialized';
+  if (state === AccountState.Initialized) return 'initialized';
+  if (state === AccountState.Frozen) return 'frozen';
+  return 'unknown';
+}
+
+function deriveToken2022Extensions(mint: ReturnType<typeof unpackMint>): { extensionKinds: Token2022ExtensionKind[]; defaultAccountState: DefaultAccountStateValue | null } {
+  const extensionSet = new Set<Token2022ExtensionKind>();
+
+  if (getPermanentDelegate(mint)) extensionSet.add('permanent-delegate');
+  if (getTransferFeeConfig(mint)) extensionSet.add('transfer-fee-config');
+  if (getTransferHook(mint)) extensionSet.add('transfer-hook');
+  if (getNonTransferable(mint)) extensionSet.add('non-transferable');
+  if (getInterestBearingMintConfigState(mint)) extensionSet.add('interest-bearing-config');
+  if (getMetadataPointerState(mint)) extensionSet.add('metadata-pointer');
+  if (getGroupPointerState(mint)) extensionSet.add('group-pointer');
+  if (getGroupMemberPointerState(mint)) extensionSet.add('group-member-pointer');
+
+  const defaultAccountState = getDefaultAccountState(mint);
+  if (defaultAccountState) {
+    extensionSet.add('default-account-state');
+  }
+
+  return {
+    extensionKinds: SUPPORTED_TOKEN_2022_EXTENSIONS.filter((kind) => extensionSet.has(kind)),
+    defaultAccountState: defaultAccountState ? mapAccountState(defaultAccountState.state) : null,
+  };
+}
+
+function toBufferData(data: Uint8Array): Buffer {
+  return Buffer.isBuffer(data) ? data : Buffer.from(data);
+}
+
+function createUnavailableMintInspection(
+  mintAddress: string,
+  program: ProgramKind,
+  unavailableReason: string,
+): WalletMintInspection {
+  return {
+    mintAddress,
+    program,
+    decimals: null,
+    supplyRaw: null,
+    mintAuthorityState: 'unknown',
+    mintAuthorityAddress: null,
+    freezeAuthorityState: 'unknown',
+    freezeAuthorityAddress: null,
+    token2022Extensions: [],
+    defaultAccountState: null,
+    unavailableReason,
+  };
+}
+
 export class WalletInspectionRpcService implements WalletInspectionService {
   readonly network: SolanaNetwork;
   readonly endpoint: string;
@@ -349,6 +445,123 @@ export class WalletInspectionRpcService implements WalletInspectionService {
     return metadataByMint;
   }
 
+  private async resolveMintInspections(
+    tokenAccounts: WalletTokenAccountInspection[],
+    warnings: string[],
+  ): Promise<WalletMintInspection[]> {
+    const mintAddresses = Array.from(new Set(tokenAccounts.map((account) => account.mintAddress)));
+    if (mintAddresses.length === 0) return [];
+
+    const inferredProgramByMint = new Map<string, ProgramKind>();
+    for (const tokenAccount of tokenAccounts) {
+      const existing = inferredProgramByMint.get(tokenAccount.mintAddress);
+      if (existing && existing !== 'unknown') continue;
+      inferredProgramByMint.set(tokenAccount.mintAddress, tokenAccount.program);
+    }
+
+    if (!this.client.getMultipleAccountsInfo) {
+      warnings.push('Mint lookup is unavailable on this RPC client.');
+      return mintAddresses.map((mintAddress) => createUnavailableMintInspection(
+        mintAddress,
+        inferredProgramByMint.get(mintAddress) ?? 'unknown',
+        'Mint account lookup unavailable on this RPC client.',
+      ));
+    }
+
+    const mintInspections = new Map<string, WalletMintInspection>();
+
+    const mintPublicKeys = mintAddresses.map((address) => new PublicKey(address));
+    for (const batch of chunkArray(mintPublicKeys, MULTIPLE_ACCOUNTS_BATCH_SIZE)) {
+      let accountsInfo: (AccountInfoLike | null)[];
+      try {
+        accountsInfo = await this.client.getMultipleAccountsInfo(batch);
+      } catch {
+        warnings.push('Mint account lookup failed; mint details are unavailable for this batch.');
+        for (const mintPublicKey of batch) {
+          const mintAddress = mintPublicKey.toBase58();
+          mintInspections.set(
+            mintAddress,
+            createUnavailableMintInspection(
+              mintAddress,
+              inferredProgramByMint.get(mintAddress) ?? 'unknown',
+              'Mint account lookup failed.',
+            ),
+          );
+        }
+        continue;
+      }
+
+      for (let index = 0; index < batch.length; index += 1) {
+        const mintPublicKey = batch[index];
+        const mintAddress = mintPublicKey.toBase58();
+        const accountInfo = accountsInfo[index];
+        const inferredProgram = inferredProgramByMint.get(mintAddress) ?? 'unknown';
+        if (!accountInfo) {
+          mintInspections.set(
+            mintAddress,
+            createUnavailableMintInspection(mintAddress, inferredProgram, 'Mint account was not found.'),
+          );
+          warnings.push(`Mint ${mintAddress} was not returned by RPC; mint details unavailable.`);
+          continue;
+        }
+
+        const accountProgram = parseProgramKindFromOwner(accountInfo.owner, inferredProgram);
+        if (accountProgram === 'unknown') {
+          mintInspections.set(
+            mintAddress,
+            createUnavailableMintInspection(mintAddress, inferredProgram, 'Mint owner program is unsupported.'),
+          );
+          warnings.push(`Mint ${mintAddress} uses an unsupported owner program; mint details unavailable.`);
+          continue;
+        }
+
+        try {
+          const mint = unpackMint(
+            mintPublicKey,
+            {
+              ...accountInfo,
+              data: toBufferData(accountInfo.data),
+              owner: accountInfo.owner instanceof PublicKey ? accountInfo.owner : new PublicKey(accountInfo.owner),
+              executable: accountInfo.executable ?? false,
+              lamports: accountInfo.lamports ?? 0,
+              rentEpoch: accountInfo.rentEpoch ?? 0,
+            },
+            accountProgram === 'token-2022' ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
+          );
+
+          const token2022Facts = accountProgram === 'token-2022'
+            ? deriveToken2022Extensions(mint)
+            : { extensionKinds: [], defaultAccountState: null as DefaultAccountStateValue | null };
+
+          mintInspections.set(mintAddress, {
+            mintAddress,
+            program: accountProgram,
+            decimals: mint.decimals,
+            supplyRaw: mint.supply.toString(),
+            mintAuthorityState: deriveMintAuthorityState(mint.mintAuthority),
+            mintAuthorityAddress: mint.mintAuthority?.toBase58() ?? null,
+            freezeAuthorityState: deriveMintAuthorityState(mint.freezeAuthority),
+            freezeAuthorityAddress: mint.freezeAuthority?.toBase58() ?? null,
+            token2022Extensions: token2022Facts.extensionKinds,
+            defaultAccountState: token2022Facts.defaultAccountState,
+            unavailableReason: null,
+          });
+        } catch {
+          mintInspections.set(
+            mintAddress,
+            createUnavailableMintInspection(mintAddress, accountProgram, 'Mint decode failed.'),
+          );
+          warnings.push(`Mint ${mintAddress} could not be decoded; mint details unavailable.`);
+        }
+      }
+    }
+
+    return mintAddresses.map((mintAddress) => (
+      mintInspections.get(mintAddress)
+      ?? createUnavailableMintInspection(mintAddress, inferredProgramByMint.get(mintAddress) ?? 'unknown', 'Mint inspection unavailable.')
+    ));
+  }
+
   async getInspection(address: string): Promise<WalletSafetyInspection> {
     let owner: PublicKey;
     try {
@@ -361,7 +574,7 @@ export class WalletInspectionRpcService implements WalletInspectionService {
 
     try {
       const [legacyResult, token2022Result] = await Promise.allSettled([
-        getAccountsByProgram(this.client, owner, SPL_TOKEN_PROGRAM_ID),
+        getAccountsByProgram(this.client, owner, TOKEN_PROGRAM_ID),
         getAccountsByProgram(this.client, owner, TOKEN_2022_PROGRAM_ID),
       ]);
 
@@ -402,6 +615,7 @@ export class WalletInspectionRpcService implements WalletInspectionService {
       }
 
       const tokenAccounts = Array.from(accounts.values());
+      const mintInspections = await this.resolveMintInspections(tokenAccounts, warnings);
       const uniqueMints = Array.from(new Set(tokenAccounts.map((account) => account.mintAddress)));
       const metadataByMint = await this.resolveTokenDisplayMetadataByMint(uniqueMints, warnings);
 
@@ -412,6 +626,7 @@ export class WalletInspectionRpcService implements WalletInspectionService {
           ...account,
           tokenDisplayMetadata: metadataByMint.get(account.mintAddress) ?? null,
         })),
+        mintInspections,
         inspectedAt: new Date().toISOString(),
         warnings,
       };

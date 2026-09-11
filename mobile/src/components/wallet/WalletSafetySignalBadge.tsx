@@ -8,6 +8,17 @@ const labelByKind: Record<WalletSafetySignal['kind'], string> = {
   'frozen-account': 'FROZEN',
   'token-2022-account': 'TOKEN-2022',
   'empty-token-account': 'EMPTY',
+  'mint-authority-active': 'MINT AUTH',
+  'freeze-authority-active': 'FREEZE AUTH',
+  'token-2022-permanent-delegate': 'PERM DELEGATE',
+  'token-2022-transfer-fee-config': 'TRANSFER FEE',
+  'token-2022-transfer-hook': 'TRANSFER HOOK',
+  'token-2022-non-transferable': 'NONTRANSFERABLE',
+  'token-2022-default-account-state': 'DEFAULT STATE',
+  'token-2022-interest-bearing-config': 'INTEREST',
+  'token-2022-metadata-pointer': 'METADATA PTR',
+  'token-2022-group-pointer': 'GROUP PTR',
+  'token-2022-group-member-pointer': 'GROUP MEMBER PTR',
 };
 
 interface WalletSafetySignalBadgeProps {

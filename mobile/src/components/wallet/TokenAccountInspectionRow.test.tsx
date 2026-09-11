@@ -179,4 +179,43 @@ describe('TokenAccountInspectionRow', () => {
     expect(text).toContain(longTokenAccount);
     expect(text).toContain(longMint);
   });
+
+  it('renders mint authority and extension facts when mint inspection is available', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAccountInspectionRow
+          account={account({ mintAddress: 'mint-with-facts' })}
+          mintInspection={{
+            mintAddress: 'mint-with-facts',
+            program: 'token-2022',
+            decimals: 6,
+            supplyRaw: '999',
+            mintAuthorityState: 'active',
+            mintAuthorityAddress: 'mint-auth',
+            freezeAuthorityState: 'revoked',
+            freezeAuthorityAddress: null,
+            token2022Extensions: ['permanent-delegate', 'transfer-fee-config'],
+            defaultAccountState: 'frozen',
+            unavailableReason: null,
+          }}
+        />,
+      );
+    });
+
+    const rowPressable = renderer.root.findAll((node) => String(node.type) === 'Pressable')[0];
+    act(() => {
+      rowPressable.props.onPress();
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('MINT AUTHORITY');
+    expect(text).toContain('ACTIVE');
+    expect(text).toContain('FREEZE AUTHORITY');
+    expect(text).toContain('REVOKED');
+    expect(text).toContain('EXTENSIONS');
+    expect(text).toContain('Permanent Delegate');
+    expect(text).toContain('Transfer Fee');
+  });
 });

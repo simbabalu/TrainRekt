@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WalletTokenAccountInspection } from '@/types/walletInspection';
+import { walletLessonCatalog } from '@/data/walletLessonCatalog';
+import type { WalletMintInspection, WalletTokenAccountInspection } from '@/types/walletInspection';
 import { recommendWalletTraining } from './recommendWalletTraining';
 
 function account(overrides: Partial<WalletTokenAccountInspection>): WalletTokenAccountInspection {
@@ -15,6 +16,23 @@ function account(overrides: Partial<WalletTokenAccountInspection>): WalletTokenA
     delegateAddress: null,
     delegatedAmountRaw: null,
     closeAuthorityAddress: null,
+    ...overrides,
+  };
+}
+
+function mintInspection(overrides: Partial<WalletMintInspection>): WalletMintInspection {
+  return {
+    mintAddress: 'mint-1',
+    program: 'spl-token',
+    decimals: 6,
+    supplyRaw: '100',
+    mintAuthorityState: 'revoked',
+    mintAuthorityAddress: null,
+    freezeAuthorityState: 'revoked',
+    freezeAuthorityAddress: null,
+    token2022Extensions: [],
+    defaultAccountState: null,
+    unavailableReason: null,
     ...overrides,
   };
 }
@@ -77,6 +95,48 @@ describe('recommendWalletTraining', () => {
     expect(recommendations[0].observedAccountCount).toBe(3);
   });
 
+  it('returns at most one recommendation per topic', () => {
+    const mintInspections = [
+      mintInspection({ mintAddress: 'mint-topic-1', program: 'token-2022', token2022Extensions: ['transfer-fee-config'] }),
+      mintInspection({ mintAddress: 'mint-topic-2', program: 'token-2022', token2022Extensions: ['transfer-hook'] }),
+    ];
+    const [firstMint, secondMint] = mintInspections;
+    const firstAccount: WalletTokenAccountInspection = {
+      ...account({}),
+      tokenAccountAddress: 'acct-topic-1',
+      mintAddress: firstMint.mintAddress,
+      program: 'token-2022',
+    };
+    const secondAccount: WalletTokenAccountInspection = {
+      ...account({}),
+      tokenAccountAddress: 'acct-topic-2',
+      mintAddress: secondMint.mintAddress,
+      program: 'token-2022',
+    };
+
+    const recommendations = recommendWalletTraining([firstAccount, secondAccount], mintInspections);
+    const topicCounts = recommendations.reduce<Map<string, number>>((acc, recommendation) => {
+      acc.set(recommendation.topic, (acc.get(recommendation.topic) ?? 0) + 1);
+      return acc;
+    }, new Map());
+
+    for (const [, count] of topicCounts) {
+      expect(count).toBe(1);
+    }
+  });
+
+  it('only emits recommendations that have at least one valid lesson exercise id', () => {
+    const recommendations = recommendWalletTraining([account({ state: 'frozen', tokenAccountAddress: 'frozen-catalog-1' })]);
+    const allExerciseIds = new Set(walletLessonCatalog.map((exercise) => exercise.id));
+
+    for (const recommendation of recommendations) {
+      expect(recommendation.recommendedExerciseIds.length).toBeGreaterThan(0);
+      for (const exerciseId of recommendation.recommendedExerciseIds) {
+        expect(allExerciseIds.has(exerciseId)).toBe(true);
+      }
+    }
+  });
+
   it('sorts mixed signals by educational priority', () => {
     const recommendations = recommendWalletTraining([
       account({ tokenAccountAddress: 'empty-1', rawAmount: '0', uiAmount: 0 }),
@@ -99,6 +159,102 @@ describe('recommendWalletTraining', () => {
     ]);
 
     expect(recommendations).toEqual([]);
+  });
+
+  it('maps selected mint Token-2022 extension signals to existing topics', () => {
+    const recommendations = recommendWalletTraining(
+      [account({ tokenAccountAddress: 'mint-aware-1', mintAddress: 'mint-1', program: 'token-2022' })],
+      [mintInspection({
+        mintAddress: 'mint-1',
+        program: 'token-2022',
+        token2022Extensions: ['permanent-delegate', 'transfer-fee-config', 'transfer-hook'],
+      })],
+    );
+
+    const token2022Recommendation = recommendations.find((recommendation) => recommendation.topic === 'token-2022');
+    expect(token2022Recommendation).toBeDefined();
+    expect(token2022Recommendation?.sourceSignalType).not.toBe('token-2022-permanent-delegate');
+  });
+
+  it('does not map token-2022-permanent-delegate to delegated-authority lessons', () => {
+    const recommendations = recommendWalletTraining(
+      [account({ tokenAccountAddress: 'perm-delegate-1', mintAddress: 'mint-1', program: 'token-2022' })],
+      [mintInspection({ mintAddress: 'mint-1', program: 'token-2022', token2022Extensions: ['permanent-delegate'] })],
+    );
+
+    expect(recommendations.some((recommendation) => recommendation.sourceSignalType === 'token-2022-permanent-delegate')).toBe(false);
+    expect(recommendations.some((recommendation) => recommendation.topic === 'delegated-authority')).toBe(false);
+  });
+
+  it('treats token-2022 default-account-state initialized as informational topic mapping', () => {
+    const recommendations = recommendWalletTraining(
+      [account({ tokenAccountAddress: 'default-state-init', mintAddress: 'mint-1', program: 'token-2022' })],
+      [mintInspection({
+        mintAddress: 'mint-1',
+        program: 'token-2022',
+        token2022Extensions: ['default-account-state'],
+        defaultAccountState: 'initialized',
+      })],
+    );
+
+    expect(recommendations.some((recommendation) => recommendation.sourceSignalType === 'token-2022-default-account-state')).toBe(true);
+  });
+
+  it('deduplicates mint-level recommendations by mint+signal across multiple accounts sharing a mint', () => {
+    const recommendations = recommendWalletTraining(
+      [
+        account({ tokenAccountAddress: 'acct-1', mintAddress: 'mint-1', program: 'token-2022' }),
+        account({ tokenAccountAddress: 'acct-2', mintAddress: 'mint-1', program: 'token-2022' }),
+        account({ tokenAccountAddress: 'acct-3', mintAddress: 'mint-1', program: 'token-2022' }),
+      ],
+      [mintInspection({
+        mintAddress: 'mint-1',
+        program: 'token-2022',
+        token2022Extensions: ['transfer-hook'],
+      })],
+    );
+
+    const transferHookRecommendation = recommendations.find((recommendation) => recommendation.sourceSignalType === 'token-2022-transfer-hook');
+    expect(transferHookRecommendation?.observedAccountCount).toBe(1);
+  });
+
+  it('counts mint-level recommendations separately when different mints share the same signal kind', () => {
+    const recommendations = recommendWalletTraining(
+      [
+        account({ tokenAccountAddress: 'acct-1', mintAddress: 'mint-1', program: 'token-2022' }),
+        account({ tokenAccountAddress: 'acct-2', mintAddress: 'mint-2', program: 'token-2022' }),
+      ],
+      [
+        mintInspection({ mintAddress: 'mint-1', program: 'token-2022', token2022Extensions: ['transfer-hook'] }),
+        mintInspection({ mintAddress: 'mint-2', program: 'token-2022', token2022Extensions: ['transfer-hook'] }),
+      ],
+    );
+
+    const transferHookRecommendation = recommendations.find((recommendation) => recommendation.sourceSignalType === 'token-2022-transfer-hook');
+    expect(transferHookRecommendation?.observedAccountCount).toBe(2);
+  });
+
+  it('keeps account-level signal counting per account even when accounts share the same mint', () => {
+    const recommendations = recommendWalletTraining(
+      [
+        account({ tokenAccountAddress: 'delegated-1', mintAddress: 'mint-1', delegateAddress: 'delegate-1' }),
+        account({ tokenAccountAddress: 'delegated-2', mintAddress: 'mint-1', delegateAddress: 'delegate-2' }),
+      ],
+      [mintInspection({ mintAddress: 'mint-1' })],
+    );
+
+    const delegatedRecommendation = recommendations.find((recommendation) => recommendation.sourceSignalType === 'delegated-account');
+    expect(delegatedRecommendation?.observedAccountCount).toBe(2);
+  });
+
+  it('does not force recommendations for authority-only mint signals without fitting lessons', () => {
+    const recommendations = recommendWalletTraining(
+      [account({ tokenAccountAddress: 'authority-only', mintAddress: 'mint-1' })],
+      [mintInspection({ mintAddress: 'mint-1', mintAuthorityState: 'active', freezeAuthorityState: 'active' })],
+    );
+
+    expect(recommendations.some((recommendation) => recommendation.sourceSignalType === 'mint-authority-active')).toBe(false);
+    expect(recommendations.some((recommendation) => recommendation.sourceSignalType === 'freeze-authority-active')).toBe(false);
   });
 
   it('derives observed-account counts for each recommendation from real grouped signal matches', () => {

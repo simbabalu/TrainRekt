@@ -70,7 +70,8 @@ describe('WalletSafetyInspection wallet isolation', () => {
             network: 'mainnet-beta',
             inspectedAt: new Date().toISOString(),
             warnings: [],
-            tokenAccounts: [
+                  mintInspections: [],
+                  tokenAccounts: [
               {
                 tokenAccountAddress: 'signal-1',
                 mintAddress: 'mint-1',

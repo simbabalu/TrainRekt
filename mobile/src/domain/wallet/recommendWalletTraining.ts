@@ -1,7 +1,7 @@
-import { getWalletLessonExerciseIds } from '@/data/walletLessonCatalog';
-import type { WalletSafetySignalKind, WalletTokenAccountInspection } from '@/types/walletInspection';
+import { findWalletLessonExercise, getWalletLessonExerciseIds } from '@/data/walletLessonCatalog';
+import type { WalletMintInspection, WalletSafetySignalKind, WalletTokenAccountInspection } from '@/types/walletInspection';
 import type { WalletTrainingPriority, WalletTrainingRecommendation, WalletTrainingTopic } from '@/types/walletTraining';
-import { deriveWalletSafetySignals } from './deriveWalletSafetySignals';
+import { deriveWalletSafetySignalsWithMints } from './deriveWalletSafetySignals';
 
 interface TopicDefinition {
   topic: WalletTrainingTopic;
@@ -9,7 +9,7 @@ interface TopicDefinition {
   reason: string;
 }
 
-const signalTopicDefinitions: Record<WalletSafetySignalKind, TopicDefinition> = {
+const signalTopicDefinitions: Partial<Record<WalletSafetySignalKind, TopicDefinition>> = {
   'frozen-account': {
     topic: 'token-account-state',
     priority: 'high',
@@ -30,6 +30,46 @@ const signalTopicDefinitions: Record<WalletSafetySignalKind, TopicDefinition> = 
     priority: 'low',
     reason: 'Learn why zero-balance token accounts can remain on-chain without implying danger.',
   },
+  'token-2022-transfer-fee-config': {
+    topic: 'token-2022',
+    priority: 'medium',
+    reason: 'Understand transfer-fee capabilities under Token-2022 and how to review them objectively.',
+  },
+  'token-2022-transfer-hook': {
+    topic: 'token-2022',
+    priority: 'high',
+    reason: 'Learn how transfer hooks add program-controlled transfer logic without assuming malicious intent.',
+  },
+  'token-2022-non-transferable': {
+    topic: 'token-2022',
+    priority: 'medium',
+    reason: 'Understand non-transferable token behavior and why transfer restrictions can be intentional.',
+  },
+  'token-2022-default-account-state': {
+    topic: 'token-account-state',
+    priority: 'high',
+    reason: 'Learn how default account state settings influence token-account behavior over time.',
+  },
+  'token-2022-interest-bearing-config': {
+    topic: 'token-2022',
+    priority: 'medium',
+    reason: 'Understand interest-bearing token configuration as a capability signal requiring context.',
+  },
+  'token-2022-metadata-pointer': {
+    topic: 'token-2022',
+    priority: 'low',
+    reason: 'Learn what metadata pointer configuration means and why it is informational by itself.',
+  },
+  'token-2022-group-pointer': {
+    topic: 'token-2022',
+    priority: 'low',
+    reason: 'Learn how Token-2022 group pointers encode relationships without implying risk by default.',
+  },
+  'token-2022-group-member-pointer': {
+    topic: 'token-2022',
+    priority: 'low',
+    reason: 'Learn how Token-2022 group member pointers add structure and should be interpreted with context.',
+  },
 };
 
 const priorityRank: Record<WalletTrainingPriority, number> = {
@@ -45,27 +85,68 @@ export function getWalletTrainingTopicLabel(topic: WalletTrainingTopic): string 
   return 'EMPTY TOKEN ACCOUNTS';
 }
 
-export function recommendWalletTraining(accounts: WalletTokenAccountInspection[]): WalletTrainingRecommendation[] {
-  const groupedSignals = new Map<WalletSafetySignalKind, Set<string>>();
-  const signals = deriveWalletSafetySignals(accounts);
+export function recommendWalletTraining(
+  accounts: WalletTokenAccountInspection[],
+  mintInspections: WalletMintInspection[] = [],
+): WalletTrainingRecommendation[] {
+  const mintByAddress = new Map(mintInspections.map((mintInspection) => [mintInspection.mintAddress, mintInspection]));
+  const topicAggregation = new Map<WalletTrainingTopic, {
+    topic: WalletTrainingTopic;
+    priority: WalletTrainingPriority;
+    reason: string;
+    sourceSignalType: WalletSafetySignalKind;
+    observedEntities: Set<string>;
+  }>();
+  const signals = deriveWalletSafetySignalsWithMints(accounts, mintInspections);
 
   for (const signal of signals) {
-    const existing = groupedSignals.get(signal.kind) ?? new Set<string>();
-    existing.add(signal.tokenAccountAddress);
-    groupedSignals.set(signal.kind, existing);
+    const mintInspection = mintByAddress.get(signal.mintAddress);
+    const isMintLevelSignal = signal.kind === 'mint-authority-active'
+      || signal.kind === 'freeze-authority-active'
+      || signal.kind.startsWith('token-2022-');
+    const definition = signalTopicDefinitions[signal.kind];
+    if (!definition) continue;
+
+    const entityKey = isMintLevelSignal && mintInspection
+      ? `mint:${mintInspection.mintAddress}`
+      : `account:${signal.tokenAccountAddress}`;
+
+    const existingTopic = topicAggregation.get(definition.topic);
+    if (!existingTopic) {
+      topicAggregation.set(definition.topic, {
+        topic: definition.topic,
+        priority: definition.priority,
+        reason: definition.reason,
+        sourceSignalType: signal.kind,
+        observedEntities: new Set([entityKey]),
+      });
+      continue;
+    }
+
+    existingTopic.observedEntities.add(entityKey);
+
+    const existingPriority = priorityRank[existingTopic.priority];
+    const nextPriority = priorityRank[definition.priority];
+    if (nextPriority < existingPriority) {
+      existingTopic.priority = definition.priority;
+      existingTopic.reason = definition.reason;
+      existingTopic.sourceSignalType = signal.kind;
+    }
   }
 
   const recommendations: WalletTrainingRecommendation[] = [];
-  for (const [signalKind, accountSet] of groupedSignals.entries()) {
-    const definition = signalTopicDefinitions[signalKind];
-    if (!definition) continue;
+  for (const aggregate of topicAggregation.values()) {
+    const recommendedExerciseIds = getWalletLessonExerciseIds(aggregate.topic)
+      .filter((exerciseId) => Boolean(findWalletLessonExercise(exerciseId)));
+    if (recommendedExerciseIds.length === 0) continue;
+
     recommendations.push({
-      topic: definition.topic,
-      priority: definition.priority,
-      reason: definition.reason,
-      sourceSignalType: signalKind,
-      observedAccountCount: accountSet.size,
-      recommendedExerciseIds: getWalletLessonExerciseIds(definition.topic),
+      topic: aggregate.topic,
+      priority: aggregate.priority,
+      reason: aggregate.reason,
+      sourceSignalType: aggregate.sourceSignalType,
+      observedAccountCount: aggregate.observedEntities.size,
+      recommendedExerciseIds,
     });
   }
 
