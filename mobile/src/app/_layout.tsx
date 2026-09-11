@@ -1,5 +1,4 @@
-import { DarkTheme, ThemeProvider } from 'expo-router';
-import AppTabs from '@/components/app-tabs';
+import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { SurpriseChallengeProvider } from '@/context/SurpriseChallengeContext';
 import { WalletProvider } from '@/context/WalletContext';
 import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
@@ -17,7 +16,7 @@ function HydratedApp() {
   const { isHydrated: progressHydrated } = useTrainingProgress();
   const { isHydrated: settingsHydrated } = useSettings();
   if (!progressHydrated || !settingsHydrated) return <View style={styles.loading}><ActivityIndicator color={Colors.accent} /></View>;
-  return <AppTabs />;
+  return <Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="wallet-safety" /></Stack>;
 }
 
 const styles = StyleSheet.create({ loading: { alignItems: 'center', backgroundColor: Colors.background, flex: 1, justifyContent: 'center' } });

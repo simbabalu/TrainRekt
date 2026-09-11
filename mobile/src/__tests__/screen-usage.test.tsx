@@ -2,10 +2,10 @@ import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
-import HomeScreen from '@/app/index';
-import TrainScreen from '@/app/train';
-import ProgressScreen from '@/app/explore';
-import SettingsScreen from '@/app/settings';
+import HomeScreen from '@/app/(tabs)/index';
+import TrainScreen from '@/app/(tabs)/train';
+import ProgressScreen from '@/app/(tabs)/explore';
+import SettingsScreen from '@/app/(tabs)/settings';
 
 Object.defineProperty(globalThis, '__DEV__', {
   value: false,
@@ -14,6 +14,7 @@ Object.defineProperty(globalThis, '__DEV__', {
 
 vi.mock('expo-router', () => ({
   Link: 'Link',
+  useRouter: () => ({ push: vi.fn() }),
   useLocalSearchParams: () => ({}),
 }));
 

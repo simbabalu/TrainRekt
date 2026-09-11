@@ -2,7 +2,7 @@ import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
-import HomeScreen from '@/app/index';
+import HomeScreen from '@/app/(tabs)/index';
 
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 

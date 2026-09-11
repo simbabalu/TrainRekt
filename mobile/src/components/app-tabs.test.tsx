@@ -51,6 +51,7 @@ describe('AppTabs', () => {
     expect(text).toContain('Train');
     expect(text).toContain('Progress');
     expect(text).toContain('Settings');
+    expect(text).not.toContain('Wallet Safety');
     expect(icons).toHaveLength(4);
   });
 });
