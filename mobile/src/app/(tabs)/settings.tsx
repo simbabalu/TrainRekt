@@ -1,10 +1,12 @@
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 
 import { AppIcon, type AppIconName } from '@/components/AppIcon';
 import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { DEV_EXERCISE_PICKER_ENABLED } from '@/constants/debug';
 import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
 import { difficultyOptions } from '@/types/settings';
@@ -14,10 +16,11 @@ import { useSurpriseChallenge } from '@/hooks/useSurpriseChallenge';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
-  const { settings, setDifficulty, setPreference, resetSettings } = useSettings();
+  const { settings, setDifficulty, resetSettings } = useSettings();
   const { progress, resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
   const { startPreview } = useSurpriseChallenge();
-  const { status, wallet, error, realMessageSigningEnabled, trainingSigningMessage } = useWallet();
+  const { status, wallet, error, realMessageSigningEnabled } = useWallet();
+  const [showSigningEducation, setShowSigningEducation] = useState(false);
   const surpriseAirdropCompleted = Boolean(progress.surpriseChallenges.completed['surprise-airdrop-001']);
   const surpriseChallengeCount = surpriseChallengeCatalog.length;
   const surpriseCompletedCount = Object.keys(progress.surpriseChallenges.completed).length;
@@ -63,68 +66,36 @@ export default function SettingsScreen() {
         {error && <Text style={styles.walletError}>{error}</Text>}
       </SectionCard>
       <SectionCard>
-        <SectionHeader
-          title="Real wallet training"
-          subtitle="Preview the exact message bytes used for local signing education."
-          iconName={{ ios: 'signature', android: 'draw', web: 'draw' }}
-          iconLabel="Real wallet training"
-        />
-        <View style={styles.trainingPreviewCard}>
-          <Text style={styles.trainingPreviewLabel}>Connected wallet</Text>
-          <Text style={styles.trainingPreviewValue}>{walletDisplayIdentity?.primary ?? 'No wallet connected'}</Text>
-          <Text style={styles.trainingPreviewLabel}>Training message (exact)</Text>
-          <Text style={styles.trainingMessage}>{trainingSigningMessage.displayMessage}</Text>
-          <Text style={styles.trainingSafetyCopy}>Message signing proves control of a key. It is not a transaction and does not move assets on its own.</Text>
-          <View style={styles.signingStateRow}>
-            <View style={[styles.signingStateDot, realMessageSigningEnabled ? styles.signingStateEnabled : styles.signingStateDisabled]} />
-            <Text style={[styles.signingStateLabel, realMessageSigningEnabled ? styles.signingStateLabelEnabled : styles.signingStateLabelDisabled]}>
-              {realMessageSigningEnabled ? 'REAL SIGNING ENABLED' : 'REAL SIGNING DISABLED'}
+        <View style={styles.compactItem}>
+          <SectionHeader
+            title="REAL WALLET TRAINING"
+            subtitle="Real message signing is currently disabled."
+            iconName={{ ios: 'signature', android: 'draw', web: 'draw' }}
+            iconLabel="Real wallet training"
+          />
+          <Pressable accessibilityRole="button" onPress={() => setShowSigningEducation((current) => !current)} style={styles.learnMoreButton}>
+            <Text style={styles.learnMoreLabel}>{showSigningEducation ? 'HIDE DETAILS' : 'LEARN MORE'}</Text>
+          </Pressable>
+          {showSigningEducation && (
+            <Text style={styles.educationCopy}>
+              TrainRekt teaches how to review wallet prompts. This simulator does not request a real signature, transaction, or asset movement.
             </Text>
-          </View>
-          {!realMessageSigningEnabled && (
-            <Text style={styles.trainingDisabledCopy}>Real wallet signing is disabled while TrainRekt is being validated.</Text>
           )}
+          {realMessageSigningEnabled && <Text style={styles.unexpectedStateCopy}>Signing availability is controlled by the wallet safety runtime.</Text>}
         </View>
       </SectionCard>
       <SectionCard>
         <SectionHeader
-          title="Training difficulty"
-          subtitle="Adjust the challenge level"
+          title="TRAINING"
+          subtitle="Training difficulty"
           iconName={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }}
           iconLabel="Training difficulty"
         />
         <View style={styles.segmented}>{difficultyOptions.map((option) => <Pressable key={option} onPress={() => setDifficulty(option)} style={[styles.segment, settings.difficulty === option && styles.selected]}><Text style={[styles.segmentLabel, settings.difficulty === option && styles.selectedLabel]}>{option}</Text></Pressable>)}</View>
       </SectionCard>
       <SectionCard>
-        <PreferenceRow
-          iconName={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
-          iconLabel="Notifications"
-          label="Notifications"
-          description="Get reminders and updates"
-          value={settings.notificationsEnabled}
-          onChange={(value) => setPreference('notificationsEnabled', value)}
-        />
-        <PreferenceRow
-          iconName={{ ios: 'speaker.wave.2.fill', android: 'volume_up', web: 'volume_up' }}
-          iconLabel="Sound effects"
-          label="Sound effects"
-          description="Play feedback sounds"
-          value={settings.soundEffectsEnabled}
-          onChange={(value) => setPreference('soundEffectsEnabled', value)}
-        />
-        <PreferenceRow
-          iconName={{ ios: 'iphone.radiowaves.left.and.right', android: 'vibration', web: 'vibration' }}
-          iconLabel="Haptic feedback"
-          label="Haptic feedback"
-          description="Feel interactions"
-          value={settings.hapticFeedbackEnabled}
-          onChange={(value) => setPreference('hapticFeedbackEnabled', value)}
-          isLast
-        />
-      </SectionCard>
-      <SectionCard>
         <SectionHeader
-          title="Reset"
+          title="DATA"
           subtitle="Restore local training data or preferences to their defaults."
           iconName={{ ios: 'arrow.counterclockwise', android: 'restart_alt', web: 'restart_alt' }}
           iconLabel="Reset"
@@ -134,7 +105,7 @@ export default function SettingsScreen() {
           <Pressable onPress={confirmResetSettings} style={styles.resetButton}><Text style={styles.resetLabel}>Reset settings</Text></Pressable>
         </View>
       </SectionCard>
-      {__DEV__ && (
+      {DEV_EXERCISE_PICKER_ENABLED && __DEV__ && (
         <SectionCard>
           <Text style={styles.sectionTitle}>DEVELOPER TOOLS</Text>
           <Text style={styles.about}>Simulate the daily training rollover without changing the device clock.</Text>
@@ -148,7 +119,7 @@ export default function SettingsScreen() {
         </SectionCard>
       )}
       <SectionCard>
-        <Text style={styles.sectionTitle}>About TrainRekt</Text>
+        <Text style={styles.sectionTitle}>ABOUT</Text>
         <Text style={styles.about}>TrainRekt is a crypto decision-training simulator.{`\n`}No real assets are traded.</Text>
         <View style={styles.version}><Text style={styles.muted}>Version</Text><Text style={styles.value}>0.1.0</Text></View>
       </SectionCard>
@@ -178,37 +149,6 @@ function SectionHeader({
   );
 }
 
-function PreferenceRow({
-  iconName,
-  iconLabel,
-  label,
-  description,
-  value,
-  onChange,
-  isLast = false,
-}: {
-  iconName: AppIconName;
-  iconLabel: string;
-  label: string;
-  description: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  isLast?: boolean;
-}) {
-  return (
-    <View style={[styles.preferenceRow, !isLast && styles.preferenceRowDivider]}>
-      <View style={styles.preferenceLeft}>
-        <AppIcon name={iconName} accessibilityLabel={iconLabel} badge />
-        <View style={styles.preferenceCopy}>
-          <Text style={styles.settingLabel}>{label}</Text>
-          <Text style={styles.settingDescription}>{description}</Text>
-        </View>
-      </View>
-      <Switch value={value} onValueChange={onChange} trackColor={{ false: Colors.secondaryCard, true: Colors.accent }} thumbColor={Colors.text} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
   sectionSubtitle: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.half },
@@ -233,25 +173,11 @@ const styles = StyleSheet.create({
   walletStatusConnected: { color: Colors.positive },
   walletStatusDisconnected: { color: Colors.secondaryText },
   walletError: { color: Colors.negative, fontSize: Typography.small, fontWeight: '600', marginTop: Spacing.md },
-  trainingPreviewCard: { backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.sm, marginTop: Spacing.md, padding: Spacing.md },
-  trainingPreviewLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
-  trainingPreviewValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '700' },
-  trainingMessage: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 20, marginTop: Spacing.xs },
-  trainingSafetyCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
-  signingStateRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
-  signingStateDot: { borderRadius: Radius.pill, height: 8, width: 8 },
-  signingStateEnabled: { backgroundColor: Colors.positive },
-  signingStateDisabled: { backgroundColor: Colors.mutedText },
-  signingStateLabel: { fontSize: Typography.small, fontWeight: '800', letterSpacing: 0.4 },
-  signingStateLabelEnabled: { color: Colors.positive },
-  signingStateLabelDisabled: { color: Colors.secondaryText },
-  trainingDisabledCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
-  preferenceRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 64, paddingVertical: Spacing.xs },
-  preferenceRowDivider: { borderBottomColor: Colors.border, borderBottomWidth: 1 },
-  preferenceLeft: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: Spacing.md, marginRight: Spacing.md },
-  preferenceCopy: { flex: 1 },
-  settingLabel: { color: Colors.text, fontSize: Typography.body, fontWeight: '600' },
-  settingDescription: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.half },
+  compactItem: { gap: Spacing.sm },
+  learnMoreButton: { alignSelf: 'flex-start', paddingVertical: Spacing.xs },
+  learnMoreLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
+  educationCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
+  unexpectedStateCopy: { color: Colors.warning, fontSize: Typography.small, lineHeight: 20 },
   about: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 23, marginTop: Spacing.md },
   resetButtons: { gap: Spacing.sm, marginTop: Spacing.lg },
   resetButton: { alignItems: 'center', borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: Spacing.md },
