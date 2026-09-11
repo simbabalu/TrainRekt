@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProgress } from '@/data/mockProgress';
+import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
 import { mockSettings } from '@/data/mockSettings';
 import {
   deserializeTrainingProgress,
@@ -41,7 +42,7 @@ describe('training progress storage', () => {
     expect(deserializeTrainingProgress('{bad json')).toBeNull();
     storage.getItem.mockResolvedValue('{"version":99,"data":{}}');
 
-    await expect(loadTrainingProgress()).resolves.toEqual(mockProgress);
+    await expect(loadTrainingProgress()).resolves.toEqual(createInitialTrainingProgress());
   });
 
   it('persists, hydrates, and clears progress through AsyncStorage', async () => {

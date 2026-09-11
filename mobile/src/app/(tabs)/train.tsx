@@ -113,7 +113,7 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
 
       {result && (
         <View onLayout={handleResultAnchorLayout}>
-          <DecisionResultPanel result={result} skill={currentExercise.skill} />
+          <DecisionResultPanel result={result} skill={currentExercise.skill} mode={mode} />
           {mode === 'daily' && !sessionComplete && <DailyGoalInlineStatus goalProgress={dailyGoalProgress} />}
           {sessionComplete ? (
             <DailyTrainingCompleteCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />

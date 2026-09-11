@@ -56,4 +56,23 @@ describe('DecisionResultPanel red-flag-identification', () => {
     expect(text).toContain('Urgent timer');
     expect(text).toContain('Brand color update');
   });
+
+  it('labels reduced practice exercise rewards without changing the awarded amount', () => {
+    const result: TrainingExerciseResult = {
+      isCorrect: true,
+      xpEarned: 30,
+      title: 'Correct',
+      explanation: 'Good decision.',
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<DecisionResultPanel result={result} skill="walletSafety" mode="practice" />);
+    });
+
+    const text = renderedText(renderer.toJSON()).replace(/\s+/g, ' ');
+    expect(/\+\s*30 XP/.test(text)).toBe(true);
+    expect(text).toContain('PRACTICE XP');
+    expect(text).not.toContain('+120 XP');
+  });
 });

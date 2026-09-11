@@ -45,6 +45,7 @@ describe('useTrainingScenario', () => {
     const initialXp = progress.totalXp;
     const initialSessions = progress.sessionsCompleted;
     const initialDailyCount = progress.daily.todayCompletedDecisions;
+    const initialHistoryLength = progress.recentTrainingHistory.length;
     const expectedXp = controller.currentExercise.xpReward;
     const correctAnswer = getCorrectAnswer(controller.currentExercise);
     act(() => {
@@ -52,10 +53,11 @@ describe('useTrainingScenario', () => {
       controller.submitAnswer(correctAnswer);
     });
 
+      expect(controller.result?.xpEarned).toBe(expectedXp);
     expect(progress.totalXp).toBe(initialXp + expectedXp);
     expect(progress.sessionsCompleted).toBe(initialSessions + 1);
     expect(progress.daily.todayCompletedDecisions).toBe(initialDailyCount + 1);
-    expect(progress.recentTrainingHistory).toHaveLength(4);
+    expect(progress.recentTrainingHistory).toHaveLength(initialHistoryLength + 1);
   });
 
   it('awards normal XP in practice mode without touching the daily counter, streak, or completion', async () => {
@@ -84,7 +86,8 @@ describe('useTrainingScenario', () => {
       controller.submitAnswer(correctAnswer);
     });
 
-    expect(progress.totalXp).toBe(initialXp + expectedXp);
+      expect(controller.result?.xpEarned).toBe(Math.round(expectedXp * 0.25));
+    expect(progress.totalXp).toBe(initialXp + Math.round(expectedXp * 0.25));
     expect(progress.daily.todayCompletedDecisions).toBe(3);
     expect(progress.daily.dailyTrainingStreak).toBe(2);
     expect(progress.daily.dailyGoalCompleted).toBe(true);
@@ -132,7 +135,8 @@ describe('useTrainingScenario', () => {
       controller.submitAnswer(getCorrectAnswer(controller.currentExercise));
     });
 
-    expect(progress.totalXp).toBe(initialXp + controller.currentExercise.xpReward);
+      expect(controller.result?.xpEarned).toBe(Math.round(controller.currentExercise.xpReward * 0.25));
+    expect(progress.totalXp).toBe(initialXp + Math.round(controller.currentExercise.xpReward * 0.25));
     expect(progress.daily.todayCompletedDecisions).toBe(initialDailyCount);
     expect(progress.daily.dailyTrainingStreak).toBe(initialDailyStreak);
     expect(progress.daily.dailyGoalCompleted).toBe(false);

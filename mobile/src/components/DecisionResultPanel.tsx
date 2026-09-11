@@ -4,14 +4,18 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { skillLabels } from '@/constants/training';
 import { SkillKey } from '@/types/progress';
 import { TrainingExerciseResult } from '@/types/exercise';
+import { TrainingMode } from '@/types/training';
 import { SectionCard } from './SectionCard';
 
-export function DecisionResultPanel({ result, skill }: { result: TrainingExerciseResult; skill: SkillKey }) {
+export function DecisionResultPanel({ result, skill, mode = 'daily' }: { result: TrainingExerciseResult; skill: SkillKey; mode?: TrainingMode }) {
   return (
     <SectionCard>
       <Text style={[styles.title, result.isCorrect ? styles.positive : styles.negative]}>{result.title}</Text>
       <View style={styles.rewardRow}>
-        <Text style={styles.xp}>+{result.xpEarned} XP</Text>
+        <View>
+          <Text style={styles.xp}>+{result.xpEarned} XP</Text>
+          {mode === 'practice' && <Text style={styles.practiceLabel}>PRACTICE XP</Text>}
+        </View>
         <Text style={styles.skill}>{skillLabels[skill]} {result.isCorrect ? '+2' : '-1'}</Text>
       </View>
       {result.riskIndicators && result.riskIndicators.length > 0 && (
@@ -169,6 +173,7 @@ const styles = StyleSheet.create({
   title: { fontSize: Typography.heading, fontWeight: '800', textTransform: 'uppercase' },
   rewardRow: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.md },
   xp: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
+  practiceLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1 },
   explanation: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22, marginTop: Spacing.sm },
   skill: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800' },
   lessonLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2, marginTop: Spacing.lg },

@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
 import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { evaluateExercise, ExerciseAnswer } from '@/domain/training/evaluateExercise';
+import { calculateAwardedExerciseXp } from '@/domain/progress/calculateAwardedExerciseXp';
 import { useRecommendedTraining } from '@/hooks/useRecommendedTraining';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { TrainingExerciseResult } from '@/types/exercise';
@@ -36,7 +37,11 @@ export function useTrainingScenario(mode: TrainingMode, options: UseTrainingScen
   function submitAnswer(answer: ExerciseAnswer) {
     if (answeredExerciseId.current === currentExercise.id) return;
     answeredExerciseId.current = currentExercise.id;
-    const exerciseResult = evaluateExercise(currentExercise, answer);
+    const evaluatedResult = evaluateExercise(currentExercise, answer);
+    const exerciseResult = {
+      ...evaluatedResult,
+      xpEarned: calculateAwardedExerciseXp({ baseXp: evaluatedResult.xpEarned, mode }),
+    };
     setSelectedAnswer(answer);
     setResult(exerciseResult);
     recordTrainingResult(currentExercise, exerciseResult, mode);

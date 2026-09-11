@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { mockProgress } from '@/data/mockProgress';
+import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
 import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { DailyTrainingState, SkillKey, SkillScores, TrainingProgress } from '@/types/progress';
 import { BadgeProgress, SurpriseChallengeDecision, SurpriseChallengeFinalDecision, SurpriseChallengeProgress } from '@/types/surpriseChallenge';
@@ -40,10 +40,10 @@ export function deserializeTrainingProgress(value: string | null): TrainingProgr
 export async function loadTrainingProgress(): Promise<TrainingProgress> {
   try {
     const stored = deserializeTrainingProgress(await AsyncStorage.getItem(storageKeys.trainingProgress));
-    return stored ?? mockProgress;
+    return stored ?? createInitialTrainingProgress();
   } catch (error) {
     console.warn('[TrainRekt] Could not load training progress.', error);
-    return mockProgress;
+    return createInitialTrainingProgress();
   }
 }
 

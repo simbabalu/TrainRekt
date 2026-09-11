@@ -16,6 +16,7 @@ const snapshot: TrainingProgressSnapshot = {
   xpIntoCurrentLevel: 0,
   xpRequiredForNextLevel: 1000,
   xpToNextLevel: 1000,
+  progressPercentage: 0,
   winRate: 50,
 };
 

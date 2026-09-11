@@ -59,6 +59,7 @@ export interface ProgressSummary {
   xpIntoCurrentLevel: number;
   xpRequiredForNextLevel: number;
   xpToNextLevel: number;
+  progressPercentage: number;
   winRate: number;
 }
 

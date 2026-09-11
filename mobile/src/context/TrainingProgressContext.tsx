@@ -1,11 +1,11 @@
 import { createContext, PropsWithChildren, useEffect, useReducer, useRef, useState } from 'react';
 
-import { mockProgress } from '@/data/mockProgress';
 import { applySurpriseChallengeCompletion } from '@/domain/progress/applySurpriseChallengeCompletion';
 import { applyTrainingResult } from '@/domain/progress/applyTrainingResult';
 import { createProgressSnapshot } from '@/domain/progress/calculateLevel';
+import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
 import { getLocalDateKey } from '@/domain/training/getLocalDateKey';
-import { createDefaultDailyTrainingState, normalizeDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
+import { normalizeDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { TrainingProgress, TrainingProgressSnapshot } from '@/types/progress';
 import { SurpriseChallengeCompletionInput } from '@/types/surpriseChallenge';
@@ -66,7 +66,7 @@ function progressReducer(progress: TrainingProgress, action: ProgressAction): Tr
 }
 
 export function TrainingProgressProvider({ children }: PropsWithChildren) {
-  const [progressState, dispatch] = useReducer(progressReducer, mockProgress);
+  const [progressState, dispatch] = useReducer(progressReducer, undefined, createInitialTrainingProgress);
   const [isHydrated, setIsHydrated] = useState(false);
   const historySequence = useRef(0);
   const skipNextPersist = useRef(false);
@@ -112,7 +112,7 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
   async function resetProgress() {
     skipNextPersist.current = true;
     await clearTrainingProgress();
-    dispatch({ type: 'hydrate', progress: { ...mockProgress, daily: createDefaultDailyTrainingState() } });
+    dispatch({ type: 'hydrate', progress: createInitialTrainingProgress() });
   }
 
   function debugSimulatePreviousDay() {

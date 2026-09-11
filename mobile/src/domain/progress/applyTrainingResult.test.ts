@@ -4,7 +4,8 @@ import { mockProgress } from '@/data/mockProgress';
 import { scenarioCatalog } from '@/data/scenarioCatalog';
 import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { applyTrainingResult } from './applyTrainingResult';
-import { createProgressSnapshot, calculateLevel, calculateWinRate } from './calculateLevel';
+import { calculateLevel, calculateProgressPercentage, createProgressSnapshot, calculateWinRate } from './calculateLevel';
+import { formatPercentage } from './formatPercentage';
 import { evaluateDecision } from '@/domain/training/evaluateDecision';
 import { DecisionExercise } from '@/types/exercise';
 
@@ -14,10 +15,20 @@ const metadata = { historyId: 'test-history', timestamp: '2026-09-10T12:00:00.00
 describe('progress calculations', () => {
   it('calculates level boundaries from total XP', () => {
     expect(calculateLevel(0).level).toBe(1);
-    expect(calculateLevel(999)).toMatchObject({ level: 1, xpIntoCurrentLevel: 999 });
-    expect(calculateLevel(1000)).toMatchObject({ level: 2, xpIntoCurrentLevel: 0 });
-    expect(calculateLevel(1999)).toMatchObject({ level: 2, xpIntoCurrentLevel: 999 });
-    expect(calculateLevel(2000)).toMatchObject({ level: 3, xpIntoCurrentLevel: 0 });
+    expect(calculateLevel(999)).toMatchObject({ level: 1, xpIntoCurrentLevel: 999, xpToNextLevel: 1 });
+    expect(calculateLevel(1000)).toMatchObject({ level: 2, xpIntoCurrentLevel: 0, xpToNextLevel: 1000 });
+    expect(calculateLevel(1001)).toMatchObject({ level: 2, xpIntoCurrentLevel: 1, xpToNextLevel: 999 });
+    expect(calculateLevel(1999)).toMatchObject({ level: 2, xpIntoCurrentLevel: 999, xpToNextLevel: 1 });
+    expect(calculateLevel(2000)).toMatchObject({ level: 3, xpIntoCurrentLevel: 0, xpToNextLevel: 1000 });
+  });
+
+  it('derives one normalized percentage for the card text and progress bar', () => {
+    expect(calculateProgressPercentage(0, 1000)).toBe(0);
+    expect(calculateProgressPercentage(120, 1000)).toBe(12);
+    expect(calculateProgressPercentage(72, 1000)).toBe(7.199999999999999);
+    expect(formatPercentage(calculateProgressPercentage(72, 1000))).toBe('7.2');
+    expect(formatPercentage(calculateProgressPercentage(120, 1000))).toBe('12');
+    expect(calculateProgressPercentage(1200, 1000)).toBe(100);
   });
 
   it('calculates win rate from correct and wrong decisions', () => {
@@ -74,7 +85,7 @@ describe('progress calculations', () => {
   it('derives the complete progress snapshot without storing duplicate calculations', () => {
     const snapshot = createProgressSnapshot({ ...mockProgress, totalXp: 2742 });
 
-    expect(snapshot).toMatchObject({ level: 3, xpIntoCurrentLevel: 742, xpRequiredForNextLevel: 1000, winRate: 58 });
+    expect(snapshot).toMatchObject({ level: 3, xpIntoCurrentLevel: 742, xpRequiredForNextLevel: 1000, progressPercentage: 74.2, winRate: 58 });
   });
 
   it('increments todays completed decisions and awards the daily bonus exactly once when the goal is reached', () => {
