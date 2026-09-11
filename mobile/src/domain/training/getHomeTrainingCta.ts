@@ -7,5 +7,7 @@ export interface HomeTrainingCta {
 }
 
 export function getHomeTrainingCta(goalProgress: DailyGoalProgress): HomeTrainingCta {
-  return goalProgress.isComplete ? { mode: 'practice', label: 'EXTRA PRACTICE' } : { mode: 'daily', label: 'START TRAINING' };
+  if (goalProgress.isComplete) return { mode: 'practice', label: 'EXTRA PRACTICE' };
+  if (goalProgress.completed > 0) return { mode: 'daily', label: 'CONTINUE TRAINING' };
+  return { mode: 'daily', label: 'START TRAINING' };
 }

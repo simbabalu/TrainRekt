@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockProgress } from '@/data/mockProgress';
 import { createDefaultDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { DailyTrainingState, SkillKey, SkillScores, TrainingProgress } from '@/types/progress';
+import { BadgeProgress, SurpriseChallengeDecision, SurpriseChallengeFinalDecision, SurpriseChallengeProgress } from '@/types/surpriseChallenge';
 import { storageKeys, storageSchemaVersion } from './storageKeys';
 
 interface StoredProgress {
@@ -23,7 +24,13 @@ export function deserializeTrainingProgress(value: string | null): TrainingProgr
     const parsed: unknown = JSON.parse(value);
     if (!isStoredEnvelope(parsed) || !isValidBaseProgress(parsed.data)) return null;
     const base = parsed.data as unknown as TrainingProgress;
-    return { ...base, skillScores: normalizeStoredSkillScores(parsed.data.skillScores), daily: normalizeStoredDaily(parsed.data.daily) };
+    return {
+      ...base,
+      skillScores: normalizeStoredSkillScores(parsed.data.skillScores),
+      daily: normalizeStoredDaily(parsed.data.daily),
+      surpriseChallenges: normalizeStoredSurpriseChallenges(parsed.data.surpriseChallenges),
+      badges: normalizeStoredBadges(parsed.data.badges),
+    };
   } catch (error) {
     console.warn('[TrainRekt] Could not parse stored training progress.', error);
     return null;
@@ -85,6 +92,71 @@ function isValidDailyState(value: unknown): value is DailyTrainingState {
 
 function isHistory(value: unknown): value is TrainingProgress['recentTrainingHistory'] {
   return Array.isArray(value) && value.length <= 10 && value.every((entry) => isRecord(entry) && typeof entry.id === 'string' && typeof entry.scenarioId === 'string' && typeof entry.scenarioTitle === 'string' && typeof entry.correct === 'boolean' && skillKeys.includes(entry.skill as SkillKey) && typeof entry.timestamp === 'string' && isNonNegativeNumber(entry.xpEarned));
+}
+
+function normalizeStoredSurpriseChallenges(value: unknown): SurpriseChallengeProgress {
+  if (!isRecord(value) || !isRecord(value.completed)) return { completed: {} };
+  const completed: SurpriseChallengeProgress['completed'] = {};
+  Object.entries(value.completed).forEach(([challengeId, record]) => {
+    if (!isValidStoredSurpriseCompletionRecord(record)) return;
+    completed[challengeId] = {
+      challengeVersion: record.challengeVersion,
+      completedAt: record.completedAt,
+      firstDecision: record.firstDecision,
+      finalDecision: record.finalDecision,
+      xpAwarded: record.xpAwarded,
+      badgeEarned: record.badgeEarned,
+    };
+  });
+  return { completed };
+}
+
+function normalizeStoredBadges(value: unknown): BadgeProgress {
+  if (!isRecord(value) || !isRecord(value.earned)) return { earned: {} };
+  const earned: BadgeProgress['earned'] = {};
+  Object.entries(value.earned).forEach(([badgeId, record]) => {
+    if (!isRecord(record)) return;
+    if (
+      typeof record.earnedAt !== 'string'
+      || typeof record.sourceChallengeId !== 'string'
+      || !isNonNegativeNumber(record.sourceChallengeVersion)
+    ) {
+      return;
+    }
+    earned[badgeId] = {
+      earnedAt: record.earnedAt,
+      sourceChallengeId: record.sourceChallengeId,
+      sourceChallengeVersion: record.sourceChallengeVersion,
+    };
+  });
+  return { earned };
+}
+
+function isValidStoredSurpriseCompletionRecord(value: unknown): value is {
+  challengeVersion: number;
+  completedAt: string;
+  firstDecision: SurpriseChallengeDecision;
+  finalDecision: SurpriseChallengeFinalDecision;
+  xpAwarded: number;
+  badgeEarned: boolean;
+} {
+  if (!isRecord(value)) return false;
+  return (
+    isNonNegativeNumber(value.challengeVersion)
+    && typeof value.completedAt === 'string'
+    && isSurpriseChallengeDecision(value.firstDecision)
+    && isSurpriseChallengeFinalDecision(value.finalDecision)
+    && isNonNegativeNumber(value.xpAwarded)
+    && typeof value.badgeEarned === 'boolean'
+  );
+}
+
+function isSurpriseChallengeDecision(value: unknown): value is SurpriseChallengeDecision {
+  return value === 'sign' || value === 'inspect' || value === 'reject';
+}
+
+function isSurpriseChallengeFinalDecision(value: unknown): value is SurpriseChallengeFinalDecision {
+  return value === 'sign' || value === 'reject';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

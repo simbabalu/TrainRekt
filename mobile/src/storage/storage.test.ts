@@ -59,6 +59,8 @@ describe('training progress storage', () => {
   it('hydrates legacy persisted progress without daily fields using safe defaults', async () => {
     const legacyData: Record<string, unknown> = { ...mockProgress };
     delete legacyData.daily;
+    delete legacyData.surpriseChallenges;
+    delete legacyData.badges;
     storage.getItem.mockResolvedValue(JSON.stringify({ version: 1, data: legacyData }));
 
     const loaded = await loadTrainingProgress();
@@ -68,10 +70,36 @@ describe('training progress storage', () => {
     expect(loaded.daily.dailyGoal).toBe(3);
     expect(loaded.daily.todayCompletedDecisions).toBe(0);
     expect(loaded.daily.dailyGoalCompleted).toBe(false);
+    expect(loaded.surpriseChallenges.completed).toEqual({});
+    expect(loaded.badges.earned).toEqual({});
   });
 
   it('round-trips daily training fields through save and load', async () => {
-    const progressWithDailyProgress = { ...mockProgress, daily: { ...mockProgress.daily, todayCompletedDecisions: 2, dailyTrainingStreak: 3, bestDailyTrainingStreak: 5 } };
+    const progressWithDailyProgress = {
+      ...mockProgress,
+      daily: { ...mockProgress.daily, todayCompletedDecisions: 2, dailyTrainingStreak: 3, bestDailyTrainingStreak: 5 },
+      surpriseChallenges: {
+        completed: {
+          'surprise-airdrop-001': {
+            challengeVersion: 1,
+            completedAt: '2026-09-11T08:00:00.000Z',
+            firstDecision: 'inspect' as const,
+            finalDecision: 'reject' as const,
+            xpAwarded: 250,
+            badgeEarned: true,
+          },
+        },
+      },
+      badges: {
+        earned: {
+          'airdrop-survivor': {
+            earnedAt: '2026-09-11T08:00:00.000Z',
+            sourceChallengeId: 'surprise-airdrop-001',
+            sourceChallengeVersion: 1,
+          },
+        },
+      },
+    };
     storage.getItem.mockResolvedValue(serializeTrainingProgress(progressWithDailyProgress));
 
     await saveTrainingProgress(progressWithDailyProgress);

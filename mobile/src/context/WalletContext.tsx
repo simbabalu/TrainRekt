@@ -1,9 +1,13 @@
-import { createContext, PropsWithChildren, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { mobileWalletService, MobileWalletService } from '@/services/wallet/mobileWalletService';
 import { buildTrainingSigningMessage, createRandomTrainingSigningNonce, TrainingSigningMessage } from '@/domain/wallet/buildTrainingSigningMessage';
 import { REAL_MESSAGE_SIGNING_DISABLED_MESSAGE, REAL_MESSAGE_SIGNING_ENABLED } from '@/security/realMessageSigning';
 import { ConnectedWallet, WalletConnectionStatus, WalletSignMessageResult } from '@/types/wallet';
+
+function isDevRuntime() {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
 
 interface WalletContextValue {
   status: WalletConnectionStatus;
@@ -36,6 +40,11 @@ export function WalletProvider({ children, service = mobileWalletService }: Wall
     () => buildTrainingSigningMessage(createRandomTrainingSigningNonce()),
     [],
   );
+
+  useEffect(() => {
+    if (!isDevRuntime()) return;
+    console.log(`[WALLET] status=${status}`);
+  }, [status]);
 
   async function connect() {
     if (pendingConnectRef.current) return;

@@ -25,4 +25,6 @@ export const mockProgress: TrainingProgress = {
     { id: 'history-memecoin-fomo', scenarioId: 'memecoin-fomo', scenarioTitle: 'Memecoin FOMO', correct: true, skill: 'fomoResistance', timestamp: '2026-09-08T08:00:00.000Z', xpEarned: 100 },
   ],
   daily: createDefaultDailyTrainingState(),
+  surpriseChallenges: { completed: {} },
+  badges: { earned: {} },
 };

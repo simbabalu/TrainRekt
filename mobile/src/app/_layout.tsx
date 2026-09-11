@@ -1,5 +1,6 @@
 import { DarkTheme, ThemeProvider } from 'expo-router';
 import AppTabs from '@/components/app-tabs';
+import { SurpriseChallengeProvider } from '@/context/SurpriseChallengeContext';
 import { WalletProvider } from '@/context/WalletContext';
 import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
 import { SettingsProvider } from '@/context/SettingsContext';
@@ -9,7 +10,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Colors } from '@/constants/theme';
 
 export default function TabLayout() {
-  return <ThemeProvider value={DarkTheme}><WalletProvider><TrainingProgressProvider><SettingsProvider><HydratedApp /></SettingsProvider></TrainingProgressProvider></WalletProvider></ThemeProvider>;
+  return <ThemeProvider value={DarkTheme}><WalletProvider><TrainingProgressProvider><SurpriseChallengeProvider><SettingsProvider><HydratedApp /></SettingsProvider></SurpriseChallengeProvider></TrainingProgressProvider></WalletProvider></ThemeProvider>;
 }
 
 function HydratedApp() {

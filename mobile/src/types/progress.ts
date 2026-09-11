@@ -1,3 +1,5 @@
+import { BadgeProgress, SurpriseChallengeProgress } from './surpriseChallenge';
+
 export type SkillKey =
   | 'riskManagement'
   | 'profitTaking'
@@ -48,6 +50,8 @@ export interface TrainingProgress {
   skillScores: SkillScores;
   recentTrainingHistory: HistoryEntry[];
   daily: DailyTrainingState;
+  surpriseChallenges: SurpriseChallengeProgress;
+  badges: BadgeProgress;
 }
 
 export interface ProgressSummary {

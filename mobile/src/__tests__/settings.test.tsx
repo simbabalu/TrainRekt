@@ -11,6 +11,7 @@ Object.defineProperty(globalThis, '__DEV__', {
 const useSettingsMock = vi.hoisted(() => vi.fn());
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 const useWalletMock = vi.hoisted(() => vi.fn());
+const useSurpriseChallengeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useSettings', () => ({
   useSettings: useSettingsMock,
@@ -22,6 +23,10 @@ vi.mock('@/hooks/useTrainingProgress', () => ({
 
 vi.mock('@/hooks/useWallet', () => ({
   useWallet: useWalletMock,
+}));
+
+vi.mock('@/hooks/useSurpriseChallenge', () => ({
+  useSurpriseChallenge: useSurpriseChallengeMock,
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -70,8 +75,17 @@ function setupDefaultMocks() {
   });
 
   useTrainingProgressMock.mockReturnValue({
+    progress: {
+      surpriseChallenges: {
+        completed: {},
+      },
+    },
     resetProgress: vi.fn(),
     debugSimulatePreviousDay: vi.fn(),
+  });
+
+  useSurpriseChallengeMock.mockReturnValue({
+    startPreview: vi.fn(),
   });
 }
 
@@ -108,7 +122,8 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('pascalschaer.skr');
     expect(text).toContain('51SY...3oJZ');
     expect(text).toContain('Connected');
-    expect(text).toContain('Disconnect');
+    expect(text).not.toContain('Disconnect');
+    expect(text).not.toContain('Connect Wallet');
     expect(text).not.toContain('04uf...Ubl=');
   });
 
@@ -182,7 +197,7 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('Feel interactions');
     expect(text).toContain('Reset');
     expect(text).toContain('Reset training progress');
-    expect(text).toContain('Disconnect');
+    expect(text).not.toContain('Disconnect');
     expect(text).toContain('Real wallet training');
     expect(text).toContain('REAL SIGNING DISABLED');
     expect(text).toContain('TrainRekt Wallet Safety Training');

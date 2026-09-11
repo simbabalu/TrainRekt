@@ -4,7 +4,11 @@ import { getHomeTrainingCta } from './getHomeTrainingCta';
 
 describe('getHomeTrainingCta', () => {
   it('recommends starting daily training before the goal is complete', () => {
-    expect(getHomeTrainingCta({ completed: 1, goal: 3, percentage: 33, isComplete: false })).toEqual({ mode: 'daily', label: 'START TRAINING' });
+    expect(getHomeTrainingCta({ completed: 0, goal: 3, percentage: 0, isComplete: false })).toEqual({ mode: 'daily', label: 'START TRAINING' });
+  });
+
+  it('recommends continuing daily training when progress has started but goal is incomplete', () => {
+    expect(getHomeTrainingCta({ completed: 1, goal: 3, percentage: 33, isComplete: false })).toEqual({ mode: 'daily', label: 'CONTINUE TRAINING' });
   });
 
   it('recommends extra practice once the daily goal is complete', () => {

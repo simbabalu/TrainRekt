@@ -5,16 +5,22 @@ import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
 import { difficultyOptions } from '@/types/settings';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
+import { useSurpriseChallenge } from '@/hooks/useSurpriseChallenge';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
   const { settings, setDifficulty, setPreference, resetSettings } = useSettings();
-  const { resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
-  const { status, wallet, error, connect, disconnect, realMessageSigningEnabled, trainingSigningMessage } = useWallet();
+  const { progress, resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
+  const { startPreview } = useSurpriseChallenge();
+  const { status, wallet, error, realMessageSigningEnabled, trainingSigningMessage } = useWallet();
+  const surpriseAirdropCompleted = Boolean(progress.surpriseChallenges.completed['surprise-airdrop-001']);
+  const surpriseChallengeCount = surpriseChallengeCatalog.length;
+  const surpriseCompletedCount = Object.keys(progress.surpriseChallenges.completed).length;
   const isConnected = status === 'connected' && Boolean(wallet);
   const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
   const walletDisplayIdentity = wallet ? getWalletDisplayIdentity(wallet) : null;
@@ -51,17 +57,6 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            <View style={styles.walletActionColumn}>
-              {isConnected ? (
-                <Pressable onPress={() => { void disconnect(); }} style={styles.walletButton}>
-                  <Text style={styles.walletButtonLabel}>Disconnect</Text>
-                </Pressable>
-              ) : (
-                <Pressable onPress={() => { void connect(); }} disabled={status === 'connecting'} style={[styles.walletButton, status === 'connecting' && styles.walletButtonDisabled]}>
-                  <Text style={styles.walletButtonLabel}>{status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}</Text>
-                </Pressable>
-              )}
-            </View>
           </View>
         </View>
 
@@ -143,8 +138,12 @@ export default function SettingsScreen() {
         <SectionCard>
           <Text style={styles.sectionTitle}>DEVELOPER TOOLS</Text>
           <Text style={styles.about}>Simulate the daily training rollover without changing the device clock.</Text>
+          <Text style={styles.devStatus}>SURPRISE STATUS</Text>
+          <Text style={styles.devStatusCopy}>surprise-airdrop-001: {surpriseAirdropCompleted ? 'completed' : 'eligible'}</Text>
+          <Text style={styles.devStatusCopy}>completed {surpriseCompletedCount}/{surpriseChallengeCount}</Text>
           <View style={styles.resetButtons}>
             <Pressable onPress={debugSimulatePreviousDay} style={styles.resetButton}><Text style={styles.resetLabel}>Simulate previous day</Text></Pressable>
+            <Pressable onPress={() => { startPreview('surprise-airdrop-001'); }} style={styles.resetButton}><Text style={styles.resetLabel}>Preview fake airdrop challenge</Text></Pressable>
           </View>
         </SectionCard>
       )}
@@ -233,11 +232,7 @@ const styles = StyleSheet.create({
   walletStatus: { fontSize: Typography.small, fontWeight: '700' },
   walletStatusConnected: { color: Colors.positive },
   walletStatusDisconnected: { color: Colors.secondaryText },
-  walletActionColumn: { alignSelf: 'stretch', justifyContent: 'flex-end' },
   walletError: { color: Colors.negative, fontSize: Typography.small, fontWeight: '600', marginTop: Spacing.md },
-  walletButton: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 44, justifyContent: 'center', minWidth: 122, paddingHorizontal: Spacing.md },
-  walletButtonDisabled: { opacity: 0.65 },
-  walletButtonLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '700' },
   trainingPreviewCard: { backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.sm, marginTop: Spacing.md, padding: Spacing.md },
   trainingPreviewLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   trainingPreviewValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '700' },
@@ -264,4 +259,6 @@ const styles = StyleSheet.create({
   version: { borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.lg, paddingTop: Spacing.lg },
   muted: { color: Colors.secondaryText, fontSize: Typography.body },
   value: { color: Colors.text, fontSize: Typography.body, fontWeight: '700' },
+  devStatus: { color: Colors.warning, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8, marginTop: Spacing.md },
+  devStatusCopy: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
 });

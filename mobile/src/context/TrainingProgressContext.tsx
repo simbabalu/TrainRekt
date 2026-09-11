@@ -1,12 +1,14 @@
 import { createContext, PropsWithChildren, useEffect, useReducer, useRef, useState } from 'react';
 
 import { mockProgress } from '@/data/mockProgress';
+import { applySurpriseChallengeCompletion } from '@/domain/progress/applySurpriseChallengeCompletion';
 import { applyTrainingResult } from '@/domain/progress/applyTrainingResult';
 import { createProgressSnapshot } from '@/domain/progress/calculateLevel';
 import { getLocalDateKey } from '@/domain/training/getLocalDateKey';
 import { createDefaultDailyTrainingState, normalizeDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
 import { TrainingProgress, TrainingProgressSnapshot } from '@/types/progress';
+import { SurpriseChallengeCompletionInput } from '@/types/surpriseChallenge';
 import { TrainingMode } from '@/types/training';
 import { clearTrainingProgress, loadTrainingProgress, saveTrainingProgress } from '@/storage/trainingProgressStorage';
 
@@ -28,12 +30,18 @@ interface DebugShiftDailyDateAction {
   type: 'debug-shift-daily-date';
 }
 
-type ProgressAction = ApplyResultAction | HydrateAction | DebugShiftDailyDateAction;
+interface CompleteSurpriseChallengeAction {
+  type: 'complete-surprise-challenge';
+  completion: SurpriseChallengeCompletionInput;
+}
+
+type ProgressAction = ApplyResultAction | HydrateAction | DebugShiftDailyDateAction | CompleteSurpriseChallengeAction;
 
 interface TrainingProgressContextValue {
   progress: TrainingProgressSnapshot;
   isHydrated: boolean;
   recordTrainingResult: (exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode) => void;
+  recordSurpriseChallengeCompletion: (completion: SurpriseChallengeCompletionInput) => void;
   resetProgress: () => Promise<void>;
   debugSimulatePreviousDay: () => void;
 }
@@ -46,6 +54,9 @@ function progressReducer(progress: TrainingProgress, action: ProgressAction): Tr
     const shiftedDate = new Date(`${progress.daily.todayDateKey}T00:00:00`);
     shiftedDate.setDate(shiftedDate.getDate() - 1);
     return { ...progress, daily: { ...progress.daily, todayDateKey: getLocalDateKey(shiftedDate) } };
+  }
+  if (action.type === 'complete-surprise-challenge') {
+    return applySurpriseChallengeCompletion(progress, action.completion);
   }
   return applyTrainingResult(progress, action.exercise, action.result, {
     historyId: action.historyId,
@@ -93,6 +104,11 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
     });
   }
 
+  function recordSurpriseChallengeCompletion(completion: SurpriseChallengeCompletionInput) {
+    if (!isHydrated) return;
+    dispatch({ type: 'complete-surprise-challenge', completion });
+  }
+
   async function resetProgress() {
     skipNextPersist.current = true;
     await clearTrainingProgress();
@@ -105,7 +121,7 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
   }
 
   return (
-    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, resetProgress, debugSimulatePreviousDay }}>
+    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, recordSurpriseChallengeCompletion, resetProgress, debugSimulatePreviousDay }}>
       {children}
     </TrainingProgressContext.Provider>
   );
