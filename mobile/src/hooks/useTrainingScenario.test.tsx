@@ -4,6 +4,7 @@ import { TrainingProgressProvider } from '@/context/TrainingProgressContext';
 import { SettingsProvider } from '@/context/SettingsContext';
 import { findWalletLessonExercise } from '@/data/walletLessonCatalog';
 import { mockProgress } from '@/data/mockProgress';
+import { demoPreparationPolicy } from '@/domain/training/demoPreparationPolicy';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { ExerciseAnswer } from '@/domain/training/evaluateExercise';
 import { TrainingExercise, TransactionInspectionDecision } from '@/types/exercise';
@@ -33,6 +34,42 @@ function getIncorrectWalletInspectionAnswer(exercise: TrainingExercise): Transac
 }
 
 describe('useTrainingScenario', () => {
+  it('uses the DEV prepared deterministic daily exercise once, then consumes the seed', async () => {
+    Object.defineProperty(globalThis, '__DEV__', { value: true, configurable: true });
+    storage.getItem.mockImplementation((key: string) => Promise.resolve(key === '@trainrekt/training-progress' ? JSON.stringify({ version: 4, data: createInitialProgressLike() }) : null));
+
+    let controller!: ScenarioController;
+    let progressContext!: ReturnType<typeof useTrainingProgress>;
+
+    function Harness() {
+      progressContext = useTrainingProgress();
+      controller = useTrainingScenario('daily');
+      return null;
+    }
+
+    function App({ revision }: { revision: number }) {
+      return <TrainingProgressProvider><SettingsProvider><Harness key={`scenario-${revision}`} /></SettingsProvider></TrainingProgressProvider>;
+    }
+
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<App revision={0} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await progressContext.prepareDemo();
+    });
+
+    await act(async () => {
+      renderer.update(<App revision={1} />);
+      await Promise.resolve();
+    });
+
+    expect(controller.currentExercise.id).toBe(demoPreparationPolicy.firstDailyExerciseId);
+    expect(progressContext.consumePreparedDemoExerciseId()).toBeNull();
+  });
+
   it('does not award progress twice for duplicate decision presses', async () => {
     let controller!: ScenarioController;
     let progress!: TrainingProgressSnapshot;
@@ -381,3 +418,28 @@ describe('useTrainingScenario', () => {
     expect(progress.walletLessonProgress['wallet-lesson-empty-token-account-context']?.passed).toBe(true);
   });
 });
+
+function createInitialProgressLike() {
+  return {
+    ...mockProgress,
+    totalXp: 0,
+    sessionsCompleted: 0,
+    correctDecisions: 0,
+    wrongDecisions: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    recentTrainingHistory: [],
+    walletLessonRewards: { claimedExerciseIds: [] },
+    walletLessonProgress: {},
+    surpriseChallenges: { completed: {} },
+    badges: { earned: {} },
+    daily: {
+      ...mockProgress.daily,
+      todayCompletedDecisions: 0,
+      dailyGoalCompleted: false,
+      lastDailyCompletionDate: null,
+      dailyTrainingStreak: 0,
+      bestDailyTrainingStreak: 0,
+    },
+  };
+}

@@ -13,6 +13,10 @@ const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 const useWalletMock = vi.hoisted(() => vi.fn());
 const useSurpriseChallengeMock = vi.hoisted(() => vi.fn());
 const alertMock = vi.hoisted(() => vi.fn());
+const debugFlags = vi.hoisted(() => ({
+  DEV_EXERCISE_PICKER_ENABLED: false,
+  DEV_DEMO_TOOLS_ENABLED: true,
+}));
 
 vi.mock('@/hooks/useSettings', () => ({
   useSettings: useSettingsMock,
@@ -31,7 +35,12 @@ vi.mock('@/hooks/useSurpriseChallenge', () => ({
 }));
 
 vi.mock('@/constants/debug', () => ({
-  DEV_EXERCISE_PICKER_ENABLED: true,
+  get DEV_EXERCISE_PICKER_ENABLED() {
+    return debugFlags.DEV_EXERCISE_PICKER_ENABLED;
+  },
+  get DEV_DEMO_TOOLS_ENABLED() {
+    return debugFlags.DEV_DEMO_TOOLS_ENABLED;
+  },
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -67,6 +76,9 @@ function renderedText(value: unknown): string {
 }
 
 function setupDefaultMocks() {
+  debugFlags.DEV_EXERCISE_PICKER_ENABLED = false;
+  debugFlags.DEV_DEMO_TOOLS_ENABLED = true;
+
   useSettingsMock.mockReturnValue({
     settings: {
       difficulty: 'Intermediate',
@@ -86,6 +98,7 @@ function setupDefaultMocks() {
       },
     },
     resetProgress: vi.fn(),
+    prepareDemo: vi.fn(),
     debugSimulatePreviousDay: vi.fn(),
   });
 
@@ -213,7 +226,11 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('LEARN MORE');
     expect(text).not.toContain('001122334455');
     expect(text).not.toContain('TrainRekt Wallet Safety Training');
+    expect(text).not.toContain('DEMO TOOLS');
     expect(text).not.toContain('DEVELOPER TOOLS');
+    expect(text).not.toContain('Preview fake airdrop challenge');
+    expect(text).not.toContain('Simulate previous day');
+    expect(text).not.toContain('PREPARE DEMO');
 
     const learnMore = renderer.root.findAll((node) => String(node.type) === 'Pressable')[0];
     expect(learnMore).toBeDefined();
@@ -242,6 +259,7 @@ describe('SettingsScreen wallet card', () => {
     useTrainingProgressMock.mockReturnValue({
       progress: { surpriseChallenges: { completed: {} } },
       resetProgress,
+      prepareDemo: vi.fn(),
       debugSimulatePreviousDay: vi.fn(),
     });
     useWalletMock.mockReturnValue({
@@ -279,7 +297,7 @@ describe('SettingsScreen wallet card', () => {
     expect(resetSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes developer tools only when DEV and the explicit feature flag are enabled', () => {
+  it('shows only demo tools when __DEV__ and DEV_DEMO_TOOLS_ENABLED are true', () => {
     setupDefaultMocks();
     useWalletMock.mockReturnValue({
       status: 'disconnected',
@@ -295,12 +313,117 @@ describe('SettingsScreen wallet card', () => {
     });
 
     Object.defineProperty(globalThis, '__DEV__', { value: true, configurable: true });
+    debugFlags.DEV_DEMO_TOOLS_ENABLED = true;
+    debugFlags.DEV_EXERCISE_PICKER_ENABLED = false;
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(<SettingsScreen />);
     });
 
-    expect(renderedText(renderer.toJSON())).toContain('DEVELOPER TOOLS');
+    const text = renderedText(renderer.toJSON());
+    expect(text).toContain('DEMO TOOLS');
+    expect(text).toContain('PREPARE DEMO');
+    expect(text).not.toContain('DEVELOPER TOOLS');
+    expect(text).not.toContain('Preview fake airdrop challenge');
+    expect(text).not.toContain('Simulate previous day');
+    Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
+  });
+
+  it('hides PREPARE DEMO when DEV_DEMO_TOOLS_ENABLED is false even in __DEV__ runtime', () => {
+    setupDefaultMocks();
+    useWalletMock.mockReturnValue({
+      status: 'disconnected',
+      wallet: null,
+      error: null,
+      realMessageSigningEnabled: false,
+      trainingSigningMessage: { nonce: '001122334455', displayMessage: 'hidden', messageBytes: new Uint8Array([1]) },
+      signingStatus: 'idle',
+      signingError: null,
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      signTrainingMessage: vi.fn(),
+    });
+
+    Object.defineProperty(globalThis, '__DEV__', { value: true, configurable: true });
+    debugFlags.DEV_DEMO_TOOLS_ENABLED = false;
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<SettingsScreen />);
+    });
+
+    const text = renderedText(renderer.toJSON());
+    expect(text).not.toContain('DEMO TOOLS');
+    expect(text).not.toContain('PREPARE DEMO');
+
+    debugFlags.DEV_DEMO_TOOLS_ENABLED = true;
+    Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
+  });
+
+  it('routes PREPARE DEMO through confirmation and allows cancel without changing state', () => {
+    setupDefaultMocks();
+    const prepareDemo = vi.fn();
+    const connect = vi.fn();
+    const disconnect = vi.fn();
+    const signTrainingMessage = vi.fn();
+    useTrainingProgressMock.mockReturnValue({
+      progress: { surpriseChallenges: { completed: {} } },
+      resetProgress: vi.fn(),
+      prepareDemo,
+      debugSimulatePreviousDay: vi.fn(),
+    });
+    useWalletMock.mockReturnValue({
+      status: 'connected',
+      wallet: {
+        label: 'demo.skr',
+        address: '51SYwT7hXpnYccF6Uabvwp7mQkY6MoBVVqf3v83oJZ',
+      },
+      error: null,
+      realMessageSigningEnabled: false,
+      trainingSigningMessage: { nonce: '001122334455', displayMessage: 'hidden', messageBytes: new Uint8Array([1]) },
+      signingStatus: 'idle',
+      signingError: null,
+      connect,
+      disconnect,
+      signTrainingMessage,
+    });
+
+    Object.defineProperty(globalThis, '__DEV__', { value: true, configurable: true });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<SettingsScreen />);
+    });
+
+    const text = renderedText(renderer.toJSON());
+    expect(text).toContain('PREPARE DEMO');
+
+    const pressables = renderer.root.findAll((node) => String(node.type) === 'Pressable');
+    expect(pressables[6]).toBeDefined();
+    act(() => {
+      pressables[6]?.props.onPress();
+    });
+
+    expect(alertMock).toHaveBeenCalled();
+    const latestCall = alertMock.mock.calls.at(-1);
+    expect(latestCall?.[0]).toBe('Prepare demo?');
+    expect(latestCall?.[1]).toContain('Your wallet and on-chain data are not changed.');
+
+    const cancelAction = latestCall?.[2].find((action: { text: string }) => action.text === 'CANCEL');
+    act(() => {
+      cancelAction.onPress?.();
+    });
+    expect(prepareDemo).not.toHaveBeenCalled();
+
+    const confirmAction = latestCall?.[2].find((action: { text: string }) => action.text === 'PREPARE DEMO');
+    act(() => {
+      confirmAction.onPress();
+    });
+    expect(prepareDemo).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(signTrainingMessage).not.toHaveBeenCalled();
+
     Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
   });
 });

@@ -6,24 +6,18 @@ import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
-import { DEV_EXERCISE_PICKER_ENABLED } from '@/constants/debug';
-import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
+import { DEV_DEMO_TOOLS_ENABLED } from '@/constants/debug';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
 import { difficultyOptions } from '@/types/settings';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
-import { useSurpriseChallenge } from '@/hooks/useSurpriseChallenge';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
   const { settings, setDifficulty, resetSettings } = useSettings();
-  const { progress, resetProgress, debugSimulatePreviousDay } = useTrainingProgress();
-  const { startPreview } = useSurpriseChallenge();
+  const { resetProgress, prepareDemo } = useTrainingProgress();
   const { status, wallet, error, realMessageSigningEnabled } = useWallet();
   const [showSigningEducation, setShowSigningEducation] = useState(false);
-  const surpriseAirdropCompleted = Boolean(progress.surpriseChallenges.completed['surprise-airdrop-001']);
-  const surpriseChallengeCount = surpriseChallengeCatalog.length;
-  const surpriseCompletedCount = Object.keys(progress.surpriseChallenges.completed).length;
   const isConnected = status === 'connected' && Boolean(wallet);
   const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
   const walletDisplayIdentity = wallet ? getWalletDisplayIdentity(wallet) : null;
@@ -40,6 +34,17 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reset', style: 'destructive', onPress: () => { void resetSettings(); } },
     ]);
+  }
+
+  function confirmPrepareDemo() {
+    Alert.alert(
+      'Prepare demo?',
+      'This resets local training progress, achievements, daily progress and demo challenge completion. Your wallet and on-chain data are not changed.',
+      [
+        { text: 'CANCEL', style: 'cancel' },
+        { text: 'PREPARE DEMO', style: 'destructive', onPress: () => { void prepareDemo(); } },
+      ],
+    );
   }
 
   return (
@@ -105,16 +110,12 @@ export default function SettingsScreen() {
           <Pressable onPress={confirmResetSettings} style={styles.resetButton}><Text style={styles.resetLabel}>Reset settings</Text></Pressable>
         </View>
       </SectionCard>
-      {DEV_EXERCISE_PICKER_ENABLED && __DEV__ && (
+      {DEV_DEMO_TOOLS_ENABLED && __DEV__ && (
         <SectionCard>
-          <Text style={styles.sectionTitle}>DEVELOPER TOOLS</Text>
-          <Text style={styles.about}>Simulate the daily training rollover without changing the device clock.</Text>
-          <Text style={styles.devStatus}>SURPRISE STATUS</Text>
-          <Text style={styles.devStatusCopy}>surprise-airdrop-001: {surpriseAirdropCompleted ? 'completed' : 'eligible'}</Text>
-          <Text style={styles.devStatusCopy}>completed {surpriseCompletedCount}/{surpriseChallengeCount}</Text>
+          <Text style={styles.sectionTitle}>DEMO TOOLS</Text>
+          <Text style={styles.devStatusCopy}>Reset local training state for a repeatable hackathon demo.</Text>
           <View style={styles.resetButtons}>
-            <Pressable onPress={debugSimulatePreviousDay} style={styles.resetButton}><Text style={styles.resetLabel}>Simulate previous day</Text></Pressable>
-            <Pressable onPress={() => { startPreview('surprise-airdrop-001'); }} style={styles.resetButton}><Text style={styles.resetLabel}>Preview fake airdrop challenge</Text></Pressable>
+            <Pressable onPress={confirmPrepareDemo} style={styles.resetButton}><Text style={styles.resetLabel}>PREPARE DEMO</Text></Pressable>
           </View>
         </SectionCard>
       )}
@@ -185,6 +186,5 @@ const styles = StyleSheet.create({
   version: { borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.lg, paddingTop: Spacing.lg },
   muted: { color: Colors.secondaryText, fontSize: Typography.body },
   value: { color: Colors.text, fontSize: Typography.body, fontWeight: '700' },
-  devStatus: { color: Colors.warning, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8, marginTop: Spacing.md },
   devStatusCopy: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
 });

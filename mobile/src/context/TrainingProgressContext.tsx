@@ -4,6 +4,7 @@ import { applySurpriseChallengeCompletion } from '@/domain/progress/applySurpris
 import { applyTrainingResult } from '@/domain/progress/applyTrainingResult';
 import { createProgressSnapshot } from '@/domain/progress/calculateLevel';
 import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
+import { demoPreparationPolicy } from '@/domain/training/demoPreparationPolicy';
 import { getLocalDateKey } from '@/domain/training/getLocalDateKey';
 import { normalizeDailyTrainingState } from '@/domain/training/normalizeDailyTrainingState';
 import { TrainingExercise, TrainingExerciseResult } from '@/types/exercise';
@@ -44,10 +45,16 @@ interface TrainingProgressContextValue {
   recordTrainingResult: (exercise: TrainingExercise, result: TrainingExerciseResult, mode: TrainingMode, source?: 'adaptive' | 'wallet') => void;
   recordSurpriseChallengeCompletion: (completion: SurpriseChallengeCompletionInput) => void;
   resetProgress: () => Promise<void>;
+  prepareDemo: () => Promise<void>;
+  consumePreparedDemoExerciseId: () => string | null;
   debugSimulatePreviousDay: () => void;
 }
 
 export const TrainingProgressContext = createContext<TrainingProgressContextValue | null>(null);
+
+function isDevRuntime() {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
 
 function progressReducer(progress: TrainingProgress, action: ProgressAction): TrainingProgress {
   if (action.type === 'hydrate') return action.progress;
@@ -72,6 +79,7 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
   const [isHydrated, setIsHydrated] = useState(false);
   const historySequence = useRef(0);
   const skipNextPersist = useRef(false);
+  const preparedDemoExerciseIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -118,13 +126,28 @@ export function TrainingProgressProvider({ children }: PropsWithChildren) {
     dispatch({ type: 'hydrate', progress: createInitialTrainingProgress() });
   }
 
+  async function prepareDemo() {
+    if (!isDevRuntime()) return;
+    skipNextPersist.current = true;
+    await clearTrainingProgress();
+    dispatch({ type: 'hydrate', progress: createInitialTrainingProgress() });
+    preparedDemoExerciseIdRef.current = demoPreparationPolicy.firstDailyExerciseId;
+  }
+
+  function consumePreparedDemoExerciseId(): string | null {
+    if (!isDevRuntime()) return null;
+    const next = preparedDemoExerciseIdRef.current;
+    preparedDemoExerciseIdRef.current = null;
+    return next;
+  }
+
   function debugSimulatePreviousDay() {
     if (!__DEV__) return;
     dispatch({ type: 'debug-shift-daily-date' });
   }
 
   return (
-    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, recordSurpriseChallengeCompletion, resetProgress, debugSimulatePreviousDay }}>
+    <TrainingProgressContext.Provider value={{ progress: createProgressSnapshot(progressState), isHydrated, recordTrainingResult, recordSurpriseChallengeCompletion, resetProgress, prepareDemo, consumePreparedDemoExerciseId, debugSimulatePreviousDay }}>
       {children}
     </TrainingProgressContext.Provider>
   );

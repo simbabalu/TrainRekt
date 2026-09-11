@@ -22,10 +22,16 @@ function findExerciseById(exerciseId: string) {
 }
 
 export function useTrainingScenario(mode: TrainingMode, options: UseTrainingScenarioOptions = {}) {
-  const { progress, recordTrainingResult } = useTrainingProgress();
+  const { progress, recordTrainingResult, consumePreparedDemoExerciseId } = useTrainingProgress();
   const recommendedExercise = useRecommendedTraining();
-  const initialExercise = options.initialExerciseId
-    ? findExerciseById(options.initialExerciseId)
+  const [preparedDemoExerciseId] = useState<string | null>(() => {
+    const source = options.source ?? 'adaptive';
+    if (source !== 'adaptive' || mode !== 'daily' || options.initialExerciseId) return null;
+    return consumePreparedDemoExerciseId();
+  });
+  const resolvedInitialExerciseId = options.initialExerciseId ?? preparedDemoExerciseId ?? undefined;
+  const initialExercise = resolvedInitialExerciseId
+    ? findExerciseById(resolvedInitialExerciseId)
     : null;
   const [currentExerciseId, setCurrentExerciseId] = useState(initialExercise?.id ?? recommendedExercise.id);
   const [selectedAnswer, setSelectedAnswer] = useState<ExerciseAnswer | null>(null);
