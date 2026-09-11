@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mockProgress } from '@/data/mockProgress';
 import { exerciseCatalog } from '@/data/exerciseCatalog';
+import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
+import { getEarnedAchievements } from '@/domain/progress/getEarnedAchievements';
 import { demoPreparationPolicy } from '@/domain/training/demoPreparationPolicy';
 import { createInitialTrainingProgress } from '@/domain/progress/createInitialTrainingProgress';
 import { TrainingProgressProvider } from './TrainingProgressContext';
@@ -234,5 +236,210 @@ describe('TrainingProgressProvider hydration', () => {
     expect(context.consumePreparedDemoExerciseId()).toBe(demoPreparationPolicy.firstDailyExerciseId);
     expect(context.consumePreparedDemoExerciseId()).toBeNull();
     expect(storageMock.clearTrainingProgress).toHaveBeenCalledTimes(1);
+  });
+
+  it('records normal surprise-airdrop-001 INSPECT -> REJECT to canonical progress and UI achievement shape', async () => {
+    storageMock.loadTrainingProgress.mockResolvedValue(createInitialTrainingProgress());
+    let context!: ReturnType<typeof useTrainingProgress>;
+
+    function Harness() {
+      context = useTrainingProgress();
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+    });
+
+    const challenge = surpriseChallengeCatalog[0];
+    const completedAt = '2026-09-11T12:00:00.000Z';
+
+    act(() => {
+      context.recordSurpriseChallengeCompletion({
+        challenge,
+        firstDecision: 'inspect',
+        finalDecision: 'reject',
+        xpAwarded: 250,
+        badgeEarned: true,
+        completedAt,
+      });
+    });
+
+    expect(context.progress.totalXp).toBe(250);
+    expect(context.progress.surpriseChallenges.completed[challenge.id]).toEqual({
+      challengeVersion: challenge.version,
+      completedAt,
+      firstDecision: 'inspect',
+      finalDecision: 'reject',
+      xpAwarded: 250,
+      badgeEarned: true,
+    });
+    expect(context.progress.badges.earned['airdrop-survivor']).toEqual({
+      earnedAt: completedAt,
+      sourceChallengeId: challenge.id,
+      sourceChallengeVersion: challenge.version,
+    });
+
+    expect(getEarnedAchievements(context.progress.badges)).toEqual([
+      {
+        id: 'airdrop-survivor',
+        title: 'Airdrop Survivor',
+        description: 'Completed the fake airdrop surprise challenge with a safe final rejection.',
+        earnedAt: completedAt,
+      },
+    ]);
+    expect(storageMock.saveTrainingProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+      badges: expect.objectContaining({
+        earned: expect.objectContaining({
+          'airdrop-survivor': expect.objectContaining({ sourceChallengeId: challenge.id }),
+        }),
+      }),
+    }));
+  });
+
+  it('does not duplicate XP or achievement if surprise completion is dispatched twice', async () => {
+    storageMock.loadTrainingProgress.mockResolvedValue(createInitialTrainingProgress());
+    let context!: ReturnType<typeof useTrainingProgress>;
+
+    function Harness() {
+      context = useTrainingProgress();
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+    });
+
+    const challenge = surpriseChallengeCatalog[0];
+
+    act(() => {
+      context.recordSurpriseChallengeCompletion({
+        challenge,
+        firstDecision: 'inspect',
+        finalDecision: 'reject',
+        xpAwarded: 250,
+        badgeEarned: true,
+        completedAt: '2026-09-11T12:00:00.000Z',
+      });
+      context.recordSurpriseChallengeCompletion({
+        challenge,
+        firstDecision: 'reject',
+        finalDecision: 'reject',
+        xpAwarded: 300,
+        badgeEarned: true,
+        completedAt: '2026-09-11T12:01:00.000Z',
+      });
+    });
+
+    expect(context.progress.totalXp).toBe(250);
+    expect(Object.keys(context.progress.badges.earned)).toEqual(['airdrop-survivor']);
+    expect(context.progress.surpriseChallenges.completed[challenge.id]?.xpAwarded).toBe(250);
+  });
+
+  it('prepareDemo clears surprise badge state, then allows earning Airdrop Survivor again', async () => {
+    storageMock.loadTrainingProgress.mockResolvedValue({
+      ...createInitialTrainingProgress(),
+      totalXp: 250,
+      surpriseChallenges: {
+        completed: {
+          'surprise-airdrop-001': {
+            challengeVersion: 1,
+            completedAt: '2026-09-11T08:00:00.000Z',
+            firstDecision: 'inspect',
+            finalDecision: 'reject',
+            xpAwarded: 250,
+            badgeEarned: true,
+          },
+        },
+      },
+      badges: {
+        earned: {
+          'airdrop-survivor': {
+            earnedAt: '2026-09-11T08:00:00.000Z',
+            sourceChallengeId: 'surprise-airdrop-001',
+            sourceChallengeVersion: 1,
+          },
+        },
+      },
+    });
+
+    let context!: ReturnType<typeof useTrainingProgress>;
+
+    function Harness() {
+      context = useTrainingProgress();
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+    });
+
+    expect(Object.keys(context.progress.badges.earned)).toEqual(['airdrop-survivor']);
+
+    await act(async () => {
+      await context.prepareDemo();
+    });
+
+    expect(context.progress.totalXp).toBe(0);
+    expect(context.progress.surpriseChallenges.completed).toEqual({});
+    expect(context.progress.badges.earned).toEqual({});
+
+    const challenge = surpriseChallengeCatalog[0];
+    act(() => {
+      context.recordSurpriseChallengeCompletion({
+        challenge,
+        firstDecision: 'reject',
+        finalDecision: 'reject',
+        xpAwarded: 300,
+        badgeEarned: true,
+        completedAt: '2026-09-11T13:00:00.000Z',
+      });
+    });
+
+    expect(context.progress.totalXp).toBe(300);
+    expect(context.progress.badges.earned['airdrop-survivor']).toBeDefined();
+  });
+
+  it('hydrates persisted Airdrop Survivor badge and preserves it for achievement rendering', async () => {
+    storageMock.loadTrainingProgress.mockResolvedValue({
+      ...createInitialTrainingProgress(),
+      totalXp: 250,
+      surpriseChallenges: {
+        completed: {
+          'surprise-airdrop-001': {
+            challengeVersion: 1,
+            completedAt: '2026-09-11T08:00:00.000Z',
+            firstDecision: 'inspect',
+            finalDecision: 'reject',
+            xpAwarded: 250,
+            badgeEarned: true,
+          },
+        },
+      },
+      badges: {
+        earned: {
+          'airdrop-survivor': {
+            earnedAt: '2026-09-11T08:00:00.000Z',
+            sourceChallengeId: 'surprise-airdrop-001',
+            sourceChallengeVersion: 1,
+          },
+        },
+      },
+    });
+
+    let context!: ReturnType<typeof useTrainingProgress>;
+
+    function Harness() {
+      context = useTrainingProgress();
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><Harness /></TrainingProgressProvider>);
+    });
+
+    const achievements = getEarnedAchievements(context.progress.badges);
+    expect(achievements.map((achievement) => achievement.id)).toEqual(['airdrop-survivor']);
+    expect(achievements[0]?.title).toBe('Airdrop Survivor');
   });
 });

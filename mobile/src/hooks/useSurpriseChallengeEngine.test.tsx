@@ -397,4 +397,53 @@ describe('useSurpriseChallengeEngine', () => {
     expect(latest.activeSession?.stage).toBe('reveal');
     expect(onComplete).not.toHaveBeenCalled();
   });
+
+  it('allows completion commit again after canonical progress is reset (prepare-demo style)', async () => {
+    const onComplete = vi.fn();
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(<Harness walletStatus="disconnected" completed={{}} onComplete={onComplete} />);
+    });
+    act(() => {
+      renderer.update(<Harness walletStatus="connected" completed={{}} onComplete={onComplete} />);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1499);
+    });
+    expect(latest.activeSession).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(latest.activeSession?.challenge.id).toBe('surprise-airdrop-001');
+
+    await act(async () => {
+      latest.chooseDecision('reject');
+      await Promise.resolve();
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      latest.dismissReveal();
+      renderer.update(<Harness walletStatus="disconnected" completed={{}} onComplete={onComplete} />);
+    });
+    act(() => {
+      renderer.update(<Harness walletStatus="connected" completed={{}} onComplete={onComplete} />);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1499);
+    });
+    expect(latest.activeSession).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(latest.activeSession?.challenge.id).toBe('surprise-airdrop-001');
+
+    await act(async () => {
+      latest.chooseDecision('reject');
+      await Promise.resolve();
+    });
+
+    expect(onComplete).toHaveBeenCalledTimes(2);
+  });
 });

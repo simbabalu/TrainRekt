@@ -80,6 +80,14 @@ export function useSurpriseChallengeEngine({
     progressRef.current = progress;
   }, [progress]);
 
+  React.useEffect(() => {
+    const committed: Record<string, boolean> = {};
+    Object.keys(progress.completed).forEach((challengeId) => {
+      committed[challengeId] = true;
+    });
+    completionCommitRef.current = committed;
+  }, [progress]);
+
   const clearScheduledTimeout = React.useCallback(() => {
     if (!timeoutRef.current) return;
     clearTimeout(timeoutRef.current);
