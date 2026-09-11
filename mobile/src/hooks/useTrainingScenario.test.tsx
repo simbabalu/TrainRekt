@@ -148,6 +148,44 @@ describe('useTrainingScenario', () => {
     expect(progress.daily.dailyGoalCompleted).toBe(false);
   });
 
+  it('keeps explicit wallet lesson routing deterministic regardless of preferred difficulty', async () => {
+    const seededProgress = {
+      ...mockProgress,
+      daily: { ...mockProgress.daily, todayCompletedDecisions: 0, dailyGoalCompleted: false },
+    };
+    const advancedSettings = {
+      version: 4,
+      data: {
+        difficulty: 'Advanced',
+        notificationsEnabled: true,
+        soundEffectsEnabled: true,
+        hapticFeedbackEnabled: true,
+      },
+    };
+    storage.getItem.mockImplementation((key: string) => {
+      if (key === '@trainrekt/training-progress') return Promise.resolve(JSON.stringify({ version: 4, data: seededProgress }));
+      if (key === '@trainrekt/settings') return Promise.resolve(JSON.stringify(advancedSettings));
+      return Promise.resolve(null);
+    });
+
+    let controller!: ScenarioController;
+    function Harness() {
+      controller = useTrainingScenario('practice', {
+        source: 'wallet',
+        topic: 'token-account-state',
+        initialExerciseId: 'wallet-lesson-frozen-account-state',
+      });
+      return null;
+    }
+
+    await act(async () => {
+      create(<TrainingProgressProvider><SettingsProvider><Harness /></SettingsProvider></TrainingProgressProvider>);
+      await Promise.resolve();
+    });
+
+    expect(controller.currentExercise.id).toBe('wallet-lesson-frozen-account-state');
+  });
+
   it('records wallet retries with zero XP while preserving Daily state and history', async () => {
     const exerciseId = 'wallet-lesson-frozen-account-state';
     const seededProgress = {

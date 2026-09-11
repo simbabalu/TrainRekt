@@ -2,6 +2,7 @@ import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Colors } from '@/constants/theme';
 import type { WalletTokenAccountInspection } from '@/types/walletInspection';
 import { TokenAccountInspectionRow } from './TokenAccountInspectionRow';
 
@@ -36,6 +37,24 @@ function account(overrides: Partial<WalletTokenAccountInspection>): WalletTokenA
 }
 
 describe('TokenAccountInspectionRow', () => {
+  it('keeps the account card neutral while preserving review and informational pill hierarchy', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(<TokenAccountInspectionRow account={account({})} />);
+    });
+
+    const row = renderer.root.findAll((node) => String(node.type) === 'Pressable')[0];
+    expect(row.props.style).toEqual(expect.objectContaining({ borderColor: Colors.border }));
+    expect(row.props.style.borderColor).not.toBe(Colors.warning);
+
+    const badgeViews = renderer.root.findAll((node) => String(node.type) === 'View' && Array.isArray(node.props.style));
+    const reviewBadge = badgeViews.find((node) => flattenText(node).includes('FROZEN'));
+    const informationalBadge = badgeViews.find((node) => flattenText(node).includes('TOKEN-2022'));
+    expect(reviewBadge?.props.style[1]).toEqual(expect.objectContaining({ borderColor: Colors.warning }));
+    expect(informationalBadge?.props.style[1]).toEqual(expect.objectContaining({ borderColor: Colors.border }));
+  });
+
   it('renders compact collapsed row then expands with full details on press', () => {
     let renderer!: ReturnType<typeof create>;
 

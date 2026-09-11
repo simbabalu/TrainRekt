@@ -201,7 +201,7 @@ describe('SettingsScreen wallet card', () => {
 
     const text = renderedText(renderer.toJSON());
     expect(text).toContain('TRAINING');
-    expect(text).toContain('Training difficulty');
+    expect(text).toContain('Prefer exercises around this challenge level.');
     expect(text).not.toContain('Notifications');
     expect(text).not.toContain('Sound effects');
     expect(text).not.toContain('Haptic feedback');

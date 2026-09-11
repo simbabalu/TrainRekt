@@ -97,7 +97,7 @@ describe('useWalletSafetyInspection', () => {
     });
 
     expect(latest.status).toBe('idle');
-    expect(latest.viewMode).toBe('review');
+    expect(latest.viewMode).toBe('collapsed');
     expect(latest.inspection).toBeNull();
     expect(getInspection).not.toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe('useWalletSafetyInspection', () => {
       await flushMicrotasks();
     });
 
-    expect(latest.viewMode).toBe('review');
+    expect(latest.viewMode).toBe('collapsed');
 
     await act(async () => {
       latest.setViewMode('informational');
@@ -135,7 +135,7 @@ describe('useWalletSafetyInspection', () => {
       await flushMicrotasks();
     });
 
-    expect(latest.viewMode).toBe('review');
+    expect(latest.viewMode).toBe('collapsed');
   });
 
   it('loads inspection for connected wallet', async () => {

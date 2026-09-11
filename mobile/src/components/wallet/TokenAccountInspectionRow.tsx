@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Fonts, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Fonts, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { abbreviateWalletAddress } from '@/domain/wallet/abbreviateWalletAddress';
 import { deriveWalletSafetySignalsWithMints } from '@/domain/wallet/deriveWalletSafetySignals';
 import type { WalletMintInspection, WalletTokenAccountInspection } from '@/types/walletInspection';
@@ -64,12 +64,6 @@ export function TokenAccountInspectionRow({ account, mintInspection = null }: To
     [account, mintInspection],
   );
 
-  const primaryCategory = useMemo(() => {
-    if (signals.some((signal) => signal.category === 'review')) return 'review';
-    if (signals.some((signal) => signal.category === 'informational')) return 'informational';
-    return 'normal';
-  }, [signals]);
-
   const tokenName = normalizeDisplayValue(account.tokenDisplayMetadata?.name);
   const tokenSymbol = normalizeDisplayValue(account.tokenDisplayMetadata?.symbol);
   const title = tokenName ?? tokenSymbol ?? 'Unknown Token';
@@ -84,7 +78,7 @@ export function TokenAccountInspectionRow({ account, mintInspection = null }: To
   return (
     <Pressable
       onPress={() => setExpanded((current) => !current)}
-      style={[styles.row, primaryCategory === 'review' ? styles.rowReview : null]}
+      style={styles.row}
     >
       <View style={styles.rowHeader}>
         <View style={styles.headerCopy}>
@@ -140,9 +134,6 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.md,
   },
-  rowReview: {
-    borderColor: Colors.warning,
-  },
   rowHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -191,7 +182,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: Typography.small,
     flexShrink: 1,
-    lineHeight: 18,
+    lineHeight: TypographyLineHeight.small,
   },
   detailValueMono: {
     fontFamily: Fonts.mono,
@@ -199,6 +190,6 @@ const styles = StyleSheet.create({
   detailHint: {
     color: Colors.mutedText,
     fontSize: Typography.small,
-    lineHeight: 18,
+    lineHeight: TypographyLineHeight.small,
   },
 });

@@ -4,7 +4,7 @@ import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { WalletSafetySnapshotCard } from '@/components/WalletSafetySnapshotCard';
 import { WalletSafetyInspection } from '@/components/wallet/WalletSafetyInspection';
-import { Colors, Typography } from '@/constants/theme';
+import { Colors, Typography, TypographyLineHeight } from '@/constants/theme';
 import { useWalletSnapshot } from '@/hooks/useWalletSnapshot';
 import { useWalletSafetyInspection } from '@/hooks/useWalletSafetyInspection';
 import { useWallet } from '@/hooks/useWallet';
@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
   footer: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
 });

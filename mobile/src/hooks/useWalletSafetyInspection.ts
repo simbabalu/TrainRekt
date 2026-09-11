@@ -8,7 +8,7 @@ import type { SolanaNetwork } from '@/types/walletSnapshot';
 import type { WalletSafetyInspection } from '@/types/walletInspection';
 
 export type WalletInspectionStatus = 'idle' | 'loading' | 'success' | 'partial' | 'unavailable';
-export type WalletInspectionViewMode = 'review' | 'informational' | 'all';
+export type WalletInspectionViewMode = 'collapsed' | 'review' | 'informational' | 'all';
 
 interface UseWalletSafetyInspectionOptions {
   service?: WalletInspectionService;
@@ -55,7 +55,7 @@ export function useWalletSafetyInspection({
   const visibleInspection = address ? (inspectionsByAddress[address] ?? null) : null;
   const visibleError = address ? error : null;
   const visibleStatus: WalletInspectionStatus = !address ? 'idle' : status;
-  const viewMode: WalletInspectionViewMode = address ? (viewModeByAddress[address] ?? 'review') : 'review';
+  const viewMode: WalletInspectionViewMode = address ? (viewModeByAddress[address] ?? 'collapsed') : 'collapsed';
 
   const setViewMode = useCallback((mode: WalletInspectionViewMode) => {
     if (!address) return;
@@ -88,8 +88,8 @@ export function useWalletSafetyInspection({
       }
 
       setViewModeByAddress((current) => {
-        if (current[targetAddress] === 'review' || current[targetAddress] === undefined) return current;
-        return { ...current, [targetAddress]: 'review' };
+        if (current[targetAddress] === 'collapsed' || current[targetAddress] === undefined) return current;
+        return { ...current, [targetAddress]: 'collapsed' };
       });
       saveInspection(nextInspection);
       setStatus(nextInspection.warnings.length > 0 ? 'partial' : 'success');

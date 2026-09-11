@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/AppIcon';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { PermissionChallengeDecision, PermissionChallengeExercise } from '@/types/exercise';
 import { PrimaryButton } from './PrimaryButton';
 import { SectionCard } from './SectionCard';
@@ -104,18 +104,18 @@ function SectionHeader({
 const styles = StyleSheet.create({
   container: { gap: Spacing.md },
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
-  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22 },
+  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', marginBottom: Spacing.sm },
   sectionHeading: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   detailLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8, marginTop: Spacing.sm },
-  primaryValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: 20 },
-  monoValue: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 20 },
-  detailValue: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: 20 },
+  primaryValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
+  monoValue: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  detailValue: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   scopeValue: { color: Colors.mutedText, fontSize: Typography.small, marginTop: 1 },
   listBlock: { gap: Spacing.sm },
   listRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
   listCopy: { flex: 1 },
-  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
+  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   question: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800', marginTop: Spacing.xs },
   actions: { gap: Spacing.sm },
   actionButton: { flex: 1 },

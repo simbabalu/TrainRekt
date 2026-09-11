@@ -7,6 +7,7 @@ import { redFlagIdentificationCatalog } from '@/data/redFlagIdentificationCatalo
 import { signatureSimulationCatalog } from '@/data/signatureSimulationCatalog';
 import { transactionInspectionCatalog } from '@/data/transactionInspectionCatalog';
 import { calculateExerciseWeight, selectAdaptiveExercise } from './selectAdaptiveExercise';
+import { getDifficultyPreferenceWeight } from './difficultyPreferencePolicy';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { TrainingExercise } from '@/types/exercise';
 
@@ -68,6 +69,116 @@ describe('selectAdaptiveExercise', () => {
       const exercise = selectAdaptiveExercise({ exercises: exerciseCatalog, progress: snapshot, difficulty }, zeroRandom);
       expect(exercise).toBeDefined();
     });
+  });
+
+  it('strongly prefers the selected difficulty while preserving adjacent variation', () => {
+    expect(getDifficultyPreferenceWeight('Beginner', 'Beginner')).toBe(1);
+    expect(getDifficultyPreferenceWeight('Beginner', 'Intermediate')).toBe(0.35);
+    expect(getDifficultyPreferenceWeight('Beginner', 'Advanced')).toBe(0.1);
+    expect(getDifficultyPreferenceWeight('Intermediate', 'Beginner')).toBe(0.35);
+    expect(getDifficultyPreferenceWeight('Intermediate', 'Intermediate')).toBe(1);
+    expect(getDifficultyPreferenceWeight('Intermediate', 'Advanced')).toBe(0.35);
+    expect(getDifficultyPreferenceWeight('Advanced', 'Beginner')).toBe(0.1);
+    expect(getDifficultyPreferenceWeight('Advanced', 'Intermediate')).toBe(0.35);
+    expect(getDifficultyPreferenceWeight('Advanced', 'Advanced')).toBe(1);
+  });
+
+  it('keeps non-preferred difficulties eligible', () => {
+    expect(getDifficultyPreferenceWeight('Beginner', 'Advanced')).toBeGreaterThan(0);
+    expect(getDifficultyPreferenceWeight('Advanced', 'Beginner')).toBeGreaterThan(0);
+  });
+
+  it('changes selected exercise distribution by difficulty preference in a controlled pool', () => {
+    const controlled: TrainingExercise[] = [
+      {
+        id: 'controlled-beginner',
+        type: 'decision',
+        title: 'Controlled Beginner',
+        skill: 'walletSafety',
+        difficulty: 'Beginner',
+        estimatedDuration: '~1 min',
+        xpReward: 100,
+        marketContext: { asset: 'SOL / USD' },
+        description: 'Controlled beginner',
+        question: 'Q',
+        options: [{ id: 'hold', label: 'HOLD' }],
+        correctOptionId: 'hold',
+        explanation: 'ok',
+      },
+      {
+        id: 'controlled-intermediate',
+        type: 'decision',
+        title: 'Controlled Intermediate',
+        skill: 'walletSafety',
+        difficulty: 'Intermediate',
+        estimatedDuration: '~1 min',
+        xpReward: 100,
+        marketContext: { asset: 'SOL / USD' },
+        description: 'Controlled intermediate',
+        question: 'Q',
+        options: [{ id: 'hold', label: 'HOLD' }],
+        correctOptionId: 'hold',
+        explanation: 'ok',
+      },
+      {
+        id: 'controlled-advanced',
+        type: 'decision',
+        title: 'Controlled Advanced',
+        skill: 'walletSafety',
+        difficulty: 'Advanced',
+        estimatedDuration: '~1 min',
+        xpReward: 100,
+        marketContext: { asset: 'SOL / USD' },
+        description: 'Controlled advanced',
+        question: 'Q',
+        options: [{ id: 'hold', label: 'HOLD' }],
+        correctOptionId: 'hold',
+        explanation: 'ok',
+      },
+    ];
+    const progress = {
+      ...snapshot,
+      skillScores: { ...snapshot.skillScores, walletSafety: 50 },
+      recentTrainingHistory: [],
+    };
+
+    const beginnerChoice = selectAdaptiveExercise({ exercises: controlled, progress, difficulty: 'Beginner' }, () => 0.6);
+    const advancedChoice = selectAdaptiveExercise({ exercises: controlled, progress, difficulty: 'Advanced' }, () => 0.6);
+
+    expect(beginnerChoice.id).toBe('controlled-beginner');
+    expect(advancedChoice.id).toBe('controlled-advanced');
+  });
+
+  it('composes difficulty with weak-skill and recent-mistake weighting', () => {
+    const exercise = exerciseCatalog.find((candidate) => candidate.difficulty === 'Intermediate') ?? exerciseCatalog[0];
+    const baselineInput = { exercises: exerciseCatalog, progress: snapshot, difficulty: 'Intermediate' as const };
+    const weakProgress = { ...snapshot, skillScores: { ...snapshot.skillScores, [exercise.skill]: 10 } };
+    const mistakeProgress = {
+      ...snapshot,
+      recentTrainingHistory: [{ id: 'mistake', scenarioId: 'other-exercise', scenarioTitle: 'Other', correct: false, skill: exercise.skill, timestamp: '2026-01-01T00:00:00.000Z', xpEarned: 0, exerciseType: exercise.type }],
+    };
+
+    expect(calculateExerciseWeight(exercise, { ...baselineInput, progress: weakProgress })).toBeGreaterThan(calculateExerciseWeight(exercise, baselineInput));
+    expect(calculateExerciseWeight(exercise, { ...baselineInput, progress: mistakeProgress })).toBeGreaterThan(calculateExerciseWeight(exercise, baselineInput));
+  });
+
+  it('keeps repetition avoidance as a multiplicative penalty without excluding the exercise', () => {
+    const exercise = exerciseCatalog[0];
+    const recentProgress = {
+      ...snapshot,
+      recentTrainingHistory: [{ id: 'recent', scenarioId: exercise.id, scenarioTitle: exercise.title, correct: true, skill: exercise.skill, timestamp: '2026-01-01T00:00:00.000Z', xpEarned: 0, exerciseType: exercise.type }],
+    };
+    const weight = calculateExerciseWeight(exercise, { exercises: exerciseCatalog, progress: recentProgress, difficulty: 'Beginner' });
+
+    expect(weight).toBeGreaterThan(0);
+    expect(weight).toBeLessThan(calculateExerciseWeight(exercise, { exercises: exerciseCatalog, progress: { ...snapshot, recentTrainingHistory: [] }, difficulty: 'Beginner' }));
+  });
+
+  it('uses injected randomness for deterministic tests while production remains weighted', () => {
+    const first = selectAdaptiveExercise({ exercises: exerciseCatalog, progress: snapshot, difficulty: 'Intermediate' }, () => 0);
+    const last = selectAdaptiveExercise({ exercises: exerciseCatalog, progress: snapshot, difficulty: 'Intermediate' }, () => 0.999999);
+
+    expect(first.id).not.toBe(last.id);
   });
 
   it('falls back to the single candidate when only one exercise is available', () => {

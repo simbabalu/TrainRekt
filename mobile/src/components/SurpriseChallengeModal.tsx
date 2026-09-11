@@ -1,7 +1,7 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { SurpriseChallengeEvaluation } from '@/domain/surprise/evaluateSurpriseChallengeCompletion';
 import { SurpriseChallengeSession } from '@/hooks/useSurpriseChallengeEngine';
 import { SurpriseChallengeDecision } from '@/types/surpriseChallenge';
@@ -243,14 +243,15 @@ const styles = StyleSheet.create({
   },
   rewardLabel: {
     color: Colors.text,
-    fontSize: 26,
+    fontSize: Typography.heading,
+    lineHeight: TypographyLineHeight.heading,
     fontWeight: '900',
     marginTop: Spacing.sm,
   },
   message: {
     color: Colors.secondaryText,
     fontSize: Typography.body,
-    lineHeight: 22,
+    lineHeight: TypographyLineHeight.body,
     marginTop: Spacing.sm,
   },
   meta: {
@@ -261,7 +262,7 @@ const styles = StyleSheet.create({
   metaStrong: {
     color: Colors.text,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   countdownLabel: {
     color: Colors.mutedText,
@@ -366,7 +367,7 @@ const styles = StyleSheet.create({
   resultSummary: {
     color: Colors.text,
     fontSize: Typography.body,
-    lineHeight: 22,
+    lineHeight: TypographyLineHeight.body,
     marginTop: Spacing.xs,
   },
   rewardCaption: {
@@ -378,7 +379,8 @@ const styles = StyleSheet.create({
   },
   xpValue: {
     color: Colors.text,
-    fontSize: 26,
+    fontSize: Typography.heading,
+    lineHeight: TypographyLineHeight.heading,
     fontWeight: '900',
     marginTop: Spacing.xs,
   },
@@ -399,7 +401,7 @@ const styles = StyleSheet.create({
   explanation: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
     marginTop: Spacing.xs,
   },
   ruleCard: {
@@ -411,7 +413,7 @@ const styles = StyleSheet.create({
   ruleText: {
     color: Colors.text,
     fontSize: Typography.body,
-    lineHeight: 22,
+    lineHeight: TypographyLineHeight.body,
     marginTop: Spacing.xs,
   },
   sectionLabel: {
@@ -431,13 +433,13 @@ const styles = StyleSheet.create({
   bulletMarker: {
     color: Colors.accent,
     fontSize: Typography.body,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
     marginRight: Spacing.sm,
   },
   bullet: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   badgeCard: {
     backgroundColor: Colors.secondaryCard,
@@ -462,13 +464,13 @@ const styles = StyleSheet.create({
   badgeDescription: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
     marginTop: Spacing.xs,
   },
   previewCopy: {
     color: Colors.warning,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
     marginTop: Spacing.sm,
   },
 });

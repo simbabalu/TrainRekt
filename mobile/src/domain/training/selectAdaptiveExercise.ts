@@ -1,7 +1,8 @@
 import { getWeakestSkills } from './getWeakestSkills';
+import { getDifficultyPreferenceWeight } from './difficultyPreferencePolicy';
 import { TrainingProgressSnapshot } from '@/types/progress';
 import { TrainingDifficulty } from '@/types/settings';
-import { ExerciseDifficulty, TrainingExercise } from '@/types/exercise';
+import { TrainingExercise } from '@/types/exercise';
 
 interface AdaptiveSelectionInput {
   exercises: TrainingExercise[];
@@ -9,12 +10,6 @@ interface AdaptiveSelectionInput {
   difficulty: TrainingDifficulty;
   currentExerciseId?: string | null;
 }
-
-const difficultyPreference: Record<TrainingDifficulty, ExerciseDifficulty[]> = {
-  Beginner: ['Beginner', 'Intermediate', 'Advanced'],
-  Intermediate: ['Intermediate', 'Beginner', 'Advanced'],
-  Advanced: ['Advanced', 'Intermediate', 'Beginner'],
-};
 
 export function selectAdaptiveExercise(input: AdaptiveSelectionInput, randomFn: () => number = Math.random): TrainingExercise {
   const candidates = input.exercises.filter((exercise) => exercise.id !== input.currentExerciseId);
@@ -39,8 +34,7 @@ export function calculateExerciseWeight(exercise: TrainingExercise, input: Adapt
   const skillScore = input.progress.skillScores[exercise.skill];
   const weaknessWeight = Math.max(1, (101 - skillScore) / 10);
   const skillPriorityWeight = weakestRank === -1 ? 1 : Math.max(1, weakestSkills.length - weakestRank);
-  const difficultyRank = difficultyPreference[input.difficulty].indexOf(exercise.difficulty);
-  const difficultyWeight = difficultyRank === 0 ? 3 : difficultyRank === 1 ? 2 : 1;
+  const difficultyWeight = getDifficultyPreferenceWeight(input.difficulty, exercise.difficulty);
   const recentEntries = input.progress.recentTrainingHistory.slice(0, 3);
   const recentMistakeBonus = recentEntries.some((entry) => !entry.correct && entry.skill === exercise.skill) ? 3 : 1;
   const recentExercisePenalty = recentEntries.some((entry) => entry.scenarioId === exercise.id) ? 0.25 : 1;

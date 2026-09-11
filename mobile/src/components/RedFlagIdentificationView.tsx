@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { RedFlagIdentificationAnswer, RedFlagIdentificationExercise } from '@/types/exercise';
 import { PrimaryButton } from './PrimaryButton';
 import { SectionCard } from './SectionCard';
@@ -93,13 +93,13 @@ export function RedFlagIdentificationView({ exercise, disabled, onSelect }: RedF
 const styles = StyleSheet.create({
   container: { gap: Spacing.md },
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
-  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22 },
+  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body },
   sectionHeading: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   detailLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '800', marginTop: Spacing.sm },
   row: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.xs },
   rowLabel: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
   rowValue: { color: Colors.text, flexShrink: 1, fontFamily: 'monospace', fontSize: Typography.small, fontWeight: '700', marginLeft: Spacing.sm, textAlign: 'right' },
-  bodyText: { color: Colors.text, fontSize: Typography.small, lineHeight: 20, marginTop: 2 },
+  bodyText: { color: Colors.text, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: 2 },
   itemList: { gap: Spacing.sm, marginTop: Spacing.sm },
   itemCard: {
     backgroundColor: Colors.secondaryCard,
@@ -125,6 +125,6 @@ const styles = StyleSheet.create({
   },
   checkboxSelected: { backgroundColor: Colors.text, borderColor: Colors.text },
   checkboxMark: { color: Colors.background, fontSize: 12, fontWeight: '900', lineHeight: 14 },
-  itemLabel: { color: Colors.text, flex: 1, fontSize: Typography.small, fontWeight: '800', lineHeight: 19 },
-  itemDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 19, marginTop: Spacing.xs },
+  itemLabel: { color: Colors.text, flex: 1, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
+  itemDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.xs },
 });

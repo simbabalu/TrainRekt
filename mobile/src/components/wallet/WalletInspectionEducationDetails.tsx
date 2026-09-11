@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import type { WalletInspectionSummary } from '@/types/walletInspection';
 
 interface WalletInspectionEducationDetailsProps {
@@ -89,6 +89,6 @@ const styles = StyleSheet.create({
   detailText: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
 });

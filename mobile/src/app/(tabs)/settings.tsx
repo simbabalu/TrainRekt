@@ -5,7 +5,7 @@ import { AppIcon, type AppIconName } from '@/components/AppIcon';
 import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { DEV_EXERCISE_PICKER_ENABLED } from '@/constants/debug';
 import { surpriseChallengeCatalog } from '@/data/surpriseChallengeCatalog';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
       <SectionCard>
         <SectionHeader
           title="TRAINING"
-          subtitle="Training difficulty"
+          subtitle="Prefer exercises around this challenge level."
           iconName={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }}
           iconLabel="Training difficulty"
         />
@@ -176,9 +176,9 @@ const styles = StyleSheet.create({
   compactItem: { gap: Spacing.sm },
   learnMoreButton: { alignSelf: 'flex-start', paddingVertical: Spacing.xs },
   learnMoreLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
-  educationCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
-  unexpectedStateCopy: { color: Colors.warning, fontSize: Typography.small, lineHeight: 20 },
-  about: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 23, marginTop: Spacing.md },
+  educationCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  unexpectedStateCopy: { color: Colors.warning, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  about: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body, marginTop: Spacing.md },
   resetButtons: { gap: Spacing.sm, marginTop: Spacing.lg },
   resetButton: { alignItems: 'center', borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: Spacing.md },
   resetLabel: { color: Colors.negative, fontSize: Typography.small, fontWeight: '800' },

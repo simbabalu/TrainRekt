@@ -13,8 +13,8 @@ export const Colors = {
   positive: '#32D583',
   negative: '#F97066',
   text: '#FFFFFF',
-  secondaryText: '#98A2B3',
-  mutedText: '#667085',
+  secondaryText: '#B0BACB',
+  mutedText: '#8490A3',
   border: '#252B38',
   warning: '#FEC84B',
 } as const;
@@ -39,11 +39,19 @@ export const Spacing = {
 export const Radius = { sm: 8, md: 12, lg: 16, pill: 999 } as const;
 
 export const Typography = {
-  title: 30,
-  heading: 22,
-  body: 15,
-  small: 12,
-  label: 11,
+  title: 28,
+  heading: 20,
+  body: 16,
+  small: 14,
+  label: 14,
+} as const;
+
+export const TypographyLineHeight = {
+  title: 34,
+  heading: 26,
+  body: 22,
+  small: 19,
+  label: 19,
 } as const;
 
 export const Training = {

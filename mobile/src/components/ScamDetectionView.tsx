@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { ScamDetectionDecision, ScamDetectionExercise } from '@/types/exercise';
 
 interface ScamDetectionViewProps {
@@ -112,7 +112,7 @@ export function ScamDetectionView({ exercise, disabled, onSelect }: ScamDetectio
 const styles = StyleSheet.create({
   container: { gap: Spacing.sm },
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
-  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 20, marginBottom: Spacing.xs },
+  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body, marginBottom: Spacing.xs },
   card: { backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: 10, borderWidth: 1, gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   sectionHeading: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8, marginBottom: Spacing.xs },
   cardLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
@@ -120,11 +120,11 @@ const styles = StyleSheet.create({
   rowLabel: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
   rowValue: { color: Colors.text, flexShrink: 1, fontFamily: 'monospace', fontSize: Typography.small, fontWeight: '700', marginLeft: Spacing.sm, textAlign: 'right' },
   divider: { backgroundColor: Colors.border, height: 1, marginVertical: Spacing.xs },
-  bodyValue: { color: Colors.text, fontSize: Typography.small, lineHeight: 18 },
+  bodyValue: { color: Colors.text, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   factList: { gap: Spacing.xs },
   factRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.xs },
-  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
-  factText: { color: Colors.text, flex: 1, fontSize: Typography.small, lineHeight: 18 },
+  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  factText: { color: Colors.text, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   question: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800', marginTop: Spacing.xs },
   actions: { flexDirection: 'row', gap: Spacing.sm },
   actionButton: { alignItems: 'center', backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: 10, borderWidth: 1, flex: 1, minHeight: 52, justifyContent: 'center', paddingHorizontal: Spacing.xs },

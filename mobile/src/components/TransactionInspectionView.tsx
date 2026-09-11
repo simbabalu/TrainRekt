@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { TransactionInspectionDecision, TransactionInspectionExercise } from '@/types/exercise';
 
 interface TransactionInspectionViewProps {
@@ -108,33 +108,33 @@ export function TransactionInspectionView({ exercise, disabled, onSelect }: Tran
 const styles = StyleSheet.create({
   container: { gap: Spacing.sm },
   title: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900' },
-  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 20, marginBottom: Spacing.xs },
+  description: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body, marginBottom: Spacing.xs },
   card: { backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: 10, borderWidth: 1, gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   cardLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   sectionHeading: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8, marginBottom: Spacing.xs },
-  primaryValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: 18 },
-  monoValue: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 18 },
+  primaryValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
+  monoValue: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   divider: { backgroundColor: Colors.border, height: 1, marginVertical: Spacing.xs },
   row: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1 },
   rowLabel: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
   rowValue: { color: Colors.text, flexShrink: 1, fontFamily: 'monospace', fontSize: Typography.small, fontWeight: '700', marginLeft: Spacing.sm, textAlign: 'right' },
   listRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.xs },
-  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
-  listCopy: { color: Colors.text, flex: 1, fontSize: Typography.small, lineHeight: 18 },
+  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  listCopy: { color: Colors.text, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   programRow: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.sm },
-  programName: { color: Colors.text, flex: 1, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 18 },
-  programStatus: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 18 },
+  programName: { color: Colors.text, flex: 1, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  programStatus: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   instructionBlock: { gap: 2, marginBottom: Spacing.xs },
-  instructionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: 18 },
+  instructionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
   transferRow: { alignItems: 'flex-start', borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', gap: Spacing.sm, paddingTop: Spacing.sm },
   transferDirection: { color: Colors.secondaryText, fontSize: Typography.label, fontWeight: '900', marginTop: 2, minWidth: 30 },
   transferCopy: { flex: 1 },
-  transferTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: 18 },
-  transferDetail: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: 18 },
+  transferTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
+  transferDetail: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   transferLabel: { color: Colors.mutedText, fontFamily: 'sans-serif', fontWeight: '700' },
   changeBlock: { borderTopColor: Colors.border, borderTopWidth: 1, gap: 1, paddingTop: Spacing.sm },
-  detailCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 18 },
-  emptyState: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 18 },
+  detailCopy: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  emptyState: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   question: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800', marginTop: Spacing.xs },
   actions: { flexDirection: 'row', gap: Spacing.sm },
   actionButton: { alignItems: 'center', backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: 10, borderWidth: 1, flex: 1, minHeight: 52, justifyContent: 'center', paddingHorizontal: Spacing.xs },

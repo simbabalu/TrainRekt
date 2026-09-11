@@ -1,6 +1,6 @@
 import { StyleSheet, Text } from 'react-native';
 
-import { Colors, Typography } from '@/constants/theme';
+import { Colors, Typography, TypographyLineHeight } from '@/constants/theme';
 import { TrainingScenario } from '@/types/scenario';
 import { ScenarioContextChips } from './ScenarioContextChips';
 import { SectionCard } from './SectionCard';
@@ -15,5 +15,5 @@ export function ScenarioMarketCard({ scenario }: { scenario: TrainingScenario })
 }
 
 const styles = StyleSheet.create({
-  description: { color: Colors.text, fontSize: Typography.body, lineHeight: 24 },
+  description: { color: Colors.text, fontSize: Typography.body, lineHeight: TypographyLineHeight.body },
 });

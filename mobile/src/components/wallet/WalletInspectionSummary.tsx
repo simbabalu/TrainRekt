@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import type { WalletInspectionCategorySummary, WalletInspectionSummary as WalletInspectionSummaryModel } from '@/types/walletInspection';
 
 interface WalletInspectionSummaryProps {
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   note: {
     color: Colors.mutedText,
     fontSize: Typography.label,
-    lineHeight: 16,
+    lineHeight: TypographyLineHeight.small,
   },
   row: {
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { skillLabels } from '@/constants/training';
 import { SkillKey } from '@/types/progress';
 import { TrainingExerciseResult } from '@/types/exercise';
@@ -176,25 +176,25 @@ const styles = StyleSheet.create({
   xp: { color: Colors.text, fontSize: Typography.heading, fontWeight: '800' },
   practiceLabel: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1 },
   retryLabel: { color: Colors.secondaryText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
-  explanation: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: 22, marginTop: Spacing.sm },
+  explanation: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body, marginTop: Spacing.sm },
   skill: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800' },
   lessonLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2, marginTop: Spacing.lg },
   learningPoints: { gap: Spacing.sm, marginTop: Spacing.md },
   learningPointRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
-  learningMarker: { color: Colors.accent, fontSize: Typography.body, fontWeight: '900', lineHeight: 20 },
-  learningPoint: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: 20 },
+  learningMarker: { color: Colors.accent, fontSize: Typography.body, fontWeight: '900', lineHeight: TypographyLineHeight.body },
+  learningPoint: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   analysisBlock: { gap: Spacing.sm },
   analysisRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
   analysisMarker: { borderRadius: 999, height: Spacing.sm, marginTop: Spacing.xs, width: Spacing.sm },
   danger: { backgroundColor: Colors.negative },
   caution: { backgroundColor: Colors.warning },
   info: { backgroundColor: Colors.accent },
-  safeMarker: { color: Colors.positive, fontSize: Typography.body, fontWeight: '900', lineHeight: 20 },
+  safeMarker: { color: Colors.positive, fontSize: Typography.body, fontWeight: '900', lineHeight: TypographyLineHeight.body },
   analysisCopy: { flex: 1 },
   analysisLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '800' },
-  analysisDetail: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: 20 },
+  analysisDetail: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   analysisStrong: { color: Colors.text, fontWeight: '800' },
-  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 20 },
+  bullet: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   positive: { color: Colors.positive },
   negative: { color: Colors.negative },
 });

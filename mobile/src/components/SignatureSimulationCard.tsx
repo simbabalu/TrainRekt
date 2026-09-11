@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { SimulatedRequestAction, SignatureSimulationExercise } from '@/types/exercise';
 import { SectionCard } from './SectionCard';
 
@@ -61,9 +61,9 @@ const styles = StyleSheet.create({
   sectionLabel: { color: Colors.mutedText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.2, marginTop: Spacing.md },
   actions: { gap: Spacing.sm, marginTop: Spacing.sm },
   actionRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
-  actionMarker: { color: Colors.accent, fontSize: Typography.body, fontWeight: '900', lineHeight: 22 },
-  action: { color: Colors.text, flex: 1, fontSize: Typography.body, lineHeight: 22 },
+  actionMarker: { color: Colors.accent, fontSize: Typography.body, fontWeight: '900', lineHeight: TypographyLineHeight.body },
+  action: { color: Colors.text, flex: 1, fontSize: Typography.body, lineHeight: TypographyLineHeight.body },
   instructionRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
   instructionCopy: { flex: 1 },
-  actionDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: 18, marginTop: Spacing.one },
+  actionDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.one },
 });

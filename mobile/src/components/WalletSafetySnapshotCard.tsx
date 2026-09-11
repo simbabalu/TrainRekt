@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { AppIcon } from '@/components/AppIcon';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { formatLamportsToSol } from '@/domain/wallet/formatLamportsToSol';
 import { formatWalletSnapshotTime } from '@/domain/wallet/formatWalletSnapshotTime';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   copy: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   errorText: {
     color: Colors.negative,

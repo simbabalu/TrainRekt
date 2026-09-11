@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionCard } from '@/components/SectionCard';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
 import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
 import { getWalletLessonStatus } from '@/domain/wallet/getWalletLessonStatus';
@@ -34,6 +34,83 @@ function StatusText({ status, error, hasInspection }: { status: WalletInspection
   if (status === 'unavailable') return <Text style={styles.error}>{error ?? 'Wallet inspection is unavailable right now.'}</Text>;
   if (status === 'partial') return <Text style={styles.info}>Inspection completed with partial results. Some token-account queries could not be completed.</Text>;
   return null;
+}
+
+function AccountListSection({
+  title,
+  accounts,
+  mintByAddress,
+  emptyMessage,
+}: {
+  title: string;
+  accounts: WalletSafetyInspectionModel['tokenAccounts'];
+  mintByAddress: ReadonlyMap<string, WalletSafetyInspectionModel['mintInspections'][number]>;
+  emptyMessage?: string;
+}) {
+  return (
+    <View style={styles.findingsSection}>
+      {title && <Text style={styles.sectionTitle}>{title}</Text>}
+      {emptyMessage && accounts.length === 0 && <Text style={styles.info}>{emptyMessage}</Text>}
+      {accounts.length > 0 && (
+        <View style={styles.list}>
+          {accounts.map((account) => (
+            <TokenAccountInspectionRow
+              key={account.tokenAccountAddress}
+              account={account}
+              mintInspection={mintByAddress.get(account.mintAddress) ?? null}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function DisclosureControls({
+  viewMode,
+  informationalAccountCount,
+  inspectedAccountCount,
+  status,
+  onViewModeChange,
+}: {
+  viewMode: WalletInspectionViewMode;
+  informationalAccountCount: number;
+  inspectedAccountCount: number;
+  status: WalletInspectionStatus;
+  onViewModeChange: (mode: WalletInspectionViewMode) => void;
+}) {
+  return (
+    <View style={styles.controlsBox}>
+      <Text style={styles.sectionTitle}>ACCOUNT DISCLOSURE CONTROLS</Text>
+      {viewMode !== 'all' && informationalAccountCount > 0 && (
+        <PrimaryButton
+          onPress={() => onViewModeChange(viewMode === 'informational' ? 'collapsed' : 'informational')}
+          disabled={status === 'loading'}
+          variant="secondary"
+        >
+          {viewMode === 'informational' ? 'HIDE INFORMATIONAL' : `SHOW INFORMATIONAL (${informationalAccountCount})`}
+        </PrimaryButton>
+      )}
+
+      {viewMode === 'all' ? (
+        <PrimaryButton
+          onPress={() => onViewModeChange('collapsed')}
+          disabled={status === 'loading'}
+          variant="secondary"
+        >
+          HIDE ALL ACCOUNTS
+        </PrimaryButton>
+      ) : (
+        <PrimaryButton
+          onPress={() => onViewModeChange('all')}
+          disabled={status === 'loading'}
+          variant="secondary"
+        >
+          {`SHOW ALL ${inspectedAccountCount} ACCOUNTS`}
+        </PrimaryButton>
+      )}
+    </View>
+  );
 }
 
 export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh, walletLessonProgress = {} }: WalletSafetyInspectionProps) {
@@ -69,18 +146,6 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
     });
   }
 
-  const visibleAccounts = (() => {
-    if (viewMode === 'all') return tokenAccounts;
-    if (viewMode === 'informational') return categorized.informationalAccounts;
-    return categorized.reviewAccounts;
-  })();
-
-  const listTitle = (() => {
-    if (viewMode === 'all') return `SHOWING ALL ACCOUNTS (${categorySummary.inspectedAccountCount})`;
-    if (viewMode === 'informational') return `INFORMATIONAL (${categorySummary.informationalAccountCount})`;
-    return `NEEDS REVIEW (${categorySummary.reviewAccountCount})`;
-  })();
-
   const canRenderInspection = Boolean(inspection);
 
   return (
@@ -109,24 +174,64 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   </View>
                 )}
 
-                <View style={styles.findingsSection}>
-                  <Text style={styles.sectionTitle}>{listTitle}</Text>
-                  {viewMode === 'review' && categorized.reviewAccounts.length === 0 && (
-                    <Text style={styles.info}>No review signals detected in the inspected token accounts.</Text>
-                  )}
+                {viewMode === 'review' && (
+                  <>
+                    <Text style={styles.sectionTitle}>{`NEEDS REVIEW (${categorySummary.reviewAccountCount})`}</Text>
+                    <PrimaryButton
+                      onPress={() => onViewModeChange('collapsed')}
+                      disabled={status === 'loading'}
+                      variant="secondary"
+                    >
+                      HIDE NEEDS REVIEW
+                    </PrimaryButton>
+                    <AccountListSection
+                      title=""
+                      accounts={categorized.reviewAccounts}
+                      mintByAddress={mintByAddress}
+                      emptyMessage="No review signals detected in the inspected token accounts."
+                    />
+                  </>
+                )}
 
-                  {visibleAccounts.length > 0 && (
-                    <View style={styles.list}>
-                      {visibleAccounts.map((account) => (
-                        <TokenAccountInspectionRow
-                          key={account.tokenAccountAddress}
-                          account={account}
-                          mintInspection={mintByAddress.get(account.mintAddress) ?? null}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
+                {viewMode !== 'review' && (
+                  <>
+                    <Text style={styles.sectionTitle}>{`NEEDS REVIEW (${categorySummary.reviewAccountCount})`}</Text>
+                    <PrimaryButton
+                      onPress={() => onViewModeChange('review')}
+                      disabled={status === 'loading'}
+                      variant="secondary"
+                    >
+                      SHOW NEEDS REVIEW
+                    </PrimaryButton>
+                  </>
+                )}
+
+                <DisclosureControls
+                  viewMode={viewMode}
+                  informationalAccountCount={categorySummary.informationalAccountCount}
+                  inspectedAccountCount={categorySummary.inspectedAccountCount}
+                  status={status}
+                  onViewModeChange={onViewModeChange}
+                />
+
+                {viewMode === 'informational' && (
+                  <>
+                    <Text style={styles.info}>Token-2022 is informational. Token-2022 itself is not a warning.</Text>
+                    <AccountListSection
+                      title={`INFORMATIONAL (${categorySummary.informationalAccountCount})`}
+                      accounts={categorized.informationalAccounts}
+                      mintByAddress={mintByAddress}
+                    />
+                  </>
+                )}
+
+                {viewMode === 'all' && (
+                  <AccountListSection
+                    title={`ALL ACCOUNTS (${categorySummary.inspectedAccountCount})`}
+                    accounts={tokenAccounts}
+                    mintByAddress={mintByAddress}
+                  />
+                )}
 
                 <View style={styles.lessonBox}>
                   <Text style={styles.educationTitle}>LEARN FROM YOUR WALLET</Text>
@@ -160,50 +265,6 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
 
                 <WalletInspectionEducationDetails summary={summary} />
 
-                <View style={styles.controlsBox}>
-                  {categorySummary.informationalAccountCount > 0 && (
-                    <>
-                      <Text style={styles.info}>Token-2022 is informational. Token-2022 itself is not a warning.</Text>
-                      <PrimaryButton
-                        onPress={() => {
-                          onViewModeChange(viewMode === 'informational' ? 'review' : 'informational');
-                        }}
-                        disabled={status === 'loading'}
-                        variant="secondary"
-                      >
-                        {viewMode === 'informational'
-                          ? 'HIDE INFORMATIONAL'
-                          : `SHOW INFORMATIONAL (${categorySummary.informationalAccountCount})`}
-                      </PrimaryButton>
-                    </>
-                  )}
-
-                  {viewMode === 'all' ? (
-                    <>
-                      <Text style={styles.sectionTitle}>SHOWING ALL ACCOUNTS</Text>
-                      <PrimaryButton
-                        onPress={() => {
-                          onViewModeChange('review');
-                        }}
-                        disabled={status === 'loading'}
-                        variant="secondary"
-                      >
-                        HIDE ALL
-                      </PrimaryButton>
-                    </>
-                  ) : (
-                    <PrimaryButton
-                      onPress={() => {
-                        onViewModeChange('all');
-                      }}
-                      disabled={status === 'loading'}
-                      variant="secondary"
-                    >
-                      {`SHOW ALL ${categorySummary.inspectedAccountCount} ACCOUNTS`}
-                    </PrimaryButton>
-                  )}
-                </View>
-
               </>
             )}
 
@@ -236,12 +297,12 @@ const styles = StyleSheet.create({
   subtitle: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   info: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   error: {
     color: Colors.negative,
@@ -259,7 +320,7 @@ const styles = StyleSheet.create({
   warningText: {
     color: Colors.warning,
     fontSize: Typography.small,
-    lineHeight: 18,
+    lineHeight: TypographyLineHeight.small,
   },
   educationTitle: {
     color: Colors.accent,
@@ -270,7 +331,7 @@ const styles = StyleSheet.create({
   educationText: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   nextLessonTitle: {
     color: Colors.accent,
@@ -281,7 +342,7 @@ const styles = StyleSheet.create({
   completedLesson: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 20,
+    lineHeight: TypographyLineHeight.small,
   },
   findingsSection: {
     gap: Spacing.sm,

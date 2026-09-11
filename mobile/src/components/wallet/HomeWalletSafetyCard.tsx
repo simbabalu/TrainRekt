@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '@/components/AppIcon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionCard } from '@/components/SectionCard';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { categorizeWalletInspectionAccounts } from '@/domain/wallet/categorizeWalletInspectionAccounts';
 import { recommendWalletTraining } from '@/domain/wallet/recommendWalletTraining';
 import { useWalletSafetyInspection } from '@/hooks/useWalletSafetyInspection';
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   description: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 18,
+    lineHeight: TypographyLineHeight.small,
   },
   connectedLabel: {
     color: Colors.secondaryText,
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     fontSize: Typography.heading,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: TypographyLineHeight.heading,
   },
   reviewLabel: {
     color: Colors.warning,
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: Typography.body,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: TypographyLineHeight.body,
   },
   infoLabel: {
     color: Colors.secondaryText,

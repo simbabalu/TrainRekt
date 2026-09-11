@@ -376,6 +376,22 @@ describe('WalletSafetyInspection', () => {
     expect(text).toContain('SHOW ALL 2 ACCOUNTS');
   });
 
+  it('keeps the default account presentation compact and exposes the review control', () => {
+    const inspection = createInspection();
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ inspection, viewMode: 'collapsed' }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain('NEEDS REVIEW (1)');
+    expect(text).toContain('SHOW NEEDS REVIEW');
+    expect(text).toContain('SHOW ALL 2 ACCOUNTS');
+    expect(text).not.toContain('FROZEN');
+    expect((text.match(/DETAILS/g) ?? []).length).toBe(0);
+  });
+
   it('renders informational list when view mode is informational', () => {
     const inspection = createInspection();
     inspection.tokenAccounts = [
@@ -422,10 +438,10 @@ describe('WalletSafetyInspection', () => {
       .find((node) => flattenText(node).includes('HIDE INFORMATIONAL'));
     expect(hideButton).toBeDefined();
     act(() => hideButton?.props.onPress());
-    expect(onViewModeChange).toHaveBeenCalledWith('review');
+    expect(onViewModeChange).toHaveBeenCalledWith('collapsed');
   });
 
-  it('places wallet lessons before secondary account disclosures', () => {
+  it('places disclosure controls and revealed informational accounts before wallet lessons', () => {
     const inspection = createInspection();
     inspection.tokenAccounts = [
       { ...inspection.tokenAccounts[0], tokenAccountAddress: 'review-account' },
@@ -438,8 +454,28 @@ describe('WalletSafetyInspection', () => {
     });
 
     const text = flattenText(renderer.toJSON());
-    expect(text.indexOf('LEARN FROM YOUR WALLET')).toBeGreaterThan(-1);
-    expect(text.indexOf('LEARN FROM YOUR WALLET')).toBeLessThan(text.indexOf('SHOW INFORMATIONAL'));
+    expect(text.indexOf('NEEDS REVIEW (1)')).toBeLessThan(text.indexOf('SHOW INFORMATIONAL (1)'));
+    expect(text.indexOf('SHOW INFORMATIONAL (1)')).toBeLessThan(text.indexOf('LEARN FROM YOUR WALLET'));
+    expect(text).not.toContain('Token-2022 is informational.');
+    expect((text.match(/DETAILS/g) ?? []).length).toBe(1);
+  });
+
+  it('reveals informational accounts immediately after controls without duplicating review accounts', () => {
+    const inspection = createInspection();
+    inspection.tokenAccounts = [
+      { ...inspection.tokenAccounts[0], tokenAccountAddress: 'review-account' },
+      { ...inspection.tokenAccounts[1], tokenAccountAddress: 'informational-account', program: 'token-2022' },
+    ];
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ inspection, viewMode: 'informational' }));
+    });
+
+    const text = flattenText(renderer.toJSON());
+    expect(text.indexOf('NEEDS REVIEW (1)')).toBeLessThan(text.indexOf('HIDE INFORMATIONAL'));
+    expect(text.indexOf('HIDE INFORMATIONAL')).toBeLessThan(text.indexOf('INFORMATIONAL (1)'));
+    expect(text.indexOf('INFORMATIONAL (1)')).toBeLessThan(text.indexOf('LEARN FROM YOUR WALLET'));
     expect((text.match(/DETAILS/g) ?? []).length).toBe(1);
   });
 
@@ -493,8 +529,26 @@ describe('WalletSafetyInspection', () => {
     const text = flattenText(renderer.toJSON());
     const detailsMatches = (text.match(/DETAILS/g) ?? []).length;
 
-    expect(text).toContain('SHOWING ALL ACCOUNTS (2)');
+    expect(text).toContain('ALL ACCOUNTS (2)');
+    expect(text).toContain('HIDE ALL ACCOUNTS');
+    expect(text.indexOf('HIDE ALL ACCOUNTS')).toBeLessThan(text.indexOf('ALL ACCOUNTS (2)'));
+    expect(text.indexOf('ALL ACCOUNTS (2)')).toBeLessThan(text.indexOf('LEARN FROM YOUR WALLET'));
     expect(detailsMatches).toBe(2);
+  });
+
+  it('returns from all mode to the compact state and hides the extra account content', () => {
+    const onViewModeChange = vi.fn();
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ viewMode: 'all', onViewModeChange }));
+    });
+
+    const hideAllButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')
+      .find((node) => flattenText(node).includes('HIDE ALL ACCOUNTS'));
+    expect(hideAllButton).toBeDefined();
+    act(() => hideAllButton?.props.onPress());
+    expect(onViewModeChange).toHaveBeenCalledWith('collapsed');
   });
 
   it('renders partial-failure message and warnings without hiding successful data', () => {

@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/AppIcon';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
 import { getWalletTrainingTopicLabel } from '@/domain/wallet/recommendWalletTraining';
 import type { WalletLessonStatus } from '@/domain/wallet/getWalletLessonStatus';
 import type { WalletTrainingRecommendation } from '@/types/walletTraining';
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   reason: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
-    lineHeight: 18,
+    lineHeight: TypographyLineHeight.small,
     marginBottom: Spacing.xs,
   },
   completed: {
