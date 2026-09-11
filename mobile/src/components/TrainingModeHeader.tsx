@@ -16,11 +16,13 @@ export function TrainingModeHeader({ mode, step }: TrainingModeHeaderProps) {
     return <View style={styles.container}><View style={styles.modeRow}><AppIcon accessibilityLabel="Extra practice" name={{ ios: 'graduationcap.fill', android: 'school', web: 'school' }} size={16} /><Text style={styles.eyebrow}>EXTRA PRACTICE</Text></View></View>;
   }
 
-  const percentage = step.totalSteps === 0 ? 0 : Math.round(((step.currentStep - 1) / step.totalSteps) * 100);
+  const label = step.isComplete
+    ? `${step.currentStep} / ${step.totalSteps} COMPLETE`
+    : `Decision ${step.currentStep} of ${step.totalSteps}`;
   return (
     <View style={styles.container}>
       <View style={styles.modeRow}><AppIcon accessibilityLabel="Daily training" name={{ ios: 'calendar.badge.checkmark', android: 'event_available', web: 'event_available' }} size={16} /><Text style={styles.eyebrow}>DAILY TRAINING</Text></View>
-      <ProgressBar label={`Decision ${step.currentStep} of ${step.totalSteps}`} percentage={percentage} />
+      <ProgressBar label={label} percentage={step.percentage} />
     </View>
   );
 }

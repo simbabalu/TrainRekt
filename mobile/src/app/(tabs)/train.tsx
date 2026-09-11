@@ -4,6 +4,7 @@ import { LayoutChangeEvent, ScrollView, StyleSheet, Text, View } from 'react-nat
 
 import { DailyGoalInlineStatus } from '@/components/DailyGoalInlineStatus';
 import { DailyTrainingCompleteCard } from '@/components/DailyTrainingCompleteCard';
+import { CompletedDailyTrainingState } from '@/components/CompletedDailyTrainingState';
 import { DecisionExerciseView } from '@/components/DecisionExerciseView';
 import { DecisionResultPanel } from '@/components/DecisionResultPanel';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -53,8 +54,25 @@ export default function TrainScreen() {
   const walletExerciseId = isWalletLesson
     ? (requestedExerciseId || (topic ? getWalletLessonExerciseIds(topic)[0] : undefined))
     : undefined;
+  const { progress } = useTrainingProgress();
   // Remount on mode change so a fresh exercise/result replaces any stale answered state.
+  if (mode === 'daily' && progress.daily.dailyGoalCompleted) {
+    return <CompletedDailyTrainingScreen />;
+  }
   return <TrainSession key={`${mode}:${source ?? 'adaptive'}:${topic ?? ''}:${walletExerciseId ?? ''}`} mode={mode} source={isWalletLesson ? 'wallet' : 'adaptive'} topic={topic} initialExerciseId={walletExerciseId} />;
+}
+
+function CompletedDailyTrainingScreen() {
+  const { progress } = useTrainingProgress();
+  const step = getDailyTrainingStep(progress.daily);
+  const dailyGoalProgress = calculateDailyGoalProgress(progress.daily);
+
+  return (
+    <Screen>
+      <TrainingModeHeader mode="daily" step={step} />
+      <CompletedDailyTrainingState goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
+    </Screen>
+  );
 }
 
 function TrainSession({ mode, source, topic, initialExerciseId }: { mode: TrainingMode; source: 'adaptive' | 'wallet'; topic: WalletTrainingTopic | null; initialExerciseId?: string }) {

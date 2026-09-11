@@ -6,6 +6,7 @@ import TrainScreen from '@/app/(tabs)/train';
 
 const useLocalSearchParamsMock = vi.hoisted(() => vi.fn());
 const useTrainingScenarioMock = vi.hoisted(() => vi.fn());
+const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 
 Object.defineProperty(globalThis, '__DEV__', {
   value: false,
@@ -21,8 +22,8 @@ vi.mock('@/hooks/useTrainingScenario', () => ({
 }));
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
-  useTrainingProgress: () => ({
-    progress: {
+  useTrainingProgress: () => useTrainingProgressMock() ?? {
+      progress: {
       level: 1,
       xpIntoCurrentLevel: 0,
       xpRequiredForNextLevel: 1000,
@@ -57,8 +58,8 @@ vi.mock('@/hooks/useTrainingProgress', () => ({
       },
       surpriseChallenges: { completed: {} },
       badges: { earned: {} },
+      },
     },
-  }),
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -82,6 +83,7 @@ vi.mock('@/components/RedFlagIdentificationView', () => ({ RedFlagIdentification
 vi.mock('@/components/DecisionResultPanel', () => ({ DecisionResultPanel: () => null }));
 vi.mock('@/components/DailyGoalInlineStatus', () => ({ DailyGoalInlineStatus: () => null }));
 vi.mock('@/components/DailyTrainingCompleteCard', () => ({ DailyTrainingCompleteCard: () => null }));
+vi.mock('@/components/CompletedDailyTrainingState', () => ({ CompletedDailyTrainingState: () => React.createElement('Text', null, 'TODAY COMPLETE') }));
 vi.mock('@/components/PrimaryButton', () => ({ PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Text', null, children) }));
 vi.mock('@/data/exerciseCatalog', () => ({ exerciseCatalog: [] }));
 vi.mock('@/data/permissionChallengeCatalog', () => ({ permissionChallengeCatalog: [] }));
@@ -132,5 +134,31 @@ describe('Train wallet routing', () => {
 
     const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
     expect(text).not.toContain('DEV EXERCISE PICKER');
+  });
+
+  it('renders completed-day state without mounting an exercise session on re-entry', () => {
+    useLocalSearchParamsMock.mockReturnValue({ mode: 'daily' });
+    useTrainingScenarioMock.mockReset();
+    useTrainingProgressMock.mockReturnValue({
+      progress: {
+        daily: {
+          dailyGoal: 3,
+          todayCompletedDecisions: 3,
+          todayDateKey: '2026-09-11',
+          dailyGoalCompleted: true,
+          lastDailyCompletionDate: '2026-09-11',
+          dailyTrainingStreak: 2,
+          bestDailyTrainingStreak: 2,
+        },
+      },
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TrainScreen />);
+    });
+
+    expect(useTrainingScenarioMock).not.toHaveBeenCalled();
+    expect(renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ')).toContain('TODAY COMPLETE');
   });
 });
