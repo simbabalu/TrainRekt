@@ -10,21 +10,20 @@ public static class TokenReviewSignalFactory
     {
         var signals = new List<TokenReviewSignal>();
 
-        var issuanceContext = inspection.ProtocolContext?.Issuance;
-        var hasDocumentedInflationaryIssuance = issuanceContext is not null
-            && string.Equals(inspection.ProtocolContext?.Protocol, ProtocolConstants.SolanaMobileSkrProtocolName, StringComparison.Ordinal)
-            && string.Equals(issuanceContext.Classification, "documented_inflationary_issuance", StringComparison.Ordinal)
-            && string.Equals(issuanceContext.Verification, "official_documentation", StringComparison.Ordinal);
+        var issuanceClaim = inspection.ProtocolContext?.Claims.FirstOrDefault(static claim =>
+            string.Equals(claim.Id, "DOCUMENTED_INFLATIONARY_ISSUANCE", StringComparison.Ordinal));
+
+        var hasDocumentedIssuanceContext = issuanceClaim is not null;
 
         if (!inspection.Authorities.MintAuthorityRevoked)
         {
-            var explanation = "Mint authority is active, meaning additional supply can still be minted.";
+            var explanation = "An active mint authority can increase token supply.";
             var category = "review";
             var severity = "medium";
 
-            if (hasDocumentedInflationaryIssuance)
+            if (hasDocumentedIssuanceContext && issuanceClaim is not null)
             {
-                explanation = "Mint authority is active. Official Solana Mobile documentation describes ongoing SKR issuance for staking rewards.";
+                explanation = "An active mint authority can increase token supply. The current active authority is consistent with documented ongoing inflationary issuance, but the authority/control mechanism has not been independently verified.";
                 category = "informational";
                 severity = "info";
             }
@@ -40,40 +39,45 @@ public static class TokenReviewSignalFactory
                 }));
         }
 
-        if (hasDocumentedInflationaryIssuance && issuanceContext is not null)
+        if (hasDocumentedIssuanceContext && issuanceClaim is not null)
         {
             var evidence = new Dictionary<string, string>
             {
-                ["protocol"] = ProtocolConstants.SolanaMobileSkrProtocolName,
-                ["sourceType"] = issuanceContext.Verification,
-                ["sourceIds"] = string.Join(",", issuanceContext.SourceIds),
-                ["mintAuthorityStateConsistentWithDocumentedModel"] = issuanceContext.MintAuthorityStateConsistentWithDocumentedModel ? "true" : "false",
-                ["mintAuthorityIdentityVerified"] = issuanceContext.MintAuthorityIdentityVerified ? "true" : "false"
+                ["verificationStatus"] = issuanceClaim.VerificationStatus.ToString(),
+                ["verificationMethod"] = issuanceClaim.VerificationMethod.ToString(),
+                ["consistency"] = issuanceClaim.Consistency.ToString(),
+                ["sourceIds"] = string.Join(",", issuanceClaim.SourceIds)
             };
 
-            if (!string.IsNullOrWhiteSpace(issuanceContext.MintAuthorityIdentityVerificationNote))
+            if (!string.IsNullOrWhiteSpace(issuanceClaim.VerificationNote))
             {
-                evidence["mintAuthorityIdentityVerificationNote"] = issuanceContext.MintAuthorityIdentityVerificationNote;
+                evidence["verificationNote"] = issuanceClaim.VerificationNote;
             }
 
             signals.Add(new TokenReviewSignal(
                 Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
                 Category: "informational",
                 Severity: "info",
-                Explanation: "Official Solana Mobile sources document SKR inflationary issuance and staking rewards.",
+                Explanation: issuanceClaim.Consistency switch
+                {
+                    ObservedConsistency.Consistent => "Ongoing inflationary issuance is documented, and the observed active mint authority is consistent with that model. The authority/control mechanism has not been independently verified.",
+                    ObservedConsistency.Conflict => "Ongoing inflationary issuance is documented, but the observed authority state conflicts with that model. The documentation is not thereby disproven, and the issuance mechanism remains not verified.",
+                    _ => issuanceClaim.Statement
+                },
                 Evidence: evidence));
 
-            if (!issuanceContext.MintAuthorityStateConsistentWithDocumentedModel)
+            if (issuanceClaim.Consistency == ObservedConsistency.Conflict)
             {
                 signals.Add(new TokenReviewSignal(
                     Id: "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE",
                     Category: "review",
                     Severity: "medium",
-                    Explanation: "Official SKR sources describe ongoing issuance, but this mint currently has no active mint authority.",
+                    Explanation: "Observed authority state conflicts with documented issuance behavior.",
                     Evidence: new Dictionary<string, string>
                     {
-                        ["mintAuthorityRevoked"] = "true",
-                        ["sourceIds"] = string.Join(",", issuanceContext.SourceIds)
+                        ["mintAuthorityRevoked"] = inspection.Authorities.MintAuthorityRevoked ? "true" : "false",
+                        ["claimId"] = issuanceClaim.Id,
+                        ["sourceIds"] = string.Join(",", issuanceClaim.SourceIds)
                     }));
             }
         }

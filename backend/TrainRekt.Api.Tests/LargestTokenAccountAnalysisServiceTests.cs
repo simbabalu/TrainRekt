@@ -157,7 +157,7 @@ public sealed class LargestTokenAccountAnalysisServiceTests
         fakeClient.Enqueue(
             "getTokenLargestAccounts",
             "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":[{\"address\":\"acct-nonzero\",\"amount\":\"500000\"},{\"address\":\"acct-zero\",\"amount\":\"0\"}]}}");
-        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+        fakeClient.Enqueue("getAccountInfo", BuildAccountInfoResponse(ProtocolConstants.PumpFunProgramId, new byte[] { 1, 2, 3 }));
         fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
         fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
 
@@ -172,5 +172,63 @@ public sealed class LargestTokenAccountAnalysisServiceTests
         Assert.DoesNotContain(result.LargestTokenAccounts, account => account.Address == zeroBalanceAddress);
         Assert.NotNull(result.PumpFunContext);
         Assert.True(result.PumpFunContext.BondingCurveDetected);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_UnverifiedPumpFunDerivation_DoesNotEmitPumpFunContext()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var accountReader = new ScopedSolanaAccountReader(fakeClient);
+        var classificationService = new TokenAccountClassificationService(Array.Empty<ITokenAccountClassifier>());
+        var service = new LargestTokenAccountAnalysisService(fakeClient, accountReader, classificationService);
+
+        fakeClient.Enqueue(
+            "getTokenLargestAccounts",
+            "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":[{\"address\":\"acct1\",\"amount\":\"500000\"}]}}");
+        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+
+        var result = await service.AnalyzeAsync(
+            ProtocolConstants.SolanaMobileSkrMint,
+            SolanaTokenConstants.SplTokenProgramId,
+            1_000_000,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Null(result.PumpFunContext);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_GraduatedPumpFunLikeMint_VerifiedCurveAccountKeepsContextWithoutLargestAccountDetection()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var accountReader = new ScopedSolanaAccountReader(fakeClient);
+        var classificationService = new TokenAccountClassificationService(Array.Empty<ITokenAccountClassifier>());
+        var service = new LargestTokenAccountAnalysisService(fakeClient, accountReader, classificationService);
+
+        fakeClient.Enqueue(
+            "getTokenLargestAccounts",
+            "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":[{\"address\":\"acct1\",\"amount\":\"500000\"}]}}");
+        fakeClient.Enqueue("getAccountInfo", BuildAccountInfoResponse(ProtocolConstants.PumpFunProgramId, new byte[] { 1, 2, 3 }));
+        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+
+        var result = await service.AnalyzeAsync(
+            "So11111111111111111111111111111111111111112",
+            SolanaTokenConstants.SplTokenProgramId,
+            1_000_000,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.PumpFunContext);
+        Assert.False(result.PumpFunContext.BondingCurveDetected);
+    }
+
+    private static string BuildAccountInfoResponse(string ownerProgramId, byte[] data)
+    {
+        return "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":{\"owner\":\""
+            + ownerProgramId
+            + "\",\"data\":[\""
+            + Convert.ToBase64String(data)
+            + "\",\"base64\"]}}}";
     }
 }

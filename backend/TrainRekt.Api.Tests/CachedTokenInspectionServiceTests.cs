@@ -182,6 +182,8 @@ public sealed class CachedTokenInspectionServiceTests
         Assert.Equal("metadata-pointer", roundTrip.Result.Program.Token2022Extensions[0]);
         Assert.Equal("ACTIVE_MINT_AUTHORITY", roundTrip.Result.ReviewSignals[0].Id);
         Assert.Equal("pump.fun", roundTrip.Result.PumpFunContext?.Protocol);
+        Assert.NotNull(roundTrip.Result.ProtocolContext);
+        Assert.Equal("DOCUMENTED_INFLATIONARY_ISSUANCE", roundTrip.Result.ProtocolContext.Claims[0].Id);
         Assert.Null(roundTrip.Result.Identity.MetadataUri);
         Assert.Equal("bonding_curve", roundTrip.Result.LargestTokenAccounts[0].Classification.Classification);
     }
@@ -317,7 +319,38 @@ public sealed class CachedTokenInspectionServiceTests
                 BondingCurveAddress: "curve",
                 BondingCurveTokenAccount: "tok1",
                 Complete: false),
-            ProtocolContext: null,
+            ProtocolContext: new ProtocolResearchContext(
+                Protocol: ProtocolConstants.SolanaMobileSkrProtocolName,
+                Sources: new[]
+                {
+                    new ResearchSource(
+                        Id: ProtocolConstants.SolanaMobileSkrTokenomicsSourceId,
+                        SourceType: ResearchSourceType.OfficialDocumentation,
+                        Title: "SKR docs",
+                        Publisher: "Solana Mobile",
+                        Url: "https://docs.solanamobile.com/solana-mobile-stack/skr",
+                        RetrievedAtUtc: null,
+                        PublishedAtUtc: null)
+                },
+                Claims: new[]
+                {
+                    new DocumentedClaim(
+                        Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+                        Category: "issuance",
+                        Statement: "Ongoing issuance is documented.",
+                        VerificationStatus: ResearchClaimVerificationStatus.Documented,
+                        VerificationMethod: ResearchClaimVerificationMethod.DocumentationOnly,
+                        SourceIds: new[] { ProtocolConstants.SolanaMobileSkrTokenomicsSourceId },
+                        ObservedFactReferences: new[]
+                        {
+                            new ObservedFactReference(
+                                FactId: ObservedFactIds.MintAuthorityActive,
+                                ObservedValue: "true",
+                                ExpectedValue: null,
+                                Note: null)
+                        },
+                        VerificationNote: null)
+                }),
             ReviewSignals: new[]
             {
                 new TokenReviewSignal(

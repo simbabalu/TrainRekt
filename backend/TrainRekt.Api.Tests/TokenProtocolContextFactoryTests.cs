@@ -4,10 +4,10 @@ using TrainRekt.Api.Domain.Models;
 
 namespace TrainRekt.Api.Tests;
 
-public sealed class TokenProtocolContextFactoryTests
+public sealed class ProtocolResearchContextFactoryTests
 {
     [Fact]
-    public void Create_CanonicalSkrMintWithActiveMintAuthority_EmitsDocumentedIssuanceContextAndPreservesRawAuthorityFact()
+    public void Create_CanonicalSkrMintWithActiveMintAuthority_EmitsGenericClaimsAndSources()
     {
         var inspection = CreateInspection(
             mint: ProtocolConstants.SolanaMobileSkrMint,
@@ -16,14 +16,21 @@ public sealed class TokenProtocolContextFactoryTests
             symbol: "SKR",
             name: "Solana Mobile SKR");
 
-        var context = TokenProtocolContextFactory.Create(inspection);
+        var context = ProtocolResearchContextFactory.Create(inspection);
 
         Assert.NotNull(context);
         Assert.Equal(ProtocolConstants.SolanaMobileSkrProtocolName, context.Protocol);
-        Assert.NotNull(context.Issuance);
-        Assert.Equal("documented_inflationary_issuance", context.Issuance.Classification);
-        Assert.Equal("official_documentation", context.Issuance.Verification);
-        Assert.False(context.Issuance.MintAuthorityIdentityVerified);
+        Assert.Equal(2, context.Sources.Count);
+        Assert.Contains(context.Sources, source => source.Id == ProtocolConstants.SolanaMobileSkrTokenomicsSourceId && source.SourceType == ResearchSourceType.OfficialDocumentation);
+        Assert.Contains(context.Sources, source => source.Id == ProtocolConstants.SolanaMobileSkrStakingIdlSourceId && source.SourceType == ResearchSourceType.OfficialIdl);
+
+        var issuanceClaim = Assert.Single(context.Claims.Where(claim => claim.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"));
+        Assert.Equal(ResearchClaimVerificationStatus.Documented, issuanceClaim.VerificationStatus);
+        Assert.Equal(ResearchClaimVerificationMethod.DocumentationOnly, issuanceClaim.VerificationMethod);
+        Assert.Equal(ObservedConsistency.Consistent, issuanceClaim.Consistency);
+
+        var identityClaim = Assert.Single(context.Claims.Where(claim => claim.Id == "MINT_AUTHORITY_IDENTITY_MATCHES_DOCUMENTED_ISSUANCE_CONTROL"));
+        Assert.Equal(ResearchClaimVerificationStatus.NotVerified, identityClaim.VerificationStatus);
         Assert.Equal("SomeAuthority", inspection.Authorities.MintAuthority);
         Assert.False(inspection.Authorities.MintAuthorityRevoked);
     }
@@ -38,7 +45,7 @@ public sealed class TokenProtocolContextFactoryTests
             symbol: "GEN",
             name: "Generic Token");
 
-        var context = TokenProtocolContextFactory.Create(inspection);
+        var context = ProtocolResearchContextFactory.Create(inspection);
 
         Assert.Null(context);
     }
@@ -53,9 +60,27 @@ public sealed class TokenProtocolContextFactoryTests
             symbol: "SKR",
             name: "Solana Mobile SKR");
 
-        var context = TokenProtocolContextFactory.Create(inspection);
+        var context = ProtocolResearchContextFactory.Create(inspection);
 
         Assert.Null(context);
+    }
+
+    [Fact]
+    public void Create_CanonicalSkrMintWithRevokedMintAuthority_EmitsConflictForIssuanceClaim()
+    {
+        var inspection = CreateInspection(
+            mint: ProtocolConstants.SolanaMobileSkrMint,
+            mintAuthority: null,
+            mintAuthorityRevoked: true,
+            symbol: "SKR",
+            name: "Solana Mobile SKR");
+
+        var context = ProtocolResearchContextFactory.Create(inspection);
+
+        Assert.NotNull(context);
+        var issuanceClaim = Assert.Single(context.Claims.Where(claim => claim.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"));
+        Assert.Equal(ResearchClaimVerificationStatus.Documented, issuanceClaim.VerificationStatus);
+        Assert.Equal(ObservedConsistency.Conflict, issuanceClaim.Consistency);
     }
 
     private static TokenInspection CreateInspection(

@@ -153,7 +153,7 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
                 ReviewSignals: Array.Empty<TokenReviewSignal>(),
                 InspectedAtUtc: DateTimeOffset.UtcNow);
 
-            var protocolContext = TokenProtocolContextFactory.Create(baseInspection);
+            var protocolContext = ProtocolResearchContextFactory.Create(baseInspection);
             var withProtocolContext = baseInspection with { ProtocolContext = protocolContext };
 
             var reviewSignals = TokenReviewSignalFactory.Create(withProtocolContext);

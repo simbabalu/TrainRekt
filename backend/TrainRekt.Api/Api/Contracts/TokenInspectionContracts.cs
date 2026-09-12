@@ -12,7 +12,7 @@ public sealed record TokenInspectionResponse(
     HolderConcentration HolderConcentration,
     IReadOnlyList<AnalyzedTokenAccount> LargestTokenAccounts,
     PumpFunContext? PumpFunContext,
-    TokenProtocolContext? ProtocolContext,
+    ProtocolResearchContext? ProtocolContext,
     IReadOnlyList<TokenReviewSignal> ReviewSignals,
     DateTimeOffset InspectedAtUtc)
 {

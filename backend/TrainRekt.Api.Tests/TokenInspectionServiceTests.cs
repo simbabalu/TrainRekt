@@ -325,8 +325,15 @@ public sealed class TokenInspectionServiceTests
 
         Assert.NotNull(result.Inspection.ProtocolContext);
         Assert.Equal(ProtocolConstants.SolanaMobileSkrProtocolName, result.Inspection.ProtocolContext.Protocol);
-        Assert.NotNull(result.Inspection.ProtocolContext.Issuance);
-        Assert.Equal("documented_inflationary_issuance", result.Inspection.ProtocolContext.Issuance.Classification);
+        Assert.Contains(result.Inspection.ProtocolContext.Claims, claim =>
+            claim.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"
+            && claim.VerificationStatus == ResearchClaimVerificationStatus.Documented
+            && claim.Consistency == ObservedConsistency.Consistent);
+        Assert.Contains(result.Inspection.ProtocolContext.Claims, claim =>
+            claim.Id == "MINT_AUTHORITY_IDENTITY_MATCHES_DOCUMENTED_ISSUANCE_CONTROL"
+            && claim.VerificationStatus == ResearchClaimVerificationStatus.NotVerified);
+
+        Assert.Null(result.Inspection.PumpFunContext);
 
         Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "ACTIVE_MINT_AUTHORITY");
         Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE");
@@ -354,8 +361,11 @@ public sealed class TokenInspectionServiceTests
 
         Assert.NotNull(result.Inspection);
         Assert.True(result.Inspection.Authorities.MintAuthorityRevoked);
-        Assert.NotNull(result.Inspection.ProtocolContext?.Issuance);
-        Assert.False(result.Inspection.ProtocolContext.Issuance.MintAuthorityStateConsistentWithDocumentedModel);
+        Assert.NotNull(result.Inspection.ProtocolContext);
+        Assert.Contains(result.Inspection.ProtocolContext.Claims, claim =>
+            claim.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"
+            && claim.VerificationStatus == ResearchClaimVerificationStatus.Documented
+            && claim.Consistency == ObservedConsistency.Conflict);
         Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE");
     }
 

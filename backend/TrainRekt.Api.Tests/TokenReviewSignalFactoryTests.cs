@@ -148,19 +148,39 @@ public sealed class TokenReviewSignalFactoryTests
                 UnclassifiedTokenAccountConcentration: null),
             LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
             PumpFunContext: null,
-            ProtocolContext: new TokenProtocolContext(
+            ProtocolContext: new ProtocolResearchContext(
                 Protocol: ProtocolConstants.SolanaMobileSkrProtocolName,
-                Issuance: new TokenIssuanceProtocolContext(
-                    Classification: "documented_inflationary_issuance",
-                    Verification: "official_documentation",
-                    SourceIds: new[]
-                    {
-                        ProtocolConstants.SolanaMobileSkrTokenomicsSourceId,
-                        ProtocolConstants.SolanaMobileSkrStakingIdlSourceId
-                    },
-                    MintAuthorityStateConsistentWithDocumentedModel: true,
-                    MintAuthorityIdentityVerified: false,
-                    MintAuthorityIdentityVerificationNote: "not tied to a specific key")),
+                Sources: new[]
+                {
+                    new ResearchSource(
+                        Id: ProtocolConstants.SolanaMobileSkrTokenomicsSourceId,
+                        SourceType: ResearchSourceType.OfficialDocumentation,
+                        Title: "SKR docs",
+                        Publisher: "Solana Mobile",
+                        Url: "https://docs.solanamobile.com/solana-mobile-stack/skr",
+                        RetrievedAtUtc: null,
+                        PublishedAtUtc: null)
+                },
+                Claims: new[]
+                {
+                    new DocumentedClaim(
+                        Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+                        Category: "issuance",
+                        Statement: "Ongoing issuance for staking rewards is documented.",
+                        VerificationStatus: ResearchClaimVerificationStatus.Documented,
+                        VerificationMethod: ResearchClaimVerificationMethod.DocumentationOnly,
+                        SourceIds: new[] { ProtocolConstants.SolanaMobileSkrTokenomicsSourceId },
+                        ObservedFactReferences: new[]
+                        {
+                            new ObservedFactReference(
+                                FactId: ObservedFactIds.MintAuthorityActive,
+                                ObservedValue: "true",
+                                ExpectedValue: "true",
+                                Note: null)
+                        },
+                        VerificationNote: null,
+                        Consistency: ObservedConsistency.Consistent)
+                }),
             ReviewSignals: Array.Empty<TokenReviewSignal>(),
             InspectedAtUtc: DateTimeOffset.UtcNow);
 
@@ -170,8 +190,77 @@ public sealed class TokenReviewSignalFactoryTests
         Assert.Equal("informational", activeMintAuthority.Category);
 
         var documentedIssuance = Assert.Single(signals.Where(signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"));
-        Assert.Equal("official_documentation", documentedIssuance.Evidence["sourceType"]);
-        Assert.Equal("false", documentedIssuance.Evidence["mintAuthorityIdentityVerified"]);
+        Assert.Equal("Documented", documentedIssuance.Evidence["verificationStatus"]);
+        Assert.Equal("Consistent", documentedIssuance.Evidence["consistency"]);
+        Assert.Contains("not been independently verified", documentedIssuance.Explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_DocumentedClaimContextAppliesWithoutAnySkrMintChecks()
+    {
+        var inspection = new TokenInspection(
+            Identity: new TokenIdentity(
+                Mint: "SomeOtherMint",
+                Name: "Other",
+                Symbol: "OTH",
+                Decimals: 6,
+                SupplyRaw: "1000000",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                MetadataUri: null),
+            Authorities: new TokenAuthorities(
+                MintAuthority: "auth",
+                MintAuthorityRevoked: false,
+                FreezeAuthority: null,
+                FreezeAuthorityRevoked: true),
+            Program: new TokenProgramInfo(
+                ProgramType: "spl-token",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                Token2022Extensions: Array.Empty<string>()),
+            Age: new TokenAgeInfo(
+                AgeSeconds: null,
+                InferredCreatedAtUtc: null,
+                IsReliable: false,
+                UnavailableReason: "n/a"),
+            HolderConcentration: new HolderConcentration(
+                TopHolderPercentage: null,
+                Top5HoldersPercentage: null,
+                Top10HoldersPercentage: null,
+                SemanticsNote: "n/a",
+                UnclassifiedTokenAccountConcentration: null),
+            LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
+            PumpFunContext: null,
+            ProtocolContext: new ProtocolResearchContext(
+                Protocol: "other-protocol",
+                Sources: new[]
+                {
+                    new ResearchSource(
+                        Id: "src",
+                        SourceType: ResearchSourceType.OfficialDocumentation,
+                        Title: "Docs",
+                        Publisher: "Org",
+                        Url: "https://example.com",
+                        RetrievedAtUtc: null,
+                        PublishedAtUtc: null)
+                },
+                Claims: new[]
+                {
+                    new DocumentedClaim(
+                        Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+                        Category: "issuance",
+                        Statement: "Inflationary issuance is documented.",
+                        VerificationStatus: ResearchClaimVerificationStatus.Documented,
+                        VerificationMethod: ResearchClaimVerificationMethod.DocumentationOnly,
+                        SourceIds: new[] { "src" },
+                        ObservedFactReferences: Array.Empty<ObservedFactReference>(),
+                        VerificationNote: null)
+                }),
+            ReviewSignals: Array.Empty<TokenReviewSignal>(),
+            InspectedAtUtc: DateTimeOffset.UtcNow);
+
+        var signals = TokenReviewSignalFactory.Create(inspection);
+
+        Assert.Contains(signals, signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE");
+        Assert.Equal("informational", signals.Single(signal => signal.Id == "ACTIVE_MINT_AUTHORITY").Category);
     }
 
     [Fact]
@@ -208,15 +297,32 @@ public sealed class TokenReviewSignalFactoryTests
                 UnclassifiedTokenAccountConcentration: null),
             LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
             PumpFunContext: null,
-            ProtocolContext: new TokenProtocolContext(
+            ProtocolContext: new ProtocolResearchContext(
                 Protocol: ProtocolConstants.SolanaMobileSkrProtocolName,
-                Issuance: new TokenIssuanceProtocolContext(
-                    Classification: "documented_inflationary_issuance",
-                    Verification: "official_documentation",
-                    SourceIds: new[] { ProtocolConstants.SolanaMobileSkrTokenomicsSourceId },
-                    MintAuthorityStateConsistentWithDocumentedModel: false,
-                    MintAuthorityIdentityVerified: false,
-                    MintAuthorityIdentityVerificationNote: null)),
+                Sources: new[]
+                {
+                    new ResearchSource(
+                        Id: ProtocolConstants.SolanaMobileSkrTokenomicsSourceId,
+                        SourceType: ResearchSourceType.OfficialDocumentation,
+                        Title: "SKR docs",
+                        Publisher: "Solana Mobile",
+                        Url: "https://docs.solanamobile.com/solana-mobile-stack/skr",
+                        RetrievedAtUtc: null,
+                        PublishedAtUtc: null)
+                },
+                Claims: new[]
+                {
+                    new DocumentedClaim(
+                        Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+                        Category: "issuance",
+                        Statement: "Ongoing issuance for staking rewards is documented.",
+                        VerificationStatus: ResearchClaimVerificationStatus.Documented,
+                        VerificationMethod: ResearchClaimVerificationMethod.DocumentationOnly,
+                        SourceIds: new[] { ProtocolConstants.SolanaMobileSkrTokenomicsSourceId },
+                        ObservedFactReferences: Array.Empty<ObservedFactReference>(),
+                        VerificationNote: null,
+                        Consistency: ObservedConsistency.Conflict)
+                }),
             ReviewSignals: Array.Empty<TokenReviewSignal>(),
             InspectedAtUtc: DateTimeOffset.UtcNow);
 

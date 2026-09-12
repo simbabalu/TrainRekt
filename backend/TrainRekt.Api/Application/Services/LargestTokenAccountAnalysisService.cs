@@ -273,6 +273,11 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
             return null;
         }
 
+        if (!requestContext.PumpFun.BondingCurveAccountVerified)
+        {
+            return null;
+        }
+
         var detected = largestTokenAccounts.Any(account =>
             string.Equals(account.Classification.Protocol, ProtocolConstants.PumpFunProtocolName, StringComparison.Ordinal)
             && string.Equals(account.Classification.Classification, TokenAccountClassificationConstants.BondingCurve, StringComparison.Ordinal));
