@@ -5,6 +5,7 @@ using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Infrastructure.Helius;
 using TrainRekt.Api.Infrastructure.Mongo;
+using TrainRekt.Api.Infrastructure.Solana;
 
 namespace TrainRekt.Api.Api.Configuration;
 
@@ -93,10 +94,12 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
+        services.AddScoped<ISolanaAccountReader, ScopedSolanaAccountReader>();
         services.AddScoped<ITokenMetadataResolver, TokenMetadataResolver>();
         services.AddScoped<ILargestTokenAccountAnalysisService, LargestTokenAccountAnalysisService>();
         services.AddScoped<ITokenAccountClassificationService, TokenAccountClassificationService>();
         services.AddScoped<ITokenAccountClassifier, PumpFunBondingCurveClassifier>();
+        services.AddScoped<ITokenAccountClassifier, PumpSwapLiquidityClassifier>();
 
         var mongoOptions = configuration.GetSection(MongoDbOptions.SectionName).Get<MongoDbOptions>() ?? new MongoDbOptions();
         if (string.IsNullOrWhiteSpace(mongoOptions.ConnectionString))

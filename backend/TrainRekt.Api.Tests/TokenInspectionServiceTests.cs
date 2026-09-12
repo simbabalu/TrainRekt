@@ -9,6 +9,7 @@ using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Domain.Constants;
 using TrainRekt.Api.Domain.Models;
 using TrainRekt.Api.Domain.Utils;
+using TrainRekt.Api.Infrastructure.Solana;
 
 namespace TrainRekt.Api.Tests;
 
@@ -249,7 +250,7 @@ public sealed class TokenInspectionServiceTests
         var service = new TokenInspectionService(
             fakeClient,
             new TokenMetadataResolver(fakeClient),
-            new LargestTokenAccountAnalysisService(fakeClient, classificationService));
+            new LargestTokenAccountAnalysisService(fakeClient, new ScopedSolanaAccountReader(fakeClient), classificationService));
         var mint = "So11111111111111111111111111111111111111112";
 
         var mintData = BuildMintData(

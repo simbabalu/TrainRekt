@@ -22,6 +22,7 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
             new TokenMetadataResolver(heliusClient),
             new LargestTokenAccountAnalysisService(
                 heliusClient,
+                new ScopedSolanaAccountReader(heliusClient),
                 new TokenAccountClassificationService(Array.Empty<ITokenAccountClassifier>())))
     {
     }

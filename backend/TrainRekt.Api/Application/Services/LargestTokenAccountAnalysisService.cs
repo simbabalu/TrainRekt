@@ -15,13 +15,16 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
     private const int PumpFunBondingCurveCompleteOffset = 48;
 
     private readonly IHeliusClient _heliusClient;
+    private readonly ISolanaAccountReader _solanaAccountReader;
     private readonly ITokenAccountClassificationService _tokenAccountClassificationService;
 
     public LargestTokenAccountAnalysisService(
         IHeliusClient heliusClient,
+        ISolanaAccountReader solanaAccountReader,
         ITokenAccountClassificationService tokenAccountClassificationService)
     {
         _heliusClient = heliusClient;
+        _solanaAccountReader = solanaAccountReader;
         _tokenAccountClassificationService = tokenAccountClassificationService;
     }
 
@@ -50,17 +53,21 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
             .ToArray();
 
         var classificationRequestContext = await BuildClassificationRequestContextAsync(mint, mintProgramId, cancellationToken);
-        var largestTokenAccounts = await AnalyzeLargestTokenAccountsAsync(
+        var analyzedLargestTokenAccounts = await AnalyzeLargestTokenAccountsAsync(
             largestAccounts,
             mintSupply,
             classificationRequestContext,
             cancellationToken);
 
+        var largestTokenAccounts = analyzedLargestTokenAccounts
+            .Where(static account => ulong.TryParse(account.RawAmount, out var amount) && amount > 0)
+            .ToArray();
+
         return new LargestTokenAccountsAnalysis(
             LargestAccountBalances: largestAccountBalances,
             LargestTokenAccounts: largestTokenAccounts,
-            PumpFunContext: BuildPumpFunContext(classificationRequestContext, largestTokenAccounts),
-            UnclassifiedTokenAccountConcentration: BuildUnclassifiedConcentration(largestTokenAccounts));
+            PumpFunContext: BuildPumpFunContext(classificationRequestContext, analyzedLargestTokenAccounts),
+            UnclassifiedTokenAccountConcentration: BuildUnclassifiedConcentration(analyzedLargestTokenAccounts));
     }
 
     private async Task<TokenAccountClassificationRequestContext> BuildClassificationRequestContextAsync(
@@ -116,16 +123,8 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
             var bondingCurveAddressText = bondingCurveAddress.Key;
             var bondingCurveTokenAccountText = bondingCurveTokenAccount.Key;
 
-            using var accountInfoResult = await _heliusClient.SendRpcRequestAsync(
-                method: "getAccountInfo",
-                parameters:
-                [
-                    bondingCurveAddressText,
-                    new { encoding = "base64", commitment = "confirmed" }
-                ],
-                cancellationToken);
-
-            if (!HeliusRpcResponseReader.TryReadGenericAccountInfo(accountInfoResult.RootElement, out var accountOwner, out var accountData))
+            var accountInfo = await _solanaAccountReader.GetAccountInfoAsync(bondingCurveAddressText, cancellationToken);
+            if (accountInfo is null)
             {
                 return new PumpFunDerivation(
                     ProgramId: ProtocolConstants.PumpFunProgramId,
@@ -135,6 +134,8 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
                     Complete: null);
             }
 
+                    var accountOwner = accountInfo.OwnerProgramId;
+                    var accountData = accountInfo.Data;
             var ownerMatches = string.Equals(accountOwner, ProtocolConstants.PumpFunProgramId, StringComparison.Ordinal);
             var complete = ownerMatches && TryParsePumpFunCompleteFlag(accountData, out var completeValue)
                 ? (bool?)completeValue
@@ -164,7 +165,6 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
         CancellationToken cancellationToken)
     {
         var limitedAccounts = largestAccounts.Take(LargestTokenAccountsAnalysisLimit).ToArray();
-        var accountCache = new Dictionary<string, (string OwnerProgramId, byte[] Data)>(StringComparer.Ordinal);
         var analyzed = new List<AnalyzedTokenAccount>(limitedAccounts.Length);
 
         foreach (var account in limitedAccounts)
@@ -175,7 +175,7 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
             string? tokenProgramId = null;
 
             if (!string.IsNullOrWhiteSpace(account.Address)
-                && await TryGetTokenAccountInfoAsync(account.Address, accountCache, cancellationToken) is { } accountInfo
+                && await TryGetTokenAccountInfoAsync(account.Address, cancellationToken) is { } accountInfo
                 && SolanaTokenAccountParser.TryParse(accountInfo.OwnerProgramId, accountInfo.Data, out var parsed)
                 && parsed is not null)
             {
@@ -210,33 +210,17 @@ public sealed class LargestTokenAccountAnalysisService : ILargestTokenAccountAna
 
     private async Task<(string OwnerProgramId, byte[] Data)?> TryGetTokenAccountInfoAsync(
         string accountAddress,
-        IDictionary<string, (string OwnerProgramId, byte[] Data)> cache,
         CancellationToken cancellationToken)
     {
-        if (cache.TryGetValue(accountAddress, out var cached))
-        {
-            return cached;
-        }
-
         try
         {
-            using var accountInfo = await _heliusClient.SendRpcRequestAsync(
-                method: "getAccountInfo",
-                parameters:
-                [
-                    accountAddress,
-                    new { encoding = "base64", commitment = "confirmed" }
-                ],
-                cancellationToken);
-
-            if (!HeliusRpcResponseReader.TryReadGenericAccountInfo(accountInfo.RootElement, out var ownerProgramId, out var data))
+            var accountInfo = await _solanaAccountReader.GetAccountInfoAsync(accountAddress, cancellationToken);
+            if (accountInfo is null)
             {
                 return null;
             }
 
-            var value = (ownerProgramId, data);
-            cache[accountAddress] = value;
-            return value;
+            return (accountInfo.OwnerProgramId, accountInfo.Data);
         }
         catch (HeliusRpcException)
         {
