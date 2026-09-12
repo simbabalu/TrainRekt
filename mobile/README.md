@@ -1,80 +1,155 @@
 # TrainRekt Mobile
 
-TrainRekt is a local crypto decision-training simulator built with Expo, React Native, TypeScript, and Expo Router. It includes Android wallet connect/disconnect via Solana Mobile Wallet Adapter (MWA) for public-address identity only. Training simulations remain local and do not sign real transactions or messages.
+TrainRekt Mobile is the React Native/Expo implementation of TrainRekt: a Solana-focused decision and wallet-safety training app.
 
-## Run the app
+## Requirements
 
-From this directory:
+- Node.js (current LTS recommended; no `engines` pin is defined in [package.json](package.json))
+- npm
+- Android SDK + platform tools
+- JDK 17+
+- Android device for MWA testing (Solana Seeker or another compatible Android device)
+
+Expo Go is not sufficient for MWA functionality in this project. Use a development build.
+
+## Install
+
+From the repository root:
 
 ```bash
+cd mobile
 npm install
-npx expo run:android --device
-npx expo start --dev-client --android --port 8081
 ```
 
-Expo Go is not sufficient for Android wallet functionality. Use an Android development build (`expo run:android`) and launch through `expo-dev-client`.
+## Development
 
-JDK 17 is required for native Android builds in the current project setup:
+Build and run Android dev client:
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-export ORG_GRADLE_JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-cd android
-./gradlew app:assembleDebug
+cd mobile
+npx expo run:android --device
+npx expo start --dev-client --clear
 ```
 
-## App routes
+If you already have a development build installed on device, you can run only:
 
-- `/`: Home dashboard with training score and today's challenge
-- `/train`: SOL momentum scenario and decision evaluation
-- `/explore`: Progress, skills, and recent training history
-- `/settings`: Difficulty and local preference controls
+```bash
+cd mobile
+npx expo start --dev-client --clear
+```
+
+## Validation
+
+From [mobile](.):
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+npx expo export --platform android --output-dir /tmp/trainrekt-mobile-check
+```
+
+## Android Release Build
+
+This repo currently ignores generated native folders in [mobile/.gitignore](.gitignore), including `/android` and `/ios`. In practice, `android/` is generated/managed through Expo prebuild workflows and may be absent in a fresh clone until native generation is run.
+
+Release signing is configured in [android/app/build.gradle](android/app/build.gradle) using Gradle properties:
+
+- `TRAINREKT_UPLOAD_STORE_FILE`
+- `TRAINREKT_UPLOAD_KEY_ALIAS`
+- `TRAINREKT_UPLOAD_STORE_PASSWORD`
+- `TRAINREKT_UPLOAD_KEY_PASSWORD`
+
+Use environment/global Gradle properties to provide these values (never hardcode secrets).
+
+Release command that is used in this project workflow:
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+Avoid treating `./gradlew clean assembleRelease` as the default command in this codebase. If native autolinking/codegen state is stale, prefer targeted regeneration/re-sync steps over broad clean commands.
+
+## Routes
+
+- `/`: Home
+- `/train`: Daily/Practice training session
+- `/explore`: Progress
+- `/settings`: Settings and data controls
+- `/wallet-safety`: Wallet Safety screen (navigable route, hidden tab trigger)
 
 ## Architecture
 
-- `src/data/` contains mock scenarios and progress records.
-- `src/data/scenarioCatalog.ts` contains the twelve typed training scenarios.
-- `src/types/` contains domain interfaces and decision types.
-- `src/domain/training/` contains pure scenario evaluation logic.
-- `src/domain/training/` also contains weakest-skill, adaptive scenario selection, and daily-goal/streak logic.
-- `src/domain/progress/` contains pure XP, level, streak, skill, and history calculations.
-- `src/context/` owns the persisted training progress and settings state.
-- `src/context/WalletContext.tsx` owns wallet lifecycle state (disconnected/connecting/connected/error) and keeps the MWA auth token in memory only.
-- `src/hooks/` contains stateful training behavior.
-- `src/hooks/useWallet.ts` is the only app-level hook for wallet actions.
-- `src/components/` contains reusable presentation components.
-- `src/services/wallet/` contains the wallet service boundary and platform-specific implementations.
-- `src/constants/theme.ts` contains shared colors, spacing, radii, and typography.
+- [src/app](src/app): route composition and screen entry points
+- [src/components](src/components): reusable presentation components
+- [src/context](src/context): provider-managed app state
+- [src/hooks](src/hooks): stateful application hooks
+- [src/domain](src/domain): pure business logic
+- [src/data](src/data): catalogs and static exercise content
+- [src/services](src/services): wallet and Solana RPC boundaries
+- [src/storage](src/storage): AsyncStorage persistence adapters
+- [src/constants](src/constants): theme and app constants
+- [src/types](src/types): domain models and discriminated unions
 
-The wallet boundary is intentional: screens/components do not import MWA directly. Android native MWA calls stay behind `src/services/wallet/mobileWalletService`.
+Wallet native integration is isolated behind [src/services/wallet](src/services/wallet) and consumed through [src/context/WalletContext.tsx](src/context/WalletContext.tsx).
 
-## Checks
+## Exercise Architecture
 
-Run the strict TypeScript check from the mobile directory:
+`TrainingExercise` is a discriminated union in [src/types/exercise.ts](src/types/exercise.ts) with these implemented families:
 
-```bash
-./node_modules/.bin/tsc --noEmit --project tsconfig.json
-```
+- `decision`
+- `signature-simulation`
+- `transaction-inspection`
+- `permission-challenge`
+- `scam-detection`
+- `red-flag-identification`
 
-Run lint and unit tests:
+Runtime catalog assembly is in [src/data/exerciseCatalog.ts](src/data/exerciseCatalog.ts), and rendering dispatch is centralized in [src/app](src/app) by exercise type.
 
-```bash
-npm run lint
-npm test
-```
+## Training Progress
 
-Build an Android export for bundle validation:
+Training progress is managed by [src/context/TrainingProgressContext.tsx](src/context/TrainingProgressContext.tsx) and persisted in AsyncStorage through [src/storage/trainingProgressStorage.ts](src/storage/trainingProgressStorage.ts).
 
-```bash
-npx expo export --platform android
-```
+Current behavior:
 
-## Current MVP limitations
+- Daily mode increments daily completion counters and can award one daily bonus at goal completion
+- Practice mode does not increment daily counters/streaks
+- Practice XP uses a 25% multiplier via [src/domain/progress/calculateAwardedExerciseXp.ts](src/domain/progress/calculateAwardedExerciseXp.ts)
+- XP, level summary, win rate, streaks, skill scores, and recent history are derived/updated in domain logic
+- Surprise challenge completions can award bonus XP and badges
+- Achievements are rendered from canonical persisted badge state via [src/domain/progress/getEarnedAchievements.ts](src/domain/progress/getEarnedAchievements.ts)
+- `prepareDemo()` (DEV demo tools) resets local training progress, achievements, daily state, and surprise challenge completion
 
-- Progress and settings persist locally through AsyncStorage and survive app restarts.
-- Wallet integration is limited to connect/disconnect and displaying a public address. There is no balance fetching, backend wallet session management, or transaction submission.
-- The daily training goal is fixed at 3 completed decisions with a one-time local-day completion bonus.
-- The catalog currently contains twelve scenarios. The next recommendation prioritizes weak skills, recent mistakes, selected difficulty, and scenario variety without immediately repeating the current scenario.
-- A `__DEV__`-only Settings control can simulate the previous local day to test daily rollover without changing the device clock. It is excluded from production builds.
-- Signature Simulation SIGN/REJECT decisions are local training inputs only and do not call real wallet signing APIs.
-- There is no backend, Privy integration, direct Seed Vault API integration, or real asset trading.
+## Wallet Integration
+
+Wallet connection is implemented with Solana Mobile Wallet Adapter on Android in [src/services/wallet/mobileWalletService.impl.android.ts](src/services/wallet/mobileWalletService.impl.android.ts).
+
+Current implemented boundaries:
+
+- MWA authorize/connect and local disconnect state handling
+- Public wallet identity usage (address/label)
+- Read-only Solana RPC snapshot and inspection in Wallet Safety
+- Learn From Your Wallet recommendations based on observed technical signals
+
+Wallet Safety inspection currently reads:
+
+- SPL Token + Token-2022 token accounts
+- token account state (including frozen)
+- delegation / close authority fields
+- mint-level properties (mint/freeze authority state, supply/decimals)
+- Token-2022 extension facts (for supported extension kinds)
+- best-effort token metadata pointer resolution
+
+These observations are used as educational signals and recommendation inputs; they are not automatic scam verdicts.
+
+## Current Safety Boundaries
+
+- No seed phrase/private-key handling in app business logic
+- No real asset transaction submission
+- Signature/transaction/permission challenge decisions are simulated training interactions
+- Wallet inspection is read-only RPC
+- MWA auth token is held in memory and not persisted in training progress storage
+- Real wallet message signing path exists in service/context boundaries but is runtime-disabled (`REAL_MESSAGE_SIGNING_ENABLED = false`)
+- Disconnect intentionally clears local wallet state; native deauthorize is currently disabled pending verified-safe upstream behavior
+- No backend service is required for the current hackathon build
