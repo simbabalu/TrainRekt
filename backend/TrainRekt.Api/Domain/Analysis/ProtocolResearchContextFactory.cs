@@ -33,7 +33,7 @@ public static class ProtocolResearchContextFactory
         var mintAuthorityActive = !inspection.Authorities.MintAuthorityRevoked;
 
         var issuanceClaim = new DocumentedClaim(
-            Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+            Id: ResearchClaimIds.DocumentedInflationaryIssuance,
             Category: "issuance",
             Statement: "SKR documentation describes ongoing inflationary issuance associated with staking rewards.",
             VerificationStatus: ResearchClaimVerificationStatus.Documented,
@@ -63,7 +63,7 @@ public static class ProtocolResearchContextFactory
                 : "Documented inflationary issuance conflicts with observed revoked mint authority state.");
 
         var authorityIdentityClaim = new DocumentedClaim(
-            Id: "MINT_AUTHORITY_IDENTITY_MATCHES_DOCUMENTED_ISSUANCE_CONTROL",
+            Id: ResearchClaimIds.MintAuthorityIdentityMatchesDocumentedIssuanceControl,
             Category: "mint_authority",
             Statement: "The current mint-authority identity is deterministically tied to a documented issuance-control mechanism.",
             VerificationStatus: ResearchClaimVerificationStatus.NotVerified,

@@ -8,7 +8,9 @@ public enum ResearchSourceType
     OfficialDocumentation,
     OfficialWhitepaper,
     OfficialIdl,
-    OfficialRepository
+    OfficialRepository,
+    ProjectWebsite,
+    ThirdParty
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

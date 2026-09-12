@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using TrainRekt.Api.Application.Abstractions;
+using TrainRekt.Api.Application.Research;
 using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Infrastructure.Helius;
 using TrainRekt.Api.Infrastructure.Mongo;
@@ -55,6 +56,9 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenInspectionCollectionName),
                 "MongoDb:TokenInspectionCollectionName must be configured when MongoDb:Enabled is true.")
+            .Validate(
+                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenResearchCollectionName),
+                "MongoDb:TokenResearchCollectionName must be configured when MongoDb:Enabled is true.")
             .ValidateOnStart();
 
         services
@@ -63,6 +67,20 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => options.FreshnessMinutes > 0,
                 "TokenInspectionCache:FreshnessMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<TokenResearchOptions>()
+            .Bind(configuration.GetSection(TokenResearchOptions.SectionName))
+            .Validate(options => options.FreshnessHours > 0, "TokenResearch:FreshnessHours must be greater than zero.")
+            .Validate(options => options.LargestUnknownTokenAccountThresholdPercent >= 0m, "TokenResearch:LargestUnknownTokenAccountThresholdPercent must be non-negative.")
+            .Validate(options => options.MaxSources > 0, "TokenResearch:MaxSources must be greater than zero.")
+            .Validate(options => options.MaxClaims > 0, "TokenResearch:MaxClaims must be greater than zero.")
+            .Validate(options => options.MaxStatementLength > 0, "TokenResearch:MaxStatementLength must be greater than zero.")
+            .Validate(options => options.MaxUrlLength > 0, "TokenResearch:MaxUrlLength must be greater than zero.")
+            .Validate(options => options.MaxTitleLength > 0, "TokenResearch:MaxTitleLength must be greater than zero.")
+            .Validate(options => options.MaxPublisherLength > 0, "TokenResearch:MaxPublisherLength must be greater than zero.")
+            .Validate(options => options.ProviderTimeoutSeconds > 0, "TokenResearch:ProviderTimeoutSeconds must be greater than zero.")
             .ValidateOnStart();
 
         services.AddSingleton(TimeProvider.System);
@@ -94,6 +112,22 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
+        services.AddScoped<ITokenResearchOrchestrator, TokenResearchOrchestrator>();
+        services.AddScoped<IResearchTrustAssessor, NoOpResearchTrustAssessor>();
+        services.AddScoped<ResearchRequestFactory>();
+        services.AddScoped<DeterministicResearchVerifier>();
+        services.AddScoped<ProtocolResearchContextMerger>();
+        services.AddScoped<CandidateResearchPromoter>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
+            return new CandidateResearchPromoter(options);
+        });
+        services.AddScoped<ResearchNeedDetector>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
+            return new ResearchNeedDetector(options);
+        });
+        services.AddScoped<ITokenResearchProvider, NoOpTokenResearchProvider>();
         services.AddScoped<ISolanaAccountReader, ScopedSolanaAccountReader>();
         services.AddScoped<ITokenMetadataResolver, TokenMetadataResolver>();
         services.AddScoped<ILargestTokenAccountAnalysisService, LargestTokenAccountAnalysisService>();
@@ -119,11 +153,13 @@ public static class ServiceCollectionExtensions
             });
             services.AddScoped<ITokenRepository, MongoTokenRepository>();
             services.AddScoped<ITokenInspectionSnapshotRepository, MongoTokenInspectionSnapshotRepository>();
+            services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
             services.AddScoped<ITokenInspectionService, CachedTokenInspectionService>();
             services.AddHostedService<MongoIndexInitializerHostedService>();
         }
         else
         {
+            services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
             services.AddScoped<ITokenInspectionService, PassthroughTokenInspectionService>();
         }
 

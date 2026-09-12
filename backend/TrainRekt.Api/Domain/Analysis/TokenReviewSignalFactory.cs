@@ -11,7 +11,7 @@ public static class TokenReviewSignalFactory
         var signals = new List<TokenReviewSignal>();
 
         var issuanceClaim = inspection.ProtocolContext?.Claims.FirstOrDefault(static claim =>
-            string.Equals(claim.Id, "DOCUMENTED_INFLATIONARY_ISSUANCE", StringComparison.Ordinal));
+            string.Equals(claim.Id, ResearchClaimIds.DocumentedInflationaryIssuance, StringComparison.Ordinal));
 
         var hasDocumentedIssuanceContext = issuanceClaim is not null;
 
