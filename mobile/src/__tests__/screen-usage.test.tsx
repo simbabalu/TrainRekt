@@ -18,6 +18,10 @@ vi.mock('expo-router', () => ({
   useLocalSearchParams: () => ({}),
 }));
 
+vi.mock('expo-constants', () => ({
+  default: { expoConfig: { version: '1.0.1' } },
+}));
+
 vi.mock('@/components/Screen', () => ({
   Screen: ({ children }: { children: React.ReactNode }) => (
     <>

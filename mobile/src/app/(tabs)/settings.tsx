@@ -1,4 +1,5 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import { useState } from 'react';
 
 import { AppIcon, type AppIconName } from '@/components/AppIcon';
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const isConnected = status === 'connected' && Boolean(wallet);
   const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
   const walletDisplayIdentity = wallet ? getWalletDisplayIdentity(wallet) : null;
+  const appVersion = Constants.expoConfig?.version ?? 'Unavailable';
 
   function confirmResetProgress() {
     Alert.alert('Reset training progress?', 'This will restore the default training score and history.', [
@@ -122,7 +124,7 @@ export default function SettingsScreen() {
       <SectionCard>
         <Text style={styles.sectionTitle}>ABOUT</Text>
         <Text style={styles.about}>TrainRekt is a crypto decision-training simulator.{`\n`}No real assets are traded.</Text>
-        <View style={styles.version}><Text style={styles.muted}>Version</Text><Text style={styles.value}>0.1.0</Text></View>
+        <View style={styles.version}><Text style={styles.muted}>Version</Text><Text style={styles.value}>{appVersion}</Text></View>
       </SectionCard>
     </Screen>
   );
