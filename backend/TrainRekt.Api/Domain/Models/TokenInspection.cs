@@ -8,5 +8,6 @@ public sealed record TokenInspection(
     HolderConcentration HolderConcentration,
     IReadOnlyList<AnalyzedTokenAccount> LargestTokenAccounts,
     PumpFunContext? PumpFunContext,
+    TokenProtocolContext? ProtocolContext,
     IReadOnlyList<TokenReviewSignal> ReviewSignals,
     DateTimeOffset InspectedAtUtc);

@@ -12,6 +12,7 @@ public sealed record TokenInspectionResponse(
     HolderConcentration HolderConcentration,
     IReadOnlyList<AnalyzedTokenAccount> LargestTokenAccounts,
     PumpFunContext? PumpFunContext,
+    TokenProtocolContext? ProtocolContext,
     IReadOnlyList<TokenReviewSignal> ReviewSignals,
     DateTimeOffset InspectedAtUtc)
 {
@@ -25,6 +26,7 @@ public sealed record TokenInspectionResponse(
             HolderConcentration: inspection.HolderConcentration,
             LargestTokenAccounts: inspection.LargestTokenAccounts,
             PumpFunContext: inspection.PumpFunContext,
+            ProtocolContext: inspection.ProtocolContext,
             ReviewSignals: inspection.ReviewSignals,
             InspectedAtUtc: inspection.InspectedAtUtc);
     }

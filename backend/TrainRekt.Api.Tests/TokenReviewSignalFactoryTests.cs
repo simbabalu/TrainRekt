@@ -1,5 +1,6 @@
 using System.Globalization;
 using TrainRekt.Api.Domain.Analysis;
+using TrainRekt.Api.Domain.Constants;
 using TrainRekt.Api.Domain.Models;
 
 namespace TrainRekt.Api.Tests;
@@ -40,6 +41,7 @@ public sealed class TokenReviewSignalFactoryTests
                 UnclassifiedTokenAccountConcentration: null),
             LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
             PumpFunContext: null,
+            ProtocolContext: null,
             ReviewSignals: Array.Empty<TokenReviewSignal>(),
             InspectedAtUtc: DateTimeOffset.UtcNow);
 
@@ -95,6 +97,7 @@ public sealed class TokenReviewSignalFactoryTests
                     UnclassifiedTokenAccountConcentration: null),
                 LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
                 PumpFunContext: null,
+                ProtocolContext: null,
                 ReviewSignals: Array.Empty<TokenReviewSignal>(),
                 InspectedAtUtc: DateTimeOffset.UtcNow);
 
@@ -109,5 +112,117 @@ public sealed class TokenReviewSignalFactoryTests
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
+    }
+
+    [Fact]
+    public void Create_SkrContextAddsDocumentedIssuanceSignalAndKeepsMintAuthorityFact()
+    {
+        var inspection = new TokenInspection(
+            Identity: new TokenIdentity(
+                Mint: ProtocolConstants.SolanaMobileSkrMint,
+                Name: "SKR",
+                Symbol: "SKR",
+                Decimals: 6,
+                SupplyRaw: "10000000000",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                MetadataUri: null),
+            Authorities: new TokenAuthorities(
+                MintAuthority: "auth",
+                MintAuthorityRevoked: false,
+                FreezeAuthority: null,
+                FreezeAuthorityRevoked: true),
+            Program: new TokenProgramInfo(
+                ProgramType: "spl-token",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                Token2022Extensions: Array.Empty<string>()),
+            Age: new TokenAgeInfo(
+                AgeSeconds: null,
+                InferredCreatedAtUtc: null,
+                IsReliable: false,
+                UnavailableReason: "n/a"),
+            HolderConcentration: new HolderConcentration(
+                TopHolderPercentage: null,
+                Top5HoldersPercentage: null,
+                Top10HoldersPercentage: null,
+                SemanticsNote: "n/a",
+                UnclassifiedTokenAccountConcentration: null),
+            LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
+            PumpFunContext: null,
+            ProtocolContext: new TokenProtocolContext(
+                Protocol: ProtocolConstants.SolanaMobileSkrProtocolName,
+                Issuance: new TokenIssuanceProtocolContext(
+                    Classification: "documented_inflationary_issuance",
+                    Verification: "official_documentation",
+                    SourceIds: new[]
+                    {
+                        ProtocolConstants.SolanaMobileSkrTokenomicsSourceId,
+                        ProtocolConstants.SolanaMobileSkrStakingIdlSourceId
+                    },
+                    MintAuthorityStateConsistentWithDocumentedModel: true,
+                    MintAuthorityIdentityVerified: false,
+                    MintAuthorityIdentityVerificationNote: "not tied to a specific key")),
+            ReviewSignals: Array.Empty<TokenReviewSignal>(),
+            InspectedAtUtc: DateTimeOffset.UtcNow);
+
+        var signals = TokenReviewSignalFactory.Create(inspection);
+
+        var activeMintAuthority = Assert.Single(signals.Where(signal => signal.Id == "ACTIVE_MINT_AUTHORITY"));
+        Assert.Equal("informational", activeMintAuthority.Category);
+
+        var documentedIssuance = Assert.Single(signals.Where(signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE"));
+        Assert.Equal("official_documentation", documentedIssuance.Evidence["sourceType"]);
+        Assert.Equal("false", documentedIssuance.Evidence["mintAuthorityIdentityVerified"]);
+    }
+
+    [Fact]
+    public void Create_SkrContextWithRevokedMintAuthority_EmitsMismatchSignal()
+    {
+        var inspection = new TokenInspection(
+            Identity: new TokenIdentity(
+                Mint: ProtocolConstants.SolanaMobileSkrMint,
+                Name: "SKR",
+                Symbol: "SKR",
+                Decimals: 6,
+                SupplyRaw: "10000000000",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                MetadataUri: null),
+            Authorities: new TokenAuthorities(
+                MintAuthority: null,
+                MintAuthorityRevoked: true,
+                FreezeAuthority: null,
+                FreezeAuthorityRevoked: true),
+            Program: new TokenProgramInfo(
+                ProgramType: "spl-token",
+                ProgramId: SolanaTokenConstants.SplTokenProgramId,
+                Token2022Extensions: Array.Empty<string>()),
+            Age: new TokenAgeInfo(
+                AgeSeconds: null,
+                InferredCreatedAtUtc: null,
+                IsReliable: false,
+                UnavailableReason: "n/a"),
+            HolderConcentration: new HolderConcentration(
+                TopHolderPercentage: null,
+                Top5HoldersPercentage: null,
+                Top10HoldersPercentage: null,
+                SemanticsNote: "n/a",
+                UnclassifiedTokenAccountConcentration: null),
+            LargestTokenAccounts: Array.Empty<AnalyzedTokenAccount>(),
+            PumpFunContext: null,
+            ProtocolContext: new TokenProtocolContext(
+                Protocol: ProtocolConstants.SolanaMobileSkrProtocolName,
+                Issuance: new TokenIssuanceProtocolContext(
+                    Classification: "documented_inflationary_issuance",
+                    Verification: "official_documentation",
+                    SourceIds: new[] { ProtocolConstants.SolanaMobileSkrTokenomicsSourceId },
+                    MintAuthorityStateConsistentWithDocumentedModel: false,
+                    MintAuthorityIdentityVerified: false,
+                    MintAuthorityIdentityVerificationNote: null)),
+            ReviewSignals: Array.Empty<TokenReviewSignal>(),
+            InspectedAtUtc: DateTimeOffset.UtcNow);
+
+        var signals = TokenReviewSignalFactory.Create(inspection);
+
+        Assert.DoesNotContain(signals, signal => signal.Id == "ACTIVE_MINT_AUTHORITY");
+        Assert.Contains(signals, signal => signal.Id == "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE");
     }
 }

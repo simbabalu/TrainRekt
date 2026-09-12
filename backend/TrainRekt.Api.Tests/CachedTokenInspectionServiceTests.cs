@@ -317,6 +317,7 @@ public sealed class CachedTokenInspectionServiceTests
                 BondingCurveAddress: "curve",
                 BondingCurveTokenAccount: "tok1",
                 Complete: false),
+            ProtocolContext: null,
             ReviewSignals: new[]
             {
                 new TokenReviewSignal(

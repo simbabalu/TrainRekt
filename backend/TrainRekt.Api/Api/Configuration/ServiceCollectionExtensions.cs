@@ -100,6 +100,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenAccountClassificationService, TokenAccountClassificationService>();
         services.AddScoped<ITokenAccountClassifier, PumpFunBondingCurveClassifier>();
         services.AddScoped<ITokenAccountClassifier, PumpSwapLiquidityClassifier>();
+        services.AddScoped<ITokenAccountClassifier, SkrStakingVaultClassifier>();
 
         var mongoOptions = configuration.GetSection(MongoDbOptions.SectionName).Get<MongoDbOptions>() ?? new MongoDbOptions();
         if (string.IsNullOrWhiteSpace(mongoOptions.ConnectionString))

@@ -10,17 +10,72 @@ public static class TokenReviewSignalFactory
     {
         var signals = new List<TokenReviewSignal>();
 
+        var issuanceContext = inspection.ProtocolContext?.Issuance;
+        var hasDocumentedInflationaryIssuance = issuanceContext is not null
+            && string.Equals(inspection.ProtocolContext?.Protocol, ProtocolConstants.SolanaMobileSkrProtocolName, StringComparison.Ordinal)
+            && string.Equals(issuanceContext.Classification, "documented_inflationary_issuance", StringComparison.Ordinal)
+            && string.Equals(issuanceContext.Verification, "official_documentation", StringComparison.Ordinal);
+
         if (!inspection.Authorities.MintAuthorityRevoked)
         {
+            var explanation = "Mint authority is active, meaning additional supply can still be minted.";
+            var category = "review";
+            var severity = "medium";
+
+            if (hasDocumentedInflationaryIssuance)
+            {
+                explanation = "Mint authority is active. Official Solana Mobile documentation describes ongoing SKR issuance for staking rewards.";
+                category = "informational";
+                severity = "info";
+            }
+
             signals.Add(new TokenReviewSignal(
                 Id: "ACTIVE_MINT_AUTHORITY",
-                Category: "review",
-                Severity: "medium",
-                Explanation: "Mint authority is active, meaning additional supply can still be minted.",
+                Category: category,
+                Severity: severity,
+                Explanation: explanation,
                 Evidence: new Dictionary<string, string>
                 {
                     ["mintAuthority"] = inspection.Authorities.MintAuthority ?? "unknown"
                 }));
+        }
+
+        if (hasDocumentedInflationaryIssuance && issuanceContext is not null)
+        {
+            var evidence = new Dictionary<string, string>
+            {
+                ["protocol"] = ProtocolConstants.SolanaMobileSkrProtocolName,
+                ["sourceType"] = issuanceContext.Verification,
+                ["sourceIds"] = string.Join(",", issuanceContext.SourceIds),
+                ["mintAuthorityStateConsistentWithDocumentedModel"] = issuanceContext.MintAuthorityStateConsistentWithDocumentedModel ? "true" : "false",
+                ["mintAuthorityIdentityVerified"] = issuanceContext.MintAuthorityIdentityVerified ? "true" : "false"
+            };
+
+            if (!string.IsNullOrWhiteSpace(issuanceContext.MintAuthorityIdentityVerificationNote))
+            {
+                evidence["mintAuthorityIdentityVerificationNote"] = issuanceContext.MintAuthorityIdentityVerificationNote;
+            }
+
+            signals.Add(new TokenReviewSignal(
+                Id: "DOCUMENTED_INFLATIONARY_ISSUANCE",
+                Category: "informational",
+                Severity: "info",
+                Explanation: "Official Solana Mobile sources document SKR inflationary issuance and staking rewards.",
+                Evidence: evidence));
+
+            if (!issuanceContext.MintAuthorityStateConsistentWithDocumentedModel)
+            {
+                signals.Add(new TokenReviewSignal(
+                    Id: "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE",
+                    Category: "review",
+                    Severity: "medium",
+                    Explanation: "Official SKR sources describe ongoing issuance, but this mint currently has no active mint authority.",
+                    Evidence: new Dictionary<string, string>
+                    {
+                        ["mintAuthorityRevoked"] = "true",
+                        ["sourceIds"] = string.Join(",", issuanceContext.SourceIds)
+                    }));
+            }
         }
 
         if (!inspection.Authorities.FreezeAuthorityRevoked)

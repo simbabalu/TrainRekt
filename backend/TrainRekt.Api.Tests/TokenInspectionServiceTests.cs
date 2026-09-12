@@ -299,6 +299,66 @@ public sealed class TokenInspectionServiceTests
         Assert.Equal(0m, result.Inspection.HolderConcentration.UnclassifiedTokenAccountConcentration.UnknownPercentageWithinReportedLargestAccounts);
     }
 
+    [Fact]
+    public async Task InspectAsync_CanonicalSkrMintWithActiveMintAuthority_PreservesRawAuthorityFactAndAddsDocumentedIssuanceContext()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var service = new TokenInspectionService(fakeClient);
+        var mint = ProtocolConstants.SolanaMobileSkrMint;
+
+        var mintData = BuildMintData(
+            supply: 10_000_000_000,
+            decimals: 6,
+            mintAuthorityOption: 1,
+            freezeAuthorityOption: 0);
+
+        fakeClient.Enqueue("getAccountInfo", $"{{\"jsonrpc\":\"2.0\",\"result\":{{\"value\":{{\"owner\":\"{SolanaTokenConstants.SplTokenProgramId}\",\"data\":[\"{Convert.ToBase64String(mintData)}\",\"base64\"]}}}}}}");
+        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+        fakeClient.Enqueue("getTokenLargestAccounts", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":[{\"amount\":\"1000000\"}]}}");
+        fakeClient.Enqueue("getAsset", "{\"jsonrpc\":\"2.0\",\"result\":{\"content\":{\"metadata\":{\"name\":\"SKR\",\"symbol\":\"SKR\"},\"json_uri\":null}}}");
+
+        var result = await service.InspectAsync(mint, CancellationToken.None);
+
+        Assert.NotNull(result.Inspection);
+        Assert.False(result.Inspection.Authorities.MintAuthorityRevoked);
+        Assert.NotNull(result.Inspection.Authorities.MintAuthority);
+
+        Assert.NotNull(result.Inspection.ProtocolContext);
+        Assert.Equal(ProtocolConstants.SolanaMobileSkrProtocolName, result.Inspection.ProtocolContext.Protocol);
+        Assert.NotNull(result.Inspection.ProtocolContext.Issuance);
+        Assert.Equal("documented_inflationary_issuance", result.Inspection.ProtocolContext.Issuance.Classification);
+
+        Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "ACTIVE_MINT_AUTHORITY");
+        Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE");
+    }
+
+    [Fact]
+    public async Task InspectAsync_CanonicalSkrMintWithRevokedMintAuthority_EmitsDocumentedIssuanceMismatchSignal()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var service = new TokenInspectionService(fakeClient);
+        var mint = ProtocolConstants.SolanaMobileSkrMint;
+
+        var mintData = BuildMintData(
+            supply: 10_000_000_000,
+            decimals: 6,
+            mintAuthorityOption: 0,
+            freezeAuthorityOption: 0);
+
+        fakeClient.Enqueue("getAccountInfo", $"{{\"jsonrpc\":\"2.0\",\"result\":{{\"value\":{{\"owner\":\"{SolanaTokenConstants.SplTokenProgramId}\",\"data\":[\"{Convert.ToBase64String(mintData)}\",\"base64\"]}}}}}}");
+        fakeClient.Enqueue("getAccountInfo", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":null}}");
+        fakeClient.Enqueue("getTokenLargestAccounts", "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":[{\"amount\":\"1000000\"}]}}");
+        fakeClient.Enqueue("getAsset", "{\"jsonrpc\":\"2.0\",\"result\":{\"content\":{\"metadata\":{\"name\":\"SKR\",\"symbol\":\"SKR\"},\"json_uri\":null}}}");
+
+        var result = await service.InspectAsync(mint, CancellationToken.None);
+
+        Assert.NotNull(result.Inspection);
+        Assert.True(result.Inspection.Authorities.MintAuthorityRevoked);
+        Assert.NotNull(result.Inspection.ProtocolContext?.Issuance);
+        Assert.False(result.Inspection.ProtocolContext.Issuance.MintAuthorityStateConsistentWithDocumentedModel);
+        Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE");
+    }
+
     private static byte[] BuildMintData(ulong supply, byte decimals, uint mintAuthorityOption, uint freezeAuthorityOption)
     {
         var data = new byte[SolanaTokenConstants.MintAccountBaseLengthBytes];

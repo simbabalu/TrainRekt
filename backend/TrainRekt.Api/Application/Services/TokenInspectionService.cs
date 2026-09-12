@@ -149,11 +149,15 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
                 HolderConcentration: concentration,
                 LargestTokenAccounts: largestAccountAnalysis.LargestTokenAccounts,
                 PumpFunContext: largestAccountAnalysis.PumpFunContext,
+                ProtocolContext: null,
                 ReviewSignals: Array.Empty<TokenReviewSignal>(),
                 InspectedAtUtc: DateTimeOffset.UtcNow);
 
-            var reviewSignals = TokenReviewSignalFactory.Create(baseInspection);
-            var inspection = baseInspection with { ReviewSignals = reviewSignals };
+            var protocolContext = TokenProtocolContextFactory.Create(baseInspection);
+            var withProtocolContext = baseInspection with { ProtocolContext = protocolContext };
+
+            var reviewSignals = TokenReviewSignalFactory.Create(withProtocolContext);
+            var inspection = withProtocolContext with { ReviewSignals = reviewSignals };
 
             return TokenInspectionResult.Success(inspection);
         }
