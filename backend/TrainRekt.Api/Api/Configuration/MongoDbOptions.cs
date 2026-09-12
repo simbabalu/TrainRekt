@@ -1,0 +1,16 @@
+namespace TrainRekt.Api.Api.Configuration;
+
+public sealed class MongoDbOptions
+{
+    public const string SectionName = "MongoDb";
+
+    public bool Enabled { get; set; }
+
+    public string? ConnectionString { get; set; }
+
+    public string DatabaseName { get; set; } = "trainrekt";
+
+    public string TokenCollectionName { get; set; } = "tokens";
+
+    public string TokenInspectionCollectionName { get; set; } = "tokenInspections";
+}

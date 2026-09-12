@@ -8,6 +8,10 @@ web-build/
 .env
 .env.*
 !.env.example
+backend/**/appsettings.Local.json
+backend/**/appsettings.*.local.json
+backend/**/.env
+backend/**/.env.*
 
 # .NET
 bin/
@@ -30,3 +34,6 @@ Thumbs.db
 # Build artifacts
 *.apk
 *.aab
+
+# Local release artifacts
+release/

@@ -1,0 +1,186 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
+using TrainRekt.Api.Api.Configuration;
+using TrainRekt.Api.Application.Abstractions;
+using TrainRekt.Api.Application.Services;
+
+namespace TrainRekt.Api.Tests;
+
+public sealed class MongoEnablementConfigurationTests
+{
+    [Fact]
+    public void AddApiServices_EnabledFalse_SelectsPassthroughInspectionService()
+    {
+        var services = new ServiceCollection();
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+            ["MongoDb:Enabled"] = "false"
+        });
+
+        services.AddApiServices(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
+
+        Assert.IsType<PassthroughTokenInspectionService>(service);
+        Assert.Null(scope.ServiceProvider.GetService<IMongoClient>());
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueWithValidConfiguration_SelectsCachedInspectionService()
+    {
+        var services = new ServiceCollection();
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+            ["MongoDb:Enabled"] = "true",
+            ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+            ["MongoDb:DatabaseName"] = "trainrekt",
+            ["MongoDb:TokenCollectionName"] = "tokens",
+            ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+        });
+
+        services.AddApiServices(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
+
+        Assert.IsType<CachedTokenInspectionService>(service);
+        Assert.NotNull(scope.ServiceProvider.GetService<IMongoClient>());
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingConnectionString_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+            })));
+
+        Assert.Contains("MongoDb:ConnectionString", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingDatabaseName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+            })));
+
+        Assert.Contains("MongoDb:DatabaseName", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingTokenCollectionName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+            })));
+
+        Assert.Contains("MongoDb:TokenCollectionName", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingTokenInspectionCollectionName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = ""
+            })));
+
+        Assert.Contains("MongoDb:TokenInspectionCollectionName", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueNeverFallsBackToPassthrough()
+    {
+        var services = new ServiceCollection();
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+            ["MongoDb:Enabled"] = "true",
+            ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+            ["MongoDb:DatabaseName"] = "trainrekt",
+            ["MongoDb:TokenCollectionName"] = "tokens",
+            ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+        });
+
+        services.AddApiServices(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
+
+        Assert.IsNotType<PassthroughTokenInspectionService>(service);
+        Assert.IsType<CachedTokenInspectionService>(service);
+    }
+
+    [Fact]
+    public void AddApiServices_ValidationErrorsDoNotExposeConnectionStringValues()
+    {
+        const string secretLikeConnectionString = "mongodb://user:super-secret-password@localhost:27017";
+
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = secretLikeConnectionString,
+                ["MongoDb:DatabaseName"] = "",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections"
+            })));
+
+        Assert.DoesNotContain(secretLikeConnectionString, ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("super-secret-password", ex.Message, StringComparison.Ordinal);
+    }
+
+    private static MongoDbOptions BuildAndGetMongoOptions(IConfiguration configuration)
+    {
+        var services = new ServiceCollection();
+        services.AddApiServices(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IOptions<MongoDbOptions>>().Value;
+    }
+
+    private static IConfiguration BuildConfiguration(IDictionary<string, string?> values)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+    }
+}
