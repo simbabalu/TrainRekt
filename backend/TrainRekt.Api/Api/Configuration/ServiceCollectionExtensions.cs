@@ -93,6 +93,8 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
+        services.AddScoped<ITokenMetadataResolver, TokenMetadataResolver>();
+        services.AddScoped<ILargestTokenAccountAnalysisService, LargestTokenAccountAnalysisService>();
         services.AddScoped<ITokenAccountClassificationService, TokenAccountClassificationService>();
         services.AddScoped<ITokenAccountClassifier, PumpFunBondingCurveClassifier>();
 

@@ -246,7 +246,10 @@ public sealed class TokenInspectionServiceTests
         {
             new PumpFunBondingCurveClassifier()
         });
-        var service = new TokenInspectionService(fakeClient, classificationService);
+        var service = new TokenInspectionService(
+            fakeClient,
+            new TokenMetadataResolver(fakeClient),
+            new LargestTokenAccountAnalysisService(fakeClient, classificationService));
         var mint = "So11111111111111111111111111111111111111112";
 
         var mintData = BuildMintData(
