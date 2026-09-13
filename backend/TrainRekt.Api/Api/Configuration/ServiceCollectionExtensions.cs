@@ -79,6 +79,12 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services
+            .AddOptions<TokenIdentityClassificationOptions>()
+            .Bind(configuration.GetSection(TokenIdentityClassificationOptions.SectionName))
+            .Validate(options => options.MaxClassificationCompetitors > 0, "TokenIdentityClassification:MaxClassificationCompetitors must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<OnChainChronologyOptions>()
             .Bind(configuration.GetSection(OnChainChronologyOptions.SectionName))
             .Validate(options => options.PageSize > 0, "OnChainChronology:PageSize must be greater than zero.")
@@ -204,6 +210,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IdentitySourceCandidateExtractor>();
         services.AddScoped<IOnChainChronologyService, OnChainChronologyService>();
         services.AddScoped<ITrustedIdentityProvenanceService, TrustedIdentityProvenanceService>();
+        services.AddScoped<ITokenIdentityClassifier, TokenIdentityClassifier>();
         services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
         services.AddScoped<AiSafetyCoachResponseValidator>();

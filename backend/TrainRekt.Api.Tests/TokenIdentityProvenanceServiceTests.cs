@@ -382,6 +382,138 @@ public sealed class TokenIdentityProvenanceServiceTests
         Assert.Contains(TokenIdentityProvenanceUnknown.IdentitySourceConflict, result.Provenance.Unknowns);
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_NoCollision_DoesNotFetchCompetitorChronology()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(0, Array.Empty<TokenIdentityObservation>())
+        };
+
+        var chronology = new StubChronologyService();
+        var service = CreateService(inspectionService, repository, chronology);
+
+        _ = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.Equal(1, chronology.CallCount);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_CollisionWithoutTrustedCompetitorEvidence_DoesNotFetchCompetitorChronology()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(
+                1,
+                new[]
+                {
+                    new TokenIdentityObservation(
+                        Mint: "Mint222",
+                        RawName: "Research Token",
+                        NormalizedName: "research token",
+                        RawSymbol: "RCH",
+                        NormalizedSymbol: "rch",
+                        TokenProgram: inspection.Program.ProgramId,
+                        FirstObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-20),
+                        LastObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-10),
+                        ObservationVersion: 1)
+                })
+        };
+
+        var chronology = new StubChronologyService();
+        var trusted = new StubTrustedIdentityProvenanceService
+        {
+            NextResult = new TrustedIdentityProvenance(
+                Sources: new[]
+                {
+                    new IdentitySourceEvidence(
+                        Url: "https://project.example",
+                        Publisher: "project",
+                        SourceTrust: IdentitySourceTrust.ClaimedProjectSource,
+                        MintLinkStatus: IdentityMintLinkStatus.ReferencesCompetingMint,
+                        ReferencedRelevantMints: new[] { "Mint222" },
+                        EvidenceSummary: "claimed")
+                },
+                Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Unknowns: Array.Empty<TrustedIdentityProvenanceUnknown>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow)
+        };
+
+        var service = CreateService(inspectionService, repository, chronology, trustedService: trusted);
+
+        _ = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.Equal(1, chronology.CallCount);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_TrustedCompetitorEvidence_FetchesAtMostOneCompetitorChronology()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(
+                2,
+                new[]
+                {
+                    new TokenIdentityObservation(
+                        Mint: "Mint222",
+                        RawName: "Research Token",
+                        NormalizedName: "research token",
+                        RawSymbol: "RCH",
+                        NormalizedSymbol: "rch",
+                        TokenProgram: inspection.Program.ProgramId,
+                        FirstObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-20),
+                        LastObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-10),
+                        ObservationVersion: 1),
+                    new TokenIdentityObservation(
+                        Mint: "Mint333",
+                        RawName: "Research Token",
+                        NormalizedName: "research token",
+                        RawSymbol: "RCH",
+                        NormalizedSymbol: "rch",
+                        TokenProgram: inspection.Program.ProgramId,
+                        FirstObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-19),
+                        LastObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-9),
+                        ObservationVersion: 1)
+                })
+        };
+
+        var chronology = new StubChronologyService();
+        var trusted = new StubTrustedIdentityProvenanceService
+        {
+            NextResult = new TrustedIdentityProvenance(
+                Sources: new[]
+                {
+                    new IdentitySourceEvidence(
+                        Url: "https://trusted.example",
+                        Publisher: "trusted",
+                        SourceTrust: IdentitySourceTrust.Trusted,
+                        MintLinkStatus: IdentityMintLinkStatus.ReferencesCompetingMint,
+                        ReferencedRelevantMints: new[] { "Mint222" },
+                        EvidenceSummary: "trusted competitor")
+                },
+                Evidence: new[] { new TokenIdentityProvenanceEvidence("TRUSTED_SOURCE_REFERENCES_COMPETING_MINT", "trusted competitor") },
+                Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Unknowns: Array.Empty<TrustedIdentityProvenanceUnknown>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow)
+        };
+
+        var service = CreateService(inspectionService, repository, chronology, trustedService: trusted);
+
+        var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.Equal(2, chronology.CallCount);
+        Assert.NotNull(result.Provenance);
+        Assert.NotNull(result.Provenance!.IdentityClassification);
+    }
+
     private static TokenInspection CreateInspection(string mint, string? name, string? symbol, ProtocolResearchContext? protocolContext = null)
     {
         var baseInspection = ResearchTestData.CreateInspection(protocolContext: protocolContext);
@@ -413,8 +545,10 @@ public sealed class TokenIdentityProvenanceServiceTests
             observationRepository,
             chronologyService,
             trustedService,
+            new TokenIdentityClassifier(),
             new TokenIdentityNormalizer(),
             Options.Create(options),
+            Options.Create(new TokenIdentityClassificationOptions { MaxClassificationCompetitors = 1 }),
             new FixedTimeProvider(now),
             NullLogger<TokenIdentityProvenanceService>.Instance);
     }
@@ -457,8 +591,12 @@ public sealed class TokenIdentityProvenanceServiceTests
 
         public bool ThrowUnexpected { get; set; }
 
+        public int CallCount { get; private set; }
+
         public Task<OnChainChronologyEvidence> AnalyzeAsync(string mint, CancellationToken cancellationToken)
         {
+            CallCount += 1;
+
             if (ThrowUnexpected)
             {
                 throw new InvalidOperationException("chronology failed");

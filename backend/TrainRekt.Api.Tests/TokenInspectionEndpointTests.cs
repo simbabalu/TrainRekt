@@ -290,8 +290,10 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
                         serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
                         serviceProvider.GetRequiredService<IOnChainChronologyService>(),
                         new StubTrustedIdentityProvenanceService(),
+                        new TokenIdentityClassifier(),
                         new TokenIdentityNormalizer(),
                         Options.Create(new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 25 }),
+                        Options.Create(new TokenIdentityClassificationOptions { MaxClassificationCompetitors = 1 }),
                         TimeProvider.System,
                         Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenIdentityProvenanceService>.Instance));
             });
@@ -383,8 +385,10 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
                         serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
                         serviceProvider.GetRequiredService<IOnChainChronologyService>(),
                         serviceProvider.GetRequiredService<ITrustedIdentityProvenanceService>(),
+                        new TokenIdentityClassifier(),
                         new TokenIdentityNormalizer(),
                         Options.Create(new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 25 }),
+                        Options.Create(new TokenIdentityClassificationOptions { MaxClassificationCompetitors = 1 }),
                         TimeProvider.System,
                         Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenIdentityProvenanceService>.Instance));
             });
@@ -482,7 +486,7 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.Contains("trustedIdentityProvenance", json, StringComparison.Ordinal);
         Assert.Contains("onChainChronology", json, StringComparison.Ordinal);
         Assert.DoesNotContain("social", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("copycat", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CONFIRMED_COPYCAT", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("original", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("safe", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("scam", json, StringComparison.OrdinalIgnoreCase);

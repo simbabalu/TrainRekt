@@ -14,8 +14,10 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     private readonly ITokenIdentityObservationRepository _observationRepository;
     private readonly IOnChainChronologyService _chronologyService;
     private readonly ITrustedIdentityProvenanceService _trustedIdentityProvenanceService;
+    private readonly ITokenIdentityClassifier _identityClassifier;
     private readonly TokenIdentityNormalizer _normalizer;
     private readonly TokenIdentityProvenanceOptions _options;
+    private readonly TokenIdentityClassificationOptions _classificationOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<TokenIdentityProvenanceService> _logger;
 
@@ -24,8 +26,10 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         ITokenIdentityObservationRepository observationRepository,
         IOnChainChronologyService chronologyService,
         ITrustedIdentityProvenanceService trustedIdentityProvenanceService,
+        ITokenIdentityClassifier identityClassifier,
         TokenIdentityNormalizer normalizer,
         IOptions<TokenIdentityProvenanceOptions> options,
+        IOptions<TokenIdentityClassificationOptions> classificationOptions,
         TimeProvider timeProvider,
         ILogger<TokenIdentityProvenanceService> logger)
     {
@@ -33,8 +37,10 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         _observationRepository = observationRepository;
         _chronologyService = chronologyService;
         _trustedIdentityProvenanceService = trustedIdentityProvenanceService;
+        _identityClassifier = identityClassifier;
         _normalizer = normalizer;
         _options = options.Value;
+        _classificationOptions = classificationOptions.Value;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -196,7 +202,14 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
 
         var (resultType, confidence) = DetermineResult(observation, collisions, isTruncated, trustedIdentityProvenance);
 
-        var provenance = new TokenIdentityProvenance(
+        var competingChronologies = await AnalyzeCompetingChronologiesAsync(
+            observation,
+            collisions,
+            trustedIdentityProvenance,
+            nowUtc,
+            cancellationToken);
+
+        var baseProvenance = new TokenIdentityProvenance(
             Result: resultType,
             Confidence: confidence,
             ScannedIdentity: new TokenIdentityProvenanceScannedIdentity(
@@ -221,9 +234,123 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             Unknowns: unknowns,
             AnalyzedAtUtc: nowUtc,
             OnChainChronology: chronology,
-            TrustedIdentityProvenance: trustedIdentityProvenance);
+            TrustedIdentityProvenance: trustedIdentityProvenance,
+            CompetingMintChronologies: competingChronologies);
+
+        var identityClassification = _identityClassifier.Classify(baseProvenance);
+        var provenance = baseProvenance with
+        {
+            IdentityClassification = identityClassification
+        };
 
         return new TokenIdentityProvenanceResult(null, provenance);
+    }
+
+    private async Task<IReadOnlyList<CompetingMintChronologyEvidence>> AnalyzeCompetingChronologiesAsync(
+        TokenIdentityObservation observation,
+        IReadOnlyList<TokenIdentityCollision> collisions,
+        TrustedIdentityProvenance trustedIdentityProvenance,
+        DateTimeOffset analyzedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (observation.NormalizedName is null && observation.NormalizedSymbol is null)
+        {
+            return Array.Empty<CompetingMintChronologyEvidence>();
+        }
+
+        if (collisions.Count == 0
+            || trustedIdentityProvenance.Conflicts.Count > 0
+            || trustedIdentityProvenance.Unknowns.Contains(TrustedIdentityProvenanceUnknown.IdentitySourceConflict))
+        {
+            return Array.Empty<CompetingMintChronologyEvidence>();
+        }
+
+        var hasTrustedScanned = trustedIdentityProvenance.Sources.Any(source =>
+            source.SourceTrust == IdentitySourceTrust.Trusted
+            && source.MintLinkStatus == IdentityMintLinkStatus.ReferencesScannedMint);
+
+        if (hasTrustedScanned)
+        {
+            return Array.Empty<CompetingMintChronologyEvidence>();
+        }
+
+        var competitorCandidates = SelectClassificationCompetitors(collisions, trustedIdentityProvenance);
+        if (competitorCandidates.Count == 0)
+        {
+            return Array.Empty<CompetingMintChronologyEvidence>();
+        }
+
+        var selectedCompetitors = competitorCandidates
+            .Take(_classificationOptions.MaxClassificationCompetitors)
+            .ToArray();
+
+        var chronologyResults = new List<CompetingMintChronologyEvidence>(selectedCompetitors.Length);
+        foreach (var competitorMint in selectedCompetitors)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            OnChainChronologyEvidence chronology;
+            try
+            {
+                chronology = await _chronologyService.AnalyzeAsync(competitorMint, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Competing mint chronology analysis failed for mint {Mint}. Classification will degrade conservatively.",
+                    competitorMint);
+                chronology = CreateUnavailableChronology(analyzedAtUtc);
+            }
+
+            chronologyResults.Add(new CompetingMintChronologyEvidence(competitorMint, chronology));
+        }
+
+        return chronologyResults;
+    }
+
+    private static IReadOnlyList<string> SelectClassificationCompetitors(
+        IReadOnlyList<TokenIdentityCollision> collisions,
+        TrustedIdentityProvenance trustedIdentityProvenance)
+    {
+        var trustedCompetingReferences = trustedIdentityProvenance.Sources
+            .Where(source => source.SourceTrust == IdentitySourceTrust.Trusted
+                && source.MintLinkStatus == IdentityMintLinkStatus.ReferencesCompetingMint)
+            .SelectMany(source => source.ReferencedRelevantMints)
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (trustedCompetingReferences.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return collisions
+            .Where(collision => trustedCompetingReferences.Contains(collision.CandidateMint)
+                && collision.MatchDimensions.Contains(TokenIdentityMatchDimension.Name))
+            .OrderBy(collision => CollisionStrength(collision))
+            .ThenBy(collision => collision.FirstObservedAtUtc)
+            .ThenBy(collision => collision.CandidateMint, StringComparer.Ordinal)
+            .Select(collision => collision.CandidateMint)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static int CollisionStrength(TokenIdentityCollision collision)
+    {
+        var hasName = collision.MatchDimensions.Contains(TokenIdentityMatchDimension.Name);
+        var hasSymbol = collision.MatchDimensions.Contains(TokenIdentityMatchDimension.Symbol);
+
+        if (hasName && hasSymbol)
+        {
+            return 0;
+        }
+
+        return hasName ? 1 : 2;
     }
 
     private static void ApplyChronologyUnknowns(List<TokenIdentityProvenanceUnknown> unknowns, OnChainChronologyEvidence chronology)

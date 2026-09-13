@@ -84,6 +84,48 @@ public enum TrustedIdentityProvenanceUnknown
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TokenIdentityClassificationType
+{
+    NoCollisionEvidence,
+    CollisionDetected,
+    PossibleCopycat,
+    IdentityConflict,
+    InsufficientEvidence
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TokenIdentityClassificationConfidence
+{
+    None,
+    Low,
+    Medium,
+    High
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TokenIdentityClassificationEvidence
+{
+    SameNormalizedName,
+    SameNormalizedSymbol,
+    CompetingMintObserved,
+    ScannedMintLaterOnChain,
+    TrustedSourceReferencesCompetingMint,
+    TrustedSourceDoesNotVerifyScannedMint,
+    TrustedIdentityConflict
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TokenIdentityClassificationLimitation
+{
+    CopyingIntentNotProven,
+    GlobalFirstTokenNotProven,
+    ProviderHistoryMayBeIncomplete,
+    ChronologyComparisonUnavailable,
+    OfficialIdentityNotFullyVerified,
+    SocialContextNotAnalyzed
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum OnChainChronologyCoverage
 {
     CompleteWithinProviderResult,
@@ -162,6 +204,17 @@ public sealed record TrustedIdentityProvenance(
     IReadOnlyList<TrustedIdentityProvenanceUnknown> Unknowns,
     DateTimeOffset AnalyzedAtUtc);
 
+public sealed record CompetingMintChronologyEvidence(
+    string Mint,
+    OnChainChronologyEvidence Chronology);
+
+public sealed record TokenIdentityClassification(
+    TokenIdentityClassificationType Classification,
+    TokenIdentityClassificationConfidence Confidence,
+    string? RelevantCompetingMint,
+    IReadOnlyList<TokenIdentityClassificationEvidence> Evidence,
+    IReadOnlyList<TokenIdentityClassificationLimitation> Limitations);
+
 public sealed record OnChainChronologyEvidence(
     string? EarliestObservedSignature,
     long? EarliestObservedSlot,
@@ -191,4 +244,6 @@ public sealed record TokenIdentityProvenance(
     IReadOnlyList<TokenIdentityProvenanceUnknown> Unknowns,
     DateTimeOffset AnalyzedAtUtc,
     OnChainChronologyEvidence? OnChainChronology = null,
-    TrustedIdentityProvenance? TrustedIdentityProvenance = null);
+    TrustedIdentityProvenance? TrustedIdentityProvenance = null,
+    IReadOnlyList<CompetingMintChronologyEvidence>? CompetingMintChronologies = null,
+    TokenIdentityClassification? IdentityClassification = null);

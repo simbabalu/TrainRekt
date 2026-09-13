@@ -98,6 +98,11 @@ public interface ITrustedIdentityProvenanceService
         CancellationToken cancellationToken);
 }
 
+public interface ITokenIdentityClassifier
+{
+    TokenIdentityClassification Classify(TokenIdentityProvenance provenance);
+}
+
 public interface ITokenIdentityProvenanceService
 {
     Task<TokenIdentityProvenanceResult> AnalyzeAsync(string mint, CancellationToken cancellationToken);

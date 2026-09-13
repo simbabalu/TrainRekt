@@ -95,7 +95,8 @@ public sealed record TokenIdentityProvenanceResponse(
     IReadOnlyList<string> Unknowns,
     DateTimeOffset AnalyzedAtUtc,
     OnChainChronologyEvidenceResponse? OnChainChronology,
-    TrustedIdentityProvenanceResponse? TrustedIdentityProvenance)
+    TrustedIdentityProvenanceResponse? TrustedIdentityProvenance,
+    TokenIdentityClassificationResponse? IdentityClassification)
 {
     public static TokenIdentityProvenanceResponse FromDomain(TokenIdentityProvenance provenance)
     {
@@ -119,7 +120,10 @@ public sealed record TokenIdentityProvenanceResponse(
                 : OnChainChronologyEvidenceResponse.FromDomain(provenance.OnChainChronology),
             TrustedIdentityProvenance: provenance.TrustedIdentityProvenance is null
                 ? null
-                : TrustedIdentityProvenanceResponse.FromDomain(provenance.TrustedIdentityProvenance));
+                : TrustedIdentityProvenanceResponse.FromDomain(provenance.TrustedIdentityProvenance),
+            IdentityClassification: provenance.IdentityClassification is null
+                ? null
+                : TokenIdentityClassificationResponse.FromDomain(provenance.IdentityClassification));
     }
 
     private static string ToResultValue(TokenIdentityProvenanceResultType value)
@@ -163,6 +167,74 @@ public sealed record TokenIdentityProvenanceResponse(
             TokenIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable => "NO_TRUSTED_IDENTITY_SOURCE_AVAILABLE",
             TokenIdentityProvenanceUnknown.SourceFetchPartial => "SOURCE_FETCH_PARTIAL",
             _ => "IDENTITY_SOURCE_CONFLICT"
+        };
+    }
+}
+
+public sealed record TokenIdentityClassificationResponse(
+    string Classification,
+    string Confidence,
+    string? RelevantCompetingMint,
+    IReadOnlyList<string> Evidence,
+    IReadOnlyList<string> Limitations)
+{
+    public static TokenIdentityClassificationResponse FromDomain(TokenIdentityClassification value)
+    {
+        return new TokenIdentityClassificationResponse(
+            Classification: ToClassificationValue(value.Classification),
+            Confidence: ToConfidenceValue(value.Confidence),
+            RelevantCompetingMint: value.RelevantCompetingMint,
+            Evidence: value.Evidence.Select(ToEvidenceValue).ToArray(),
+            Limitations: value.Limitations.Select(ToLimitationValue).ToArray());
+    }
+
+    private static string ToClassificationValue(TokenIdentityClassificationType value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationType.NoCollisionEvidence => "NO_COLLISION_EVIDENCE",
+            TokenIdentityClassificationType.CollisionDetected => "COLLISION_DETECTED",
+            TokenIdentityClassificationType.PossibleCopycat => "POSSIBLE_COPYCAT",
+            TokenIdentityClassificationType.IdentityConflict => "IDENTITY_CONFLICT",
+            _ => "INSUFFICIENT_EVIDENCE"
+        };
+    }
+
+    private static string ToConfidenceValue(TokenIdentityClassificationConfidence value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationConfidence.High => "HIGH",
+            TokenIdentityClassificationConfidence.Medium => "MEDIUM",
+            TokenIdentityClassificationConfidence.Low => "LOW",
+            _ => "NONE"
+        };
+    }
+
+    private static string ToEvidenceValue(TokenIdentityClassificationEvidence value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationEvidence.SameNormalizedName => "SAME_NORMALIZED_NAME",
+            TokenIdentityClassificationEvidence.SameNormalizedSymbol => "SAME_NORMALIZED_SYMBOL",
+            TokenIdentityClassificationEvidence.CompetingMintObserved => "COMPETING_MINT_OBSERVED",
+            TokenIdentityClassificationEvidence.ScannedMintLaterOnChain => "SCANNED_MINT_LATER_ON_CHAIN",
+            TokenIdentityClassificationEvidence.TrustedSourceReferencesCompetingMint => "TRUSTED_SOURCE_REFERENCES_COMPETING_MINT",
+            TokenIdentityClassificationEvidence.TrustedSourceDoesNotVerifyScannedMint => "TRUSTED_SOURCE_DOES_NOT_VERIFY_SCANNED_MINT",
+            _ => "TRUSTED_IDENTITY_CONFLICT"
+        };
+    }
+
+    private static string ToLimitationValue(TokenIdentityClassificationLimitation value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationLimitation.CopyingIntentNotProven => "COPYING_INTENT_NOT_PROVEN",
+            TokenIdentityClassificationLimitation.GlobalFirstTokenNotProven => "GLOBAL_FIRST_TOKEN_NOT_PROVEN",
+            TokenIdentityClassificationLimitation.ProviderHistoryMayBeIncomplete => "PROVIDER_HISTORY_MAY_BE_INCOMPLETE",
+            TokenIdentityClassificationLimitation.ChronologyComparisonUnavailable => "CHRONOLOGY_COMPARISON_UNAVAILABLE",
+            TokenIdentityClassificationLimitation.OfficialIdentityNotFullyVerified => "OFFICIAL_IDENTITY_NOT_FULLY_VERIFIED",
+            _ => "SOCIAL_CONTEXT_NOT_ANALYZED"
         };
     }
 }
