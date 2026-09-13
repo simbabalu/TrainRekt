@@ -22,5 +22,13 @@ public sealed class TokenResearchOptions
 
     public int ProviderTimeoutSeconds { get; set; } = 8;
 
+    public int SourceTimeoutSeconds { get; set; } = 8;
+
+    public int MaxRedirects { get; set; } = 3;
+
+    public int MaxResponseBytes { get; set; } = 1_048_576;
+
+    public int[] AllowedHttpsPorts { get; set; } = [443];
+
     public bool AcceptCanonicalProjectWebsite { get; set; } = true;
 }

@@ -79,6 +79,29 @@ public sealed record CandidateResearchResult(
     IReadOnlyList<CandidateResearchSource> Sources,
     IReadOnlyList<CandidateDocumentedClaim> Claims);
 
+public enum ResearchSourceAssessmentReason
+{
+    None,
+    InvalidUrl,
+    UnsupportedScheme,
+    UnsupportedPort,
+    UrlContainsCredentials,
+    PrivateNetworkTarget,
+    DnsResolutionRejected,
+    RedirectRejected,
+    TooManyRedirects,
+    Timeout,
+    HttpNotSuccessful,
+    ResponseTooLarge,
+    UnsupportedContentType,
+    MalformedContent,
+    MintNotReferenced,
+    SourceIdentityUnconfirmed,
+    CanonicalDomainUnconfirmed,
+    RepositoryUnconfirmed,
+    ConflictingMint
+}
+
 public enum ResearchSourceAssessmentDecision
 {
     Accepted,
@@ -90,7 +113,10 @@ public sealed record AssessedResearchSource(
     ResearchSourceAssessmentDecision Decision,
     ResearchSourceType? EffectiveSourceType,
     bool IsCanonicalProjectWebsite,
-    string? AssessmentNote);
+    string? AssessmentNote,
+    ResearchSourceAssessmentReason Reason = ResearchSourceAssessmentReason.None,
+    bool HasExactMintMatch = false,
+    string? NormalizedHost = null);
 
 public sealed record ResearchIdentityAssessment(
     ResearchIdentityMatch Match,

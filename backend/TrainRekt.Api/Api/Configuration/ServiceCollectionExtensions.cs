@@ -6,6 +6,7 @@ using TrainRekt.Api.Application.Research;
 using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Infrastructure.Helius;
 using TrainRekt.Api.Infrastructure.Mongo;
+using TrainRekt.Api.Infrastructure.Research;
 using TrainRekt.Api.Infrastructure.Solana;
 
 namespace TrainRekt.Api.Api.Configuration;
@@ -81,6 +82,11 @@ public static class ServiceCollectionExtensions
             .Validate(options => options.MaxTitleLength > 0, "TokenResearch:MaxTitleLength must be greater than zero.")
             .Validate(options => options.MaxPublisherLength > 0, "TokenResearch:MaxPublisherLength must be greater than zero.")
             .Validate(options => options.ProviderTimeoutSeconds > 0, "TokenResearch:ProviderTimeoutSeconds must be greater than zero.")
+            .Validate(options => options.SourceTimeoutSeconds > 0, "TokenResearch:SourceTimeoutSeconds must be greater than zero.")
+            .Validate(options => options.MaxRedirects >= 0, "TokenResearch:MaxRedirects must be non-negative.")
+            .Validate(options => options.MaxResponseBytes > 0, "TokenResearch:MaxResponseBytes must be greater than zero.")
+            .Validate(options => options.AllowedHttpsPorts.Length > 0, "TokenResearch:AllowedHttpsPorts must include at least one port.")
+            .Validate(options => options.AllowedHttpsPorts.All(port => port is > 0 and <= 65535), "TokenResearch:AllowedHttpsPorts must contain valid TCP ports.")
             .ValidateOnStart();
 
         services.AddSingleton(TimeProvider.System);
@@ -113,10 +119,27 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
         services.AddScoped<ITokenResearchOrchestrator, TokenResearchOrchestrator>();
-        services.AddScoped<IResearchTrustAssessor, NoOpResearchTrustAssessor>();
+        services.AddScoped<IResearchTrustAssessor, ProductionResearchTrustAssessor>();
+        services.AddScoped<NoOpResearchTrustAssessor>();
         services.AddScoped<ResearchRequestFactory>();
         services.AddScoped<DeterministicResearchVerifier>();
         services.AddScoped<ProtocolResearchContextMerger>();
+        services.AddScoped<ResearchContentNormalizer>();
+        services.AddScoped<SolanaMintEvidenceMatcher>();
+        services.AddScoped<TrustedSourceClassifier>();
+        services.AddSingleton<ITrustedMintSourceRegistry, TrustedMintSourceRegistry>();
+        services.AddScoped<ResearchUrlSafetyPolicy>();
+        services.AddSingleton<IResearchDnsResolver, DefaultResearchDnsResolver>();
+        services.AddHttpClient<ISafeResearchSourceClient, SafeResearchSourceClient>()
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.None,
+                ConnectCallback = ResearchEndpointPinning.ConnectAsync
+            })
+            // URLs may carry secrets in query strings; suppress automatic URL logging.
+            .RemoveAllLoggers();
         services.AddScoped<CandidateResearchPromoter>(serviceProvider =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
