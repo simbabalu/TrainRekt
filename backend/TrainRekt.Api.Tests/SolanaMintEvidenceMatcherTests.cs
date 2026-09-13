@@ -58,4 +58,34 @@ public sealed class SolanaMintEvidenceMatcherTests
 
         Assert.False(result.HasExactMintMatch);
     }
+
+    [Fact]
+    public void FindRelevantMintReferences_UsesExactBoundariesAndDeduplicates()
+    {
+        var matcher = new SolanaMintEvidenceMatcher();
+        var relevant = new[]
+        {
+            Mint,
+            "So11111111111111111111111111111111111111112"
+        };
+
+        var text = $"prefix{Mint}suffix {Mint} and So11111111111111111111111111111111111111112";
+        var result = matcher.FindRelevantMintReferences(relevant, text, Array.Empty<string>(), maxBase58Candidates: 64);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(Mint, result);
+        Assert.Contains("So11111111111111111111111111111111111111112", result);
+    }
+
+    [Fact]
+    public void FindRelevantMintReferences_JsonMintValuesAreIncluded()
+    {
+        var matcher = new SolanaMintEvidenceMatcher();
+        var relevant = new[] { Mint };
+
+        var result = matcher.FindRelevantMintReferences(relevant, "{}", new[] { Mint }, maxBase58Candidates: 1);
+
+        Assert.Single(result);
+        Assert.Equal(Mint, result[0]);
+    }
 }

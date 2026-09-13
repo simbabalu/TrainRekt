@@ -21,4 +21,6 @@ public sealed class MongoDbOptions
     public string TokenIdentityObservationCollectionName { get; set; } = "tokenIdentityObservations";
 
     public string TokenIdentityChronologyCollectionName { get; set; } = "tokenIdentityChronology";
+
+    public string TokenIdentitySourceVerificationCollectionName { get; set; } = "tokenIdentitySourceVerification";
 }

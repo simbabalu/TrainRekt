@@ -91,6 +91,21 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services
+            .AddOptions<TrustedIdentityProvenanceOptions>()
+            .Bind(configuration.GetSection(TrustedIdentityProvenanceOptions.SectionName))
+            .Validate(options => options.MaxSources > 0, "TrustedIdentityProvenance:MaxSources must be greater than zero.")
+            .Validate(options => options.MaxCompetingMints > 0, "TrustedIdentityProvenance:MaxCompetingMints must be greater than zero.")
+            .Validate(options => options.MaxEvidencePerSource > 0, "TrustedIdentityProvenance:MaxEvidencePerSource must be greater than zero.")
+            .Validate(options => options.MaxTotalEvidence > 0, "TrustedIdentityProvenance:MaxTotalEvidence must be greater than zero.")
+            .Validate(options => options.SourceTimeoutSeconds > 0, "TrustedIdentityProvenance:SourceTimeoutSeconds must be greater than zero.")
+            .Validate(options => options.TrustedFreshnessHours > 0, "TrustedIdentityProvenance:TrustedFreshnessHours must be greater than zero.")
+            .Validate(options => options.ClaimedFreshnessHours > 0, "TrustedIdentityProvenance:ClaimedFreshnessHours must be greater than zero.")
+            .Validate(options => options.UnavailableFreshnessMinutes > 0, "TrustedIdentityProvenance:UnavailableFreshnessMinutes must be greater than zero.")
+            .Validate(options => options.ConflictFreshnessMinutes > 0, "TrustedIdentityProvenance:ConflictFreshnessMinutes must be greater than zero.")
+            .Validate(options => options.MaxBase58CandidatesPerSource > 0, "TrustedIdentityProvenance:MaxBase58CandidatesPerSource must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<MongoDbOptions>()
             .Bind(configuration.GetSection(MongoDbOptions.SectionName))
             .PostConfigure(options =>
@@ -124,6 +139,9 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenIdentityChronologyCollectionName),
                 "MongoDb:TokenIdentityChronologyCollectionName must be configured when MongoDb:Enabled is true.")
+            .Validate(
+                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenIdentitySourceVerificationCollectionName),
+                "MongoDb:TokenIdentitySourceVerificationCollectionName must be configured when MongoDb:Enabled is true.")
             .ValidateOnStart();
 
         services
@@ -183,7 +201,9 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
         services.AddSingleton<TokenIdentityNormalizer>();
+        services.AddScoped<IdentitySourceCandidateExtractor>();
         services.AddScoped<IOnChainChronologyService, OnChainChronologyService>();
+        services.AddScoped<ITrustedIdentityProvenanceService, TrustedIdentityProvenanceService>();
         services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
         services.AddScoped<AiSafetyCoachResponseValidator>();
@@ -282,6 +302,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IAiSafetyCoachSnapshotRepository, MongoTokenInspectionCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, MongoTokenIdentityObservationRepository>();
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, MongoTokenIdentityChronologySnapshotRepository>();
+            services.AddScoped<ITokenIdentitySourceVerificationSnapshotRepository, MongoTokenIdentitySourceVerificationSnapshotRepository>();
             services.AddScoped<CachedTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
@@ -295,6 +316,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IAiSafetyCoachSnapshotRepository, NoOpAiSafetyCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, NoOpTokenIdentityObservationRepository>();
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, NoOpTokenIdentityChronologySnapshotRepository>();
+            services.AddScoped<ITokenIdentitySourceVerificationSnapshotRepository, NoOpTokenIdentitySourceVerificationSnapshotRepository>();
             services.AddScoped<PassthroughTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(

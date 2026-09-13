@@ -166,4 +166,37 @@ internal static class TokenMongoMapper
             ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
             Evidence: document.Evidence);
     }
+
+    public static TokenIdentitySourceVerificationSnapshotDocument ToDocument(CachedTokenIdentitySourceVerificationSnapshot model)
+    {
+        return new TokenIdentitySourceVerificationSnapshotDocument
+        {
+            CanonicalUrl = model.CanonicalUrl,
+            RelevantMintSetFingerprint = model.RelevantMintSetFingerprint,
+            IdentityProvenanceVersion = model.IdentityProvenanceVersion,
+            AnalyzedAtUtc = DateTime.SpecifyKind(model.AnalyzedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            CachedAtUtc = DateTime.SpecifyKind(model.CachedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            ExpiresAtUtc = DateTime.SpecifyKind(model.ExpiresAtUtc.UtcDateTime, DateTimeKind.Utc),
+            SourceEvidence = model.SourceEvidence,
+            Evidence = model.Evidence.ToList(),
+            Conflicts = model.Conflicts.ToList(),
+            Unknowns = model.Unknowns.ToList()
+        };
+    }
+
+    public static CachedTokenIdentitySourceVerificationSnapshot ToModel(TokenIdentitySourceVerificationSnapshotDocument document)
+    {
+        return new CachedTokenIdentitySourceVerificationSnapshot(
+            Id: document.Id,
+            CanonicalUrl: document.CanonicalUrl,
+            RelevantMintSetFingerprint: document.RelevantMintSetFingerprint,
+            IdentityProvenanceVersion: document.IdentityProvenanceVersion,
+            AnalyzedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.AnalyzedAtUtc, DateTimeKind.Utc)),
+            CachedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.CachedAtUtc, DateTimeKind.Utc)),
+            ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
+            SourceEvidence: document.SourceEvidence,
+            Evidence: document.Evidence,
+            Conflicts: document.Conflicts,
+            Unknowns: document.Unknowns);
+    }
 }

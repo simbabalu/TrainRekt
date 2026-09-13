@@ -286,6 +286,102 @@ public sealed class TokenIdentityProvenanceServiceTests
         Assert.Equal(OnChainChronologyCoverage.Unavailable, result.Provenance.OnChainChronology!.HistoryCoverage);
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_TrustedSourceReferencesScannedMint_RemovesOfficialIdentityUnknown()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository();
+        var trusted = new StubTrustedIdentityProvenanceService
+        {
+            NextResult = new TrustedIdentityProvenance(
+                Sources: new[]
+                {
+                    new IdentitySourceEvidence(
+                        Url: "https://trusted.example/project",
+                        Publisher: "Trusted Publisher",
+                        SourceTrust: IdentitySourceTrust.Trusted,
+                        MintLinkStatus: IdentityMintLinkStatus.ReferencesScannedMint,
+                        ReferencedRelevantMints: new[] { "Mint111" },
+                        EvidenceSummary: "A trusted project source references this exact mint.")
+                },
+                Evidence: new[]
+                {
+                    new TokenIdentityProvenanceEvidence("TRUSTED_SOURCE_REFERENCES_SCANNED_MINT", "Trusted source references scanned mint.")
+                },
+                Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Unknowns: Array.Empty<TrustedIdentityProvenanceUnknown>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow)
+        };
+
+        var service = CreateService(inspectionService, repository, new StubChronologyService(), trustedService: trusted);
+
+        var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.NotNull(result.Provenance);
+        Assert.DoesNotContain(TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified, result.Provenance!.Unknowns);
+        Assert.NotNull(result.Provenance.TrustedIdentityProvenance);
+        Assert.Single(result.Provenance.TrustedIdentityProvenance!.Sources);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_TrustedIdentityConflict_PromotesResultToAmbiguous()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(
+                1,
+                new[]
+                {
+                    new TokenIdentityObservation(
+                        Mint: "Mint222",
+                        RawName: "Research Token",
+                        NormalizedName: "research token",
+                        RawSymbol: "RCH",
+                        NormalizedSymbol: "rch",
+                        TokenProgram: inspection.Program.ProgramId,
+                        FirstObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-20),
+                        LastObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-10),
+                        ObservationVersion: 1)
+                })
+        };
+
+        var trusted = new StubTrustedIdentityProvenanceService
+        {
+            NextResult = new TrustedIdentityProvenance(
+                Sources: new[]
+                {
+                    new IdentitySourceEvidence(
+                        Url: "https://trusted.example/project",
+                        Publisher: "Trusted Publisher",
+                        SourceTrust: IdentitySourceTrust.Trusted,
+                        MintLinkStatus: IdentityMintLinkStatus.ReferencesCompetingMint,
+                        ReferencedRelevantMints: new[] { "Mint222" },
+                        EvidenceSummary: "A trusted project source references another observed mint using the same identity.")
+                },
+                Evidence: new[]
+                {
+                    new TokenIdentityProvenanceEvidence("TRUSTED_SOURCE_REFERENCES_COMPETING_MINT", "Trusted source references competing mint.")
+                },
+                Conflicts: new[]
+                {
+                    new TokenIdentityProvenanceEvidence("TRUSTED_SOURCE_REFERENCES_COMPETING_MINT", "Trusted source references competing mint.")
+                },
+                Unknowns: new[] { TrustedIdentityProvenanceUnknown.IdentitySourceConflict },
+                AnalyzedAtUtc: DateTimeOffset.UtcNow)
+        };
+
+        var service = CreateService(inspectionService, repository, new StubChronologyService(), trustedService: trusted);
+
+        var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.NotNull(result.Provenance);
+        Assert.Equal(TokenIdentityProvenanceResultType.Ambiguous, result.Provenance!.Result);
+        Assert.Contains(TokenIdentityProvenanceUnknown.IdentitySourceConflict, result.Provenance.Unknowns);
+    }
+
     private static TokenInspection CreateInspection(string mint, string? name, string? symbol, ProtocolResearchContext? protocolContext = null)
     {
         var baseInspection = ResearchTestData.CreateInspection(protocolContext: protocolContext);
@@ -304,16 +400,19 @@ public sealed class TokenIdentityProvenanceServiceTests
         ITokenInspectionDeterministicService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
         IOnChainChronologyService chronologyService,
+        ITrustedIdentityProvenanceService? trustedService = null,
         TokenIdentityProvenanceOptions? options = null,
         DateTimeOffset? time = null)
     {
         options ??= new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 25 };
+        trustedService ??= new StubTrustedIdentityProvenanceService();
         var now = time ?? new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
 
         return new TokenIdentityProvenanceService(
             inspectionService,
             observationRepository,
             chronologyService,
+            trustedService,
             new TokenIdentityNormalizer(),
             Options.Create(options),
             new FixedTimeProvider(now),
@@ -417,6 +516,27 @@ public sealed class TokenIdentityProvenanceServiceTests
 
             FindCount += 1;
             return Task.FromResult(QueryResult);
+        }
+    }
+
+    private sealed class StubTrustedIdentityProvenanceService : ITrustedIdentityProvenanceService
+    {
+        public TrustedIdentityProvenance NextResult { get; set; } = new(
+            Sources: Array.Empty<IdentitySourceEvidence>(),
+            Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            Unknowns: new[]
+            {
+                TrustedIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable,
+                TrustedIdentityProvenanceUnknown.OfficialIdentityNotVerified
+            },
+            AnalyzedAtUtc: DateTimeOffset.UtcNow);
+
+        public Task<TrustedIdentityProvenance> AnalyzeAsync(
+            TrustedIdentityProvenanceRequest request,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(NextResult);
         }
     }
 

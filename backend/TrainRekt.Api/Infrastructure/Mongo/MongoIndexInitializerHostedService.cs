@@ -115,6 +115,24 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         };
 
         await chronologyCollection.Indexes.CreateManyAsync(chronologyIndexes, cancellationToken);
+
+        var identitySourceCollection = _database.GetCollection<TokenIdentitySourceVerificationSnapshotDocument>(_options.TokenIdentitySourceVerificationCollectionName);
+        var identitySourceIndexes = new[]
+        {
+            new CreateIndexModel<TokenIdentitySourceVerificationSnapshotDocument>(
+                Builders<TokenIdentitySourceVerificationSnapshotDocument>.IndexKeys.Ascending(entry => entry.CanonicalUrl),
+                new CreateIndexOptions { Name = "ix_tokenIdentitySourceVerification_url" }),
+            new CreateIndexModel<TokenIdentitySourceVerificationSnapshotDocument>(
+                Builders<TokenIdentitySourceVerificationSnapshotDocument>.IndexKeys
+                    .Ascending(entry => entry.CanonicalUrl)
+                    .Ascending(entry => entry.RelevantMintSetFingerprint)
+                    .Ascending(entry => entry.IdentityProvenanceVersion)
+                    .Descending(entry => entry.ExpiresAtUtc)
+                    .Descending(entry => entry.AnalyzedAtUtc),
+                new CreateIndexOptions { Name = "ix_tokenIdentitySourceVerification_cache_lookup" })
+        };
+
+        await identitySourceCollection.Indexes.CreateManyAsync(identitySourceIndexes, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

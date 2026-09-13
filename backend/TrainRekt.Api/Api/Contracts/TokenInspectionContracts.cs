@@ -94,7 +94,8 @@ public sealed record TokenIdentityProvenanceResponse(
     IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> ConflictingEvidence,
     IReadOnlyList<string> Unknowns,
     DateTimeOffset AnalyzedAtUtc,
-    OnChainChronologyEvidenceResponse? OnChainChronology)
+    OnChainChronologyEvidenceResponse? OnChainChronology,
+    TrustedIdentityProvenanceResponse? TrustedIdentityProvenance)
 {
     public static TokenIdentityProvenanceResponse FromDomain(TokenIdentityProvenance provenance)
     {
@@ -115,7 +116,10 @@ public sealed record TokenIdentityProvenanceResponse(
             AnalyzedAtUtc: provenance.AnalyzedAtUtc,
             OnChainChronology: provenance.OnChainChronology is null
                 ? null
-                : OnChainChronologyEvidenceResponse.FromDomain(provenance.OnChainChronology));
+                : OnChainChronologyEvidenceResponse.FromDomain(provenance.OnChainChronology),
+            TrustedIdentityProvenance: provenance.TrustedIdentityProvenance is null
+                ? null
+                : TrustedIdentityProvenanceResponse.FromDomain(provenance.TrustedIdentityProvenance));
     }
 
     private static string ToResultValue(TokenIdentityProvenanceResultType value)
@@ -154,7 +158,84 @@ public sealed record TokenIdentityProvenanceResponse(
             TokenIdentityProvenanceUnknown.ChainHistoryPartial => "CHAIN_HISTORY_PARTIAL",
             TokenIdentityProvenanceUnknown.ChainHistoryUnavailable => "CHAIN_HISTORY_UNAVAILABLE",
             TokenIdentityProvenanceUnknown.BlockTimeUnavailable => "BLOCK_TIME_UNAVAILABLE",
-            _ => "PROVIDER_RETENTION_UNKNOWN"
+            TokenIdentityProvenanceUnknown.ProviderRetentionUnknown => "PROVIDER_RETENTION_UNKNOWN",
+            TokenIdentityProvenanceUnknown.NoIdentitySourceAvailable => "NO_IDENTITY_SOURCE_AVAILABLE",
+            TokenIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable => "NO_TRUSTED_IDENTITY_SOURCE_AVAILABLE",
+            TokenIdentityProvenanceUnknown.SourceFetchPartial => "SOURCE_FETCH_PARTIAL",
+            _ => "IDENTITY_SOURCE_CONFLICT"
+        };
+    }
+}
+
+public sealed record TrustedIdentityProvenanceResponse(
+    IReadOnlyList<IdentitySourceEvidenceResponse> Sources,
+    IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> Evidence,
+    IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> Conflicts,
+    IReadOnlyList<string> Unknowns,
+    DateTimeOffset AnalyzedAtUtc)
+{
+    public static TrustedIdentityProvenanceResponse FromDomain(TrustedIdentityProvenance value)
+    {
+        return new TrustedIdentityProvenanceResponse(
+            Sources: value.Sources.Select(IdentitySourceEvidenceResponse.FromDomain).ToArray(),
+            Evidence: value.Evidence.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
+            Conflicts: value.Conflicts.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
+            Unknowns: value.Unknowns.Select(ToUnknownValue).ToArray(),
+            AnalyzedAtUtc: value.AnalyzedAtUtc);
+    }
+
+    private static string ToUnknownValue(TrustedIdentityProvenanceUnknown value)
+    {
+        return value switch
+        {
+            TrustedIdentityProvenanceUnknown.NoIdentitySourceAvailable => "NO_IDENTITY_SOURCE_AVAILABLE",
+            TrustedIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable => "NO_TRUSTED_IDENTITY_SOURCE_AVAILABLE",
+            TrustedIdentityProvenanceUnknown.SourceFetchPartial => "SOURCE_FETCH_PARTIAL",
+            TrustedIdentityProvenanceUnknown.IdentitySourceConflict => "IDENTITY_SOURCE_CONFLICT",
+            _ => "OFFICIAL_IDENTITY_NOT_VERIFIED"
+        };
+    }
+}
+
+public sealed record IdentitySourceEvidenceResponse(
+    string Url,
+    string Publisher,
+    string SourceTrust,
+    string MintLinkStatus,
+    IReadOnlyList<string> ReferencedRelevantMints,
+    string EvidenceSummary)
+{
+    public static IdentitySourceEvidenceResponse FromDomain(IdentitySourceEvidence value)
+    {
+        return new IdentitySourceEvidenceResponse(
+            Url: value.Url,
+            Publisher: value.Publisher,
+            SourceTrust: ToSourceTrustValue(value.SourceTrust),
+            MintLinkStatus: ToMintLinkStatusValue(value.MintLinkStatus),
+            ReferencedRelevantMints: value.ReferencedRelevantMints,
+            EvidenceSummary: value.EvidenceSummary);
+    }
+
+    private static string ToSourceTrustValue(IdentitySourceTrust value)
+    {
+        return value switch
+        {
+            IdentitySourceTrust.Trusted => "TRUSTED",
+            IdentitySourceTrust.ClaimedProjectSource => "CLAIMED_PROJECT_SOURCE",
+            _ => "DISCOVERED"
+        };
+    }
+
+    private static string ToMintLinkStatusValue(IdentityMintLinkStatus value)
+    {
+        return value switch
+        {
+            IdentityMintLinkStatus.ReferencesScannedMint => "REFERENCES_SCANNED_MINT",
+            IdentityMintLinkStatus.ReferencesCompetingMint => "REFERENCES_COMPETING_MINT",
+            IdentityMintLinkStatus.ReferencesMultipleRelevantMints => "REFERENCES_MULTIPLE_RELEVANT_MINTS",
+            IdentityMintLinkStatus.NoRelevantMintReference => "NO_RELEVANT_MINT_REFERENCE",
+            IdentityMintLinkStatus.FetchUnavailable => "FETCH_UNAVAILABLE",
+            _ => "UNVERIFIED"
         };
     }
 }

@@ -33,6 +33,7 @@ public sealed class MongoEnablementConfigurationTests
         Assert.IsType<NoOpAiSafetyCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.IsType<NoOpTokenIdentityObservationRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityObservationRepository>());
         Assert.IsType<NoOpTokenIdentityChronologySnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityChronologySnapshotRepository>());
+        Assert.IsType<NoOpTokenIdentitySourceVerificationSnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentitySourceVerificationSnapshotRepository>());
         Assert.Null(scope.ServiceProvider.GetService<IMongoClient>());
     }
 
@@ -62,7 +63,30 @@ public sealed class MongoEnablementConfigurationTests
         Assert.IsType<MongoTokenInspectionCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.IsType<MongoTokenIdentityObservationRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityObservationRepository>());
         Assert.IsType<MongoTokenIdentityChronologySnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityChronologySnapshotRepository>());
+        Assert.IsType<MongoTokenIdentitySourceVerificationSnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentitySourceVerificationSnapshotRepository>());
         Assert.NotNull(scope.ServiceProvider.GetService<IMongoClient>());
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingTokenIdentitySourceVerificationCollectionName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections",
+                ["MongoDb:TokenResearchCollectionName"] = "tokenResearch",
+                ["MongoDb:TokenInspectionCoachCollectionName"] = "tokenInspectionCoach",
+                ["MongoDb:TokenIdentityObservationCollectionName"] = "tokenIdentityObservations",
+                ["MongoDb:TokenIdentityChronologyCollectionName"] = "tokenIdentityChronology",
+                ["MongoDb:TokenIdentitySourceVerificationCollectionName"] = ""
+            })));
+
+        Assert.Contains("MongoDb:TokenIdentitySourceVerificationCollectionName", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

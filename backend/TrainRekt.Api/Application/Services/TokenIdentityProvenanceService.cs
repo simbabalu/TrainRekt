@@ -13,6 +13,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     private readonly ITokenInspectionDeterministicService _inspectionService;
     private readonly ITokenIdentityObservationRepository _observationRepository;
     private readonly IOnChainChronologyService _chronologyService;
+    private readonly ITrustedIdentityProvenanceService _trustedIdentityProvenanceService;
     private readonly TokenIdentityNormalizer _normalizer;
     private readonly TokenIdentityProvenanceOptions _options;
     private readonly TimeProvider _timeProvider;
@@ -22,6 +23,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         ITokenInspectionDeterministicService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
         IOnChainChronologyService chronologyService,
+        ITrustedIdentityProvenanceService trustedIdentityProvenanceService,
         TokenIdentityNormalizer normalizer,
         IOptions<TokenIdentityProvenanceOptions> options,
         TimeProvider timeProvider,
@@ -30,6 +32,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         _inspectionService = inspectionService;
         _observationRepository = observationRepository;
         _chronologyService = chronologyService;
+        _trustedIdentityProvenanceService = trustedIdentityProvenanceService;
         _normalizer = normalizer;
         _options = options.Value;
         _timeProvider = timeProvider;
@@ -150,6 +153,30 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             chronology = CreateUnavailableChronology(nowUtc);
         }
 
+        TrustedIdentityProvenance trustedIdentityProvenance;
+        try
+        {
+            trustedIdentityProvenance = await _trustedIdentityProvenanceService.AnalyzeAsync(
+                new TrustedIdentityProvenanceRequest(
+                    ScannedMint: inspection.Identity.Mint,
+                    ScannedMetadataUri: inspection.Identity.MetadataUri,
+                    Collisions: collisions,
+                    AnalyzedAtUtc: nowUtc),
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Trusted identity provenance analysis failed for mint {Mint}. Returning observed and chronology evidence.",
+                inspection.Identity.Mint);
+            trustedIdentityProvenance = CreateUnavailableTrustedIdentityProvenance(nowUtc);
+        }
+
         var unknowns = new List<TokenIdentityProvenanceUnknown>
         {
             TokenIdentityProvenanceUnknown.GlobalHistoryNotChecked,
@@ -165,8 +192,9 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         }
 
         ApplyChronologyUnknowns(unknowns, chronology);
+        ApplyTrustedIdentityUnknowns(unknowns, trustedIdentityProvenance);
 
-        var (resultType, confidence) = DetermineResult(observation, collisions, isTruncated);
+        var (resultType, confidence) = DetermineResult(observation, collisions, isTruncated, trustedIdentityProvenance);
 
         var provenance = new TokenIdentityProvenance(
             Result: resultType,
@@ -192,7 +220,8 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             ConflictingEvidence: conflictingEvidence,
             Unknowns: unknowns,
             AnalyzedAtUtc: nowUtc,
-            OnChainChronology: chronology);
+            OnChainChronology: chronology,
+            TrustedIdentityProvenance: trustedIdentityProvenance);
 
         return new TokenIdentityProvenanceResult(null, provenance);
     }
@@ -222,6 +251,37 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         }
     }
 
+    private static void ApplyTrustedIdentityUnknowns(
+        List<TokenIdentityProvenanceUnknown> unknowns,
+        TrustedIdentityProvenance trustedIdentityProvenance)
+    {
+        foreach (var trustedUnknown in trustedIdentityProvenance.Unknowns)
+        {
+            var mapped = trustedUnknown switch
+            {
+                TrustedIdentityProvenanceUnknown.NoIdentitySourceAvailable => TokenIdentityProvenanceUnknown.NoIdentitySourceAvailable,
+                TrustedIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable => TokenIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable,
+                TrustedIdentityProvenanceUnknown.SourceFetchPartial => TokenIdentityProvenanceUnknown.SourceFetchPartial,
+                TrustedIdentityProvenanceUnknown.IdentitySourceConflict => TokenIdentityProvenanceUnknown.IdentitySourceConflict,
+                _ => TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified
+            };
+
+            if (!unknowns.Contains(mapped))
+            {
+                unknowns.Add(mapped);
+            }
+        }
+
+        var hasTrustedScannedMintEvidence = trustedIdentityProvenance.Sources.Any(source =>
+            source.SourceTrust == IdentitySourceTrust.Trusted
+            && source.MintLinkStatus == IdentityMintLinkStatus.ReferencesScannedMint);
+
+        if (hasTrustedScannedMintEvidence)
+        {
+            unknowns.Remove(TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified);
+        }
+    }
+
     private static OnChainChronologyEvidence CreateUnavailableChronology(DateTimeOffset analyzedAtUtc)
     {
         return new OnChainChronologyEvidence(
@@ -244,11 +304,29 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             AnalyzedAtUtc: analyzedAtUtc);
     }
 
+    private static TrustedIdentityProvenance CreateUnavailableTrustedIdentityProvenance(DateTimeOffset analyzedAtUtc)
+    {
+        return new TrustedIdentityProvenance(
+            Sources: Array.Empty<IdentitySourceEvidence>(),
+            Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            Unknowns: new[]
+            {
+                TrustedIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable,
+                TrustedIdentityProvenanceUnknown.OfficialIdentityNotVerified,
+                TrustedIdentityProvenanceUnknown.SourceFetchPartial
+            },
+            AnalyzedAtUtc: analyzedAtUtc);
+    }
+
     private static (TokenIdentityProvenanceResultType Result, TokenIdentityProvenanceConfidence Confidence) DetermineResult(
         TokenIdentityObservation scanned,
         IReadOnlyList<TokenIdentityCollision> collisions,
-        bool isTruncated)
+        bool isTruncated,
+        TrustedIdentityProvenance trustedIdentityProvenance)
     {
+        var hasTrustedIdentityConflict = trustedIdentityProvenance.Conflicts.Count > 0;
+
         if (scanned.NormalizedName is null && scanned.NormalizedSymbol is null)
         {
             return (TokenIdentityProvenanceResultType.InsufficientEvidence, TokenIdentityProvenanceConfidence.None);
@@ -259,6 +337,12 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             var confidence = scanned.NormalizedName is not null && scanned.NormalizedSymbol is not null
                 ? TokenIdentityProvenanceConfidence.High
                 : TokenIdentityProvenanceConfidence.Medium;
+
+            if (hasTrustedIdentityConflict)
+            {
+                return (TokenIdentityProvenanceResultType.Ambiguous, TokenIdentityProvenanceConfidence.Low);
+            }
+
             return (TokenIdentityProvenanceResultType.NoMeaningfulCollisionFound, confidence);
         }
 
@@ -266,6 +350,11 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         if (!anyExact)
         {
             return (TokenIdentityProvenanceResultType.Ambiguous, TokenIdentityProvenanceConfidence.Low);
+        }
+
+        if (hasTrustedIdentityConflict)
+        {
+            return (TokenIdentityProvenanceResultType.Ambiguous, TokenIdentityProvenanceConfidence.Medium);
         }
 
         if (isTruncated)

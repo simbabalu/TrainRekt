@@ -47,7 +47,40 @@ public enum TokenIdentityProvenanceUnknown
     ChainHistoryPartial,
     ChainHistoryUnavailable,
     BlockTimeUnavailable,
-    ProviderRetentionUnknown
+    ProviderRetentionUnknown,
+    NoIdentitySourceAvailable,
+    NoTrustedIdentitySourceAvailable,
+    SourceFetchPartial,
+    IdentitySourceConflict
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum IdentitySourceTrust
+{
+    Discovered,
+    ClaimedProjectSource,
+    Trusted
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum IdentityMintLinkStatus
+{
+    ReferencesScannedMint,
+    ReferencesCompetingMint,
+    ReferencesMultipleRelevantMints,
+    NoRelevantMintReference,
+    FetchUnavailable,
+    Unverified
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TrustedIdentityProvenanceUnknown
+{
+    NoIdentitySourceAvailable,
+    NoTrustedIdentitySourceAvailable,
+    OfficialIdentityNotVerified,
+    SourceFetchPartial,
+    IdentitySourceConflict
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -114,6 +147,21 @@ public sealed record TokenIdentityProvenanceEvidence(
     string Id,
     string Detail);
 
+public sealed record IdentitySourceEvidence(
+    string Url,
+    string Publisher,
+    IdentitySourceTrust SourceTrust,
+    IdentityMintLinkStatus MintLinkStatus,
+    IReadOnlyList<string> ReferencedRelevantMints,
+    string EvidenceSummary);
+
+public sealed record TrustedIdentityProvenance(
+    IReadOnlyList<IdentitySourceEvidence> Sources,
+    IReadOnlyList<TokenIdentityProvenanceEvidence> Evidence,
+    IReadOnlyList<TokenIdentityProvenanceEvidence> Conflicts,
+    IReadOnlyList<TrustedIdentityProvenanceUnknown> Unknowns,
+    DateTimeOffset AnalyzedAtUtc);
+
 public sealed record OnChainChronologyEvidence(
     string? EarliestObservedSignature,
     long? EarliestObservedSlot,
@@ -142,4 +190,5 @@ public sealed record TokenIdentityProvenance(
     IReadOnlyList<TokenIdentityProvenanceEvidence> ConflictingEvidence,
     IReadOnlyList<TokenIdentityProvenanceUnknown> Unknowns,
     DateTimeOffset AnalyzedAtUtc,
-    OnChainChronologyEvidence? OnChainChronology = null);
+    OnChainChronologyEvidence? OnChainChronology = null,
+    TrustedIdentityProvenance? TrustedIdentityProvenance = null);
