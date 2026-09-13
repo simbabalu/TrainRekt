@@ -4,6 +4,7 @@ using MongoDB.Driver;
 using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Application.Research;
 using TrainRekt.Api.Application.Services;
+using TrainRekt.Api.Infrastructure.Gemini;
 using TrainRekt.Api.Infrastructure.Helius;
 using TrainRekt.Api.Infrastructure.Mongo;
 using TrainRekt.Api.Infrastructure.Research;
@@ -33,6 +34,24 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => Uri.TryCreate(options.RpcBaseUrl, UriKind.Absolute, out _),
                 "Helius:RpcBaseUrl must be an absolute URI.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<GeminiOptions>()
+            .Bind(configuration.GetSection(GeminiOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    options.ApiKey = configuration["GEMINI_API_KEY"];
+                }
+            })
+            .Validate(options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _), "Gemini:BaseUrl must be an absolute URI.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Model), "Gemini:Model must be configured.")
+            .Validate(options => options.TimeoutSeconds > 0, "Gemini:TimeoutSeconds must be greater than zero.")
+            .Validate(options => options.MaxResearchOutputTokens > 0, "Gemini:MaxResearchOutputTokens must be greater than zero.")
+            .Validate(options => options.MaxExtractionOutputTokens > 0, "Gemini:MaxExtractionOutputTokens must be greater than zero.")
+            .Validate(options => options.MaxResponseBytes > 0, "Gemini:MaxResponseBytes must be greater than zero.")
             .ValidateOnStart();
 
         services
@@ -127,9 +146,28 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ResearchContentNormalizer>();
         services.AddScoped<SolanaMintEvidenceMatcher>();
         services.AddScoped<TrustedSourceClassifier>();
+        services.AddScoped<GeminiGroundingNormalizer>();
+        services.AddScoped<GeminiCandidateMapper>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
+            return new GeminiCandidateMapper(options);
+        });
         services.AddSingleton<ITrustedMintSourceRegistry, TrustedMintSourceRegistry>();
         services.AddScoped<ResearchUrlSafetyPolicy>();
         services.AddSingleton<IResearchDnsResolver, DefaultResearchDnsResolver>();
+        services.AddHttpClient<IGeminiInteractionClient, GeminiInteractionClient>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
+                client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.None
+            })
+            // Request payloads and headers may contain sensitive metadata; suppress automatic logging.
+            .RemoveAllLoggers();
         services.AddHttpClient<ISafeResearchSourceClient, SafeResearchSourceClient>()
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
@@ -150,7 +188,7 @@ public static class ServiceCollectionExtensions
             var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
             return new ResearchNeedDetector(options);
         });
-        services.AddScoped<ITokenResearchProvider, NoOpTokenResearchProvider>();
+        services.AddScoped<ITokenResearchProvider, GeminiTokenResearchProvider>();
         services.AddScoped<ISolanaAccountReader, ScopedSolanaAccountReader>();
         services.AddScoped<ITokenMetadataResolver, TokenMetadataResolver>();
         services.AddScoped<ILargestTokenAccountAnalysisService, LargestTokenAccountAnalysisService>();

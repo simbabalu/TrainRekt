@@ -159,6 +159,61 @@ public sealed class TokenResearchOrchestratorTests
         Assert.Equal(0, repository.InsertCount);
     }
 
+    [Fact]
+    public async Task RunAsync_GeminiClaimedOfficialCanonicalOnUntrustedMintSource_FailsClosed()
+    {
+        var mint = ProtocolConstants.SolanaMobileSkrMint;
+        var candidate = CreateGeminiLikeCandidateResult(
+            mint,
+            sourceUrl: "https://untrusted.example/skr-docs",
+            claimedSourceType: ResearchSourceType.OfficialDocumentation,
+            claimedCanonicalProjectWebsite: true);
+
+        var provider = new FakeProvider(candidate);
+        var repository = new FakeRepository();
+        var orchestrator = CreateOrchestratorWithProductionAssessor(
+            provider,
+            repository,
+            source => SuccessFetch(source.Url, "text/plain", $"mint={mint}"));
+
+        var outcome = await orchestrator.RunAsync(CreateInspectionForMint(mint), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.NoUsableSources, outcome.Status);
+        Assert.Null(outcome.Context);
+        Assert.Equal(0, repository.InsertCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_TrustedRegistrySourceWithExactMint_PromotesDocumentedOnly()
+    {
+        var mint = ProtocolConstants.SolanaMobileSkrMint;
+        var candidate = CreateGeminiLikeCandidateResult(
+            mint,
+            sourceUrl: "https://docs.solanamobile.com/solana-mobile-stack/skr",
+            claimedSourceType: ResearchSourceType.OfficialDocumentation,
+            claimedCanonicalProjectWebsite: true);
+
+        var provider = new FakeProvider(candidate);
+        var repository = new FakeRepository();
+        var orchestrator = CreateOrchestratorWithProductionAssessor(
+            provider,
+            repository,
+            source => SuccessFetch(source.Url, "text/plain", $"mint={mint}"));
+
+        var outcome = await orchestrator.RunAsync(CreateInspectionForMint(mint), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Completed, outcome.Status);
+        Assert.NotNull(outcome.Context);
+        Assert.Single(outcome.Context!.Sources);
+        Assert.Equal(ResearchSourceType.OfficialDocumentation, outcome.Context.Sources[0].SourceType);
+
+        var claim = Assert.Single(outcome.Context.Claims);
+        Assert.Equal(ResearchClaimVerificationStatus.Documented, claim.VerificationStatus);
+        Assert.Equal(ResearchClaimVerificationMethod.DocumentationOnly, claim.VerificationMethod);
+        Assert.NotEqual(ResearchClaimVerificationMethod.DeterministicReconciliation, claim.VerificationMethod);
+        Assert.NotEqual(ResearchClaimVerificationStatus.Verified, claim.VerificationStatus);
+    }
+
     private static TokenResearchOrchestrator CreateOrchestrator(
         FakeProvider provider,
         FakeRepository repository,
@@ -223,6 +278,43 @@ public sealed class TokenResearchOrchestratorTests
             });
     }
 
+    private static CandidateResearchResult CreateGeminiLikeCandidateResult(
+        string mint,
+        string sourceUrl,
+        ResearchSourceType claimedSourceType,
+        bool claimedCanonicalProjectWebsite)
+    {
+        return new CandidateResearchResult(
+            IdentityEvidence: new[]
+            {
+                new CandidateIdentityEvidence(ResearchIdentityEvidenceType.MintAddressMentioned, mint, "provider extracted exact mint")
+            },
+            Sources: new[]
+            {
+                new CandidateResearchSource(
+                    Id: "src",
+                    ClaimedSourceType: claimedSourceType,
+                    Title: "Gemini source",
+                    Publisher: "Unverified",
+                    Url: sourceUrl,
+                    ClaimedCanonicalProjectWebsite: claimedCanonicalProjectWebsite,
+                    PublishedAtUtc: null)
+            },
+            Claims: new[]
+            {
+                new CandidateDocumentedClaim(
+                    Id: ResearchClaimIds.DocumentedInflationaryIssuance,
+                    Category: "issuance",
+                    Statement: "Issuance is documented by source.",
+                    SourceIds: new[] { "src" },
+                    ObservedFactReferences: new[]
+                    {
+                        new ObservedFactReference(ObservedFactIds.MintAuthorityActive, "true", "true", null)
+                    },
+                    ExtractionNote: "gemini claim")
+            });
+    }
+
     private static CandidateResearchSource CreateSource(string id)
     {
         return new CandidateResearchSource(
@@ -255,6 +347,74 @@ public sealed class TokenResearchOrchestratorTests
                     IsCanonicalProjectWebsite: false,
                     AssessmentNote: "trusted")
             });
+    }
+
+    private static TokenInspection CreateInspectionForMint(string mint)
+    {
+        var inspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        return inspection with
+        {
+            Identity = inspection.Identity with
+            {
+                Mint = mint,
+                Name = "SKR",
+                Symbol = "SKR"
+            }
+        };
+    }
+
+    private static SafeSourceFetchResult SuccessFetch(string url, string contentType, string content)
+    {
+        return new SafeSourceFetchResult(
+            Success: true,
+            FinalUri: new Uri(url),
+            NormalizedHost: new Uri(url).Host,
+            ContentType: contentType,
+            Content: content,
+            BytesRead: content.Length,
+            Reason: ResearchSourceAssessmentReason.None,
+            Detail: null);
+    }
+
+    private static TokenResearchOrchestrator CreateOrchestratorWithProductionAssessor(
+        FakeProvider provider,
+        FakeRepository repository,
+        Func<CandidateResearchSource, SafeSourceFetchResult> fetchHandler)
+    {
+        var options = Options.Create(new TokenResearchOptions
+        {
+            FreshnessHours = 24,
+            LargestUnknownTokenAccountThresholdPercent = 10m,
+            MaxSources = 16,
+            MaxClaims = 32,
+            MaxStatementLength = 600,
+            MaxUrlLength = 2048,
+            MaxTitleLength = 160,
+            MaxPublisherLength = 120,
+            ProviderTimeoutSeconds = 8,
+            AcceptCanonicalProjectWebsite = true
+        });
+
+        var trustAssessor = new ProductionResearchTrustAssessor(
+            new StubSafeResearchSourceClient(fetchHandler),
+            new TrustedMintSourceRegistry(),
+            new ResearchContentNormalizer(),
+            new SolanaMintEvidenceMatcher(),
+            new TrustedSourceClassifier(),
+            NullLogger<ProductionResearchTrustAssessor>.Instance);
+
+        return new TokenResearchOrchestrator(
+            provider,
+            trustAssessor,
+            repository,
+            new ResearchNeedDetector(options.Value),
+            new ResearchRequestFactory(),
+            new CandidateResearchPromoter(options.Value),
+            new DeterministicResearchVerifier(),
+            new ProtocolResearchContextMerger(),
+            TimeProvider.System,
+            options,
+            NullLogger<TokenResearchOrchestrator>.Instance);
     }
 
     private static CachedTokenResearchSnapshot CreateSnapshot(DateTimeOffset expiresAtUtc)
