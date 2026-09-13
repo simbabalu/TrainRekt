@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
@@ -11,6 +12,50 @@ namespace TrainRekt.Api.Tests;
 
 public sealed class GeminiInteractionClientTests
 {
+    [Fact]
+    public async Task RunGroundedResearchAsync_RequestSchema_UsesInteractionsToolsAndNoLegacyFields()
+    {
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/v1beta/interactions", request.RequestUri!.AbsolutePath);
+            Assert.True(request.Headers.Contains("x-goog-api-key"));
+
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+
+            Assert.Equal("gemini-2.5-flash-lite", root.GetProperty("model").GetString());
+            Assert.True(root.TryGetProperty("input", out var inputElement));
+            Assert.Equal(JsonValueKind.String, inputElement.ValueKind);
+
+            var tools = root.GetProperty("tools");
+            Assert.Equal(JsonValueKind.Array, tools.ValueKind);
+            var tool = Assert.Single(tools.EnumerateArray());
+            Assert.Equal("google_search", tool.GetProperty("type").GetString());
+
+            Assert.False(root.TryGetProperty("response_mime_type", out _));
+            Assert.False(root.TryGetProperty("outputs", out _));
+
+            var generationConfig = root.GetProperty("generation_config");
+            Assert.True(generationConfig.TryGetProperty("max_output_tokens", out _));
+            Assert.False(generationConfig.TryGetProperty("thinking_level", out _));
+
+            const string payload = "{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"grounded\",\"annotations\":[{\"type\":\"url_citation\",\"url\":\"https://docs.example.com/a\"}]}]}]}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler);
+
+        var result = await client.RunGroundedResearchAsync(CreateRequest(), CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
     [Fact]
     public async Task RunGroundedResearchAsync_ValidGroundedResponse_ReturnsNormalizedCitations()
     {
@@ -53,6 +98,36 @@ public sealed class GeminiInteractionClientTests
         Assert.Equal(2, result.Value.Sources.Count);
         Assert.Contains(result.Value.Sources, source => source.Url == "https://docs.example.com/x");
         Assert.Contains(result.Value.Sources, source => source.Url == "https://repo.example.com/a");
+    }
+
+    [Fact]
+    public async Task RunGroundedResearchAsync_ParsesGoogleSearchResultStepAndDeduplicates()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            const string payload = "{" +
+                "\"steps\":[" +
+                "{\"type\":\"google_search_call\",\"query\":\"skr mint\"}," +
+                "{\"type\":\"google_search_result\",\"results\":[" +
+                "{\"url\":\"https://www.google.com/url?url=https%3A%2F%2Frepo.example.com%2Fa\",\"title\":\"redirect\"}," +
+                "{\"url\":\"https://repo.example.com/a\",\"title\":\"direct\"}" +
+                "]}," +
+                "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"grounded text\"}]}" +
+                "]}";
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var client = CreateClient(handler);
+
+        var result = await client.RunGroundedResearchAsync(CreateRequest(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Single(result.Value!.Sources);
+        Assert.Equal("https://repo.example.com/a", result.Value.Sources[0].Url);
     }
 
     [Fact]
@@ -141,6 +216,47 @@ public sealed class GeminiInteractionClientTests
     }
 
     [Fact]
+    public async Task RunStructuredExtractionAsync_RequestSchema_UsesResponseFormatSchemaAndNoLegacyFields()
+    {
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/v1beta/interactions", request.RequestUri!.AbsolutePath);
+
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+
+            Assert.Equal("gemini-2.5-flash-lite", root.GetProperty("model").GetString());
+            Assert.False(root.TryGetProperty("tools", out _));
+            Assert.False(root.TryGetProperty("response_mime_type", out _));
+            Assert.False(root.TryGetProperty("outputs", out _));
+
+            var responseFormat = root.GetProperty("response_format");
+            Assert.Equal("text", responseFormat.GetProperty("type").GetString());
+            Assert.Equal("application/json", responseFormat.GetProperty("mime_type").GetString());
+            Assert.Equal(JsonValueKind.Object, responseFormat.GetProperty("schema").ValueKind);
+
+            const string payload = "{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"identityEvidence\\\":[],\\\"sources\\\":[],\\\"claims\\\":[]}\"}]}]}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler);
+        var grounded = new GeminiGroundedResearch("grounded", new[]
+        {
+            new GeminiCitation("https://docs.example.com", "docs")
+        });
+
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), grounded, CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
     public async Task RunStructuredExtractionAsync_MalformedApiPayload_ReturnsMalformedResponse()
     {
         var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -155,6 +271,37 @@ public sealed class GeminiInteractionClientTests
 
         Assert.False(result.Success);
         Assert.Equal(GeminiFailureReason.MalformedResponse, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task RunGroundedResearchAsync_Http400_UsesSanitizedGoogleErrorDetail()
+    {
+        var oversized = new string('x', 1200);
+        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(
+                "{" +
+                "\"error\":{" +
+                "\"code\":400," +
+                "\"status\":\"INVALID_ARGUMENT\"," +
+                "\"message\":\"bad field in request: " + oversized + "\"}" +
+                "}",
+                Encoding.UTF8,
+                "application/json")
+        }));
+
+        var client = CreateClient(handler);
+        var result = await client.RunGroundedResearchAsync(CreateRequest(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(GeminiFailureReason.ProviderRejected, result.FailureReason);
+        Assert.Equal(400, result.HttpStatusCode);
+        Assert.NotNull(result.Detail);
+        Assert.Contains("http=400", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("error_type=INVALID_ARGUMENT", result.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("test-key", result.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mint=So11111111111111111111111111111111111111112", result.Detail, StringComparison.Ordinal);
+        Assert.True(result.Detail.Length <= 420);
     }
 
     private static ResearchRequest CreateRequest()

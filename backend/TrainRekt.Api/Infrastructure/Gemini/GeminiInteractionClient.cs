@@ -12,6 +12,8 @@ namespace TrainRekt.Api.Infrastructure.Gemini;
 public sealed class GeminiInteractionClient : IGeminiInteractionClient
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+    private const int MaxErrorBodyBytes = 16384;
+    private const int MaxErrorDetailLength = 420;
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _options;
     private readonly GeminiGroundingNormalizer _groundingNormalizer;
@@ -40,8 +42,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             ["generation_config"] = new Dictionary<string, object?>
             {
                 ["temperature"] = 0.1,
-                ["max_output_tokens"] = _options.MaxResearchOutputTokens,
-                ["thinking_level"] = "low"
+                ["max_output_tokens"] = _options.MaxResearchOutputTokens
             }
         };
 
@@ -106,8 +107,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             ["generation_config"] = new Dictionary<string, object?>
             {
                 ["temperature"] = 0.0,
-                ["max_output_tokens"] = _options.MaxExtractionOutputTokens,
-                ["thinking_level"] = "low"
+                ["max_output_tokens"] = _options.MaxExtractionOutputTokens
             },
             ["response_format"] = BuildResponseFormat()
         };
@@ -180,6 +180,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             var statusCode = (int)response.StatusCode;
             if (!response.IsSuccessStatusCode)
             {
+                var errorBody = await ReadLimitedBodyBytesAsync(response.Content, MaxErrorBodyBytes, cancellationToken);
                 var reason = response.StatusCode switch
                 {
                     HttpStatusCode.TooManyRequests => GeminiFailureReason.RateLimited,
@@ -191,7 +192,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
                     false,
                     null,
                     reason,
-                    $"Gemini returned HTTP {statusCode}.",
+                    BuildSanitizedProviderErrorDetail(stage, statusCode, stopwatch.ElapsedMilliseconds, errorBody),
                     statusCode);
             }
 
@@ -234,6 +235,17 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
 
     private async Task<GeminiClientResult<byte[]>> ReadBodyBytesAsync(HttpContent content, CancellationToken cancellationToken)
     {
+        return await ReadBodyBytesAsync(content, _options.MaxResponseBytes, cancellationToken);
+    }
+
+    private static async Task<byte[]?> ReadLimitedBodyBytesAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
+        var bodyResult = await ReadBodyBytesAsync(content, maxBytes, cancellationToken);
+        return bodyResult.Success ? bodyResult.Value : null;
+    }
+
+    private static async Task<GeminiClientResult<byte[]>> ReadBodyBytesAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
         await using var stream = await content.ReadAsStreamAsync(cancellationToken);
         using var memory = new MemoryStream();
         var buffer = new byte[8192];
@@ -248,7 +260,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             }
 
             total += read;
-            if (total > _options.MaxResponseBytes)
+            if (total > maxBytes)
             {
                 return new GeminiClientResult<byte[]>(
                     false,
@@ -276,8 +288,21 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
         foreach (var step in stepsElement.EnumerateArray())
         {
             if (!step.TryGetProperty("type", out var stepTypeElement)
-                || stepTypeElement.ValueKind != JsonValueKind.String
-                || !string.Equals(stepTypeElement.GetString(), "model_output", StringComparison.Ordinal))
+                || stepTypeElement.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var stepType = stepTypeElement.GetString();
+
+            if (citations is not null
+                && string.Equals(stepType, "google_search_result", StringComparison.Ordinal))
+            {
+                TryExtractGoogleSearchResultCitations(step, citations);
+                continue;
+            }
+
+            if (!string.Equals(stepType, "model_output", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -342,6 +367,98 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
         }
 
         return true;
+    }
+
+    private static void TryExtractGoogleSearchResultCitations(JsonElement step, List<GeminiCitation> citations)
+    {
+        if (!step.TryGetProperty("results", out var resultsElement) || resultsElement.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var result in resultsElement.EnumerateArray())
+        {
+            if (result.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (!result.TryGetProperty("url", out var urlElement) || urlElement.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var title = result.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String
+                ? titleElement.GetString()
+                : null;
+
+            citations.Add(new GeminiCitation(urlElement.GetString() ?? string.Empty, title));
+        }
+    }
+
+    private string BuildSanitizedProviderErrorDetail(string stage, int statusCode, long durationMs, byte[]? errorBody)
+    {
+        var (errorCode, errorType, errorMessage) = TryParseGoogleError(errorBody);
+        var detail = $"Gemini stage={stage}; model={_options.Model}; http={statusCode}; error_code={errorCode}; error_type={errorType}; message={errorMessage}; duration_ms={durationMs}.";
+        return TruncateAndNormalize(detail, MaxErrorDetailLength);
+    }
+
+    private static (string ErrorCode, string ErrorType, string ErrorMessage) TryParseGoogleError(byte[]? body)
+    {
+        if (body is null || body.Length == 0)
+        {
+            return ("unknown", "unknown", "No provider error payload.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("error", out var errorElement) || errorElement.ValueKind != JsonValueKind.Object)
+            {
+                return ("unknown", "unknown", "Provider returned a non-standard error payload.");
+            }
+
+            var code = errorElement.TryGetProperty("code", out var codeElement)
+                ? codeElement.ValueKind switch
+                {
+                    JsonValueKind.Number when codeElement.TryGetInt32(out var intCode) => intCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    JsonValueKind.String => codeElement.GetString() ?? "unknown",
+                    _ => "unknown"
+                }
+                : "unknown";
+
+            var type = errorElement.TryGetProperty("status", out var statusElement) && statusElement.ValueKind == JsonValueKind.String
+                ? statusElement.GetString() ?? "unknown"
+                : errorElement.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String
+                    ? typeElement.GetString() ?? "unknown"
+                    : "unknown";
+
+            var message = errorElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
+                ? messageElement.GetString() ?? "Provider rejected request."
+                : "Provider rejected request.";
+
+            return (
+                TruncateAndNormalize(code, 32),
+                TruncateAndNormalize(type, 64),
+                TruncateAndNormalize(message, 220));
+        }
+        catch (JsonException)
+        {
+            return ("unknown", "unknown", "Provider returned a non-JSON error payload.");
+        }
+    }
+
+    private static string TruncateAndNormalize(string value, int maxLength)
+    {
+        var normalized = string.Join(" ", value
+            .Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (normalized.Length <= maxLength)
+        {
+            return normalized;
+        }
+
+        return normalized[..maxLength];
     }
 
     private static string BuildGroundedSystemInstruction()
