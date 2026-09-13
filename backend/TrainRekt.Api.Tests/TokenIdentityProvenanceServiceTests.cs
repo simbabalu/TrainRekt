@@ -12,9 +12,9 @@ public sealed class TokenIdentityProvenanceServiceTests
     [Fact]
     public async Task AnalyzeAsync_InspectionFailure_ReturnsInspectionErrorAndSkipsRepository()
     {
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Failure(TokenInspectionErrorCode.InvalidMint, "bad"));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Failure(TokenInspectionErrorCode.InvalidMint, "bad"));
         var repository = new StubObservationRepository();
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         var result = await service.AnalyzeAsync("bad", CancellationToken.None);
 
@@ -28,13 +28,13 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_WithNoCollisions_ReturnsNoMeaningfulCollisionFound()
     {
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository
         {
             QueryResult = new TokenIdentityObservationQueryResult(0, Array.Empty<TokenIdentityObservation>())
         };
 
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -49,7 +49,7 @@ public sealed class TokenIdentityProvenanceServiceTests
     {
         var now = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository
         {
             QueryResult = new TokenIdentityObservationQueryResult(
@@ -69,7 +69,7 @@ public sealed class TokenIdentityProvenanceServiceTests
                 })
         };
 
-        var service = CreateService(inspectionService, repository, time: now);
+        var service = CreateService(inspectionService, repository, new StubChronologyService(), time: now);
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -85,7 +85,7 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_WithNormalizedOnlyCollision_ReturnsAmbiguousLowConfidence()
     {
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository
         {
             QueryResult = new TokenIdentityObservationQueryResult(
@@ -105,7 +105,7 @@ public sealed class TokenIdentityProvenanceServiceTests
                 })
         };
 
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -119,9 +119,9 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_WithMissingNameAndSymbol_ReturnsInsufficientEvidenceAndUnknown()
     {
         var inspection = CreateInspection("Mint111", null, null);
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository();
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -135,7 +135,7 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_WithTruncatedResults_LowersCollisionConfidence()
     {
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository
         {
             QueryResult = new TokenIdentityObservationQueryResult(
@@ -155,7 +155,7 @@ public sealed class TokenIdentityProvenanceServiceTests
                 })
         };
 
-        var service = CreateService(inspectionService, repository, options: new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 1 });
+        var service = CreateService(inspectionService, repository, new StubChronologyService(), options: new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 1 });
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -171,9 +171,9 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_RepositoryFailure_ReturnsPersistenceUnavailable()
     {
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository { ThrowOnUpsert = true };
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
@@ -186,9 +186,9 @@ public sealed class TokenIdentityProvenanceServiceTests
     public async Task AnalyzeAsync_RepositoryCancellation_Propagates()
     {
         var inspection = CreateInspection("Mint111", "Research Token", "RCH");
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository { ThrowCancellation = true };
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None));
@@ -199,15 +199,91 @@ public sealed class TokenIdentityProvenanceServiceTests
     {
         var protocolContext = new ProtocolResearchContext("protocol", Array.Empty<ResearchSource>(), Array.Empty<DocumentedClaim>());
         var inspection = CreateInspection("Mint111", "Research Token", "RCH", protocolContext);
-        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
         var repository = new StubObservationRepository();
-        var service = CreateService(inspectionService, repository);
+        var service = CreateService(inspectionService, repository, new StubChronologyService());
 
         _ = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.Same(protocolContext, inspection.ProtocolContext);
         Assert.Equal("Research Token", inspection.Identity.Name);
         Assert.Equal("RCH", inspection.Identity.Symbol);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ChronologyEvidence_RemovesOnChainCreationOrderUnknownAndAddsChronology()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var chronology = new OnChainChronologyEvidence(
+            EarliestObservedSignature: "sig-1",
+            EarliestObservedSlot: 123,
+            EarliestObservedBlockTimeUtc: DateTimeOffset.UtcNow,
+            HistoryCoverage: OnChainChronologyCoverage.CompleteWithinProviderResult,
+            PaginationExhausted: true,
+            PagesScanned: 1,
+            SignaturesScanned: 2,
+            Source: "HELIUS_SOLANA_RPC",
+            Confidence: OnChainChronologyConfidence.High,
+            Precision: OnChainChronologyPrecision.BlockTime,
+            AccountCreationProven: false,
+            Unknowns: new[]
+            {
+                OnChainChronologyUnknown.CanonicalCreationTimeNotProven,
+                OnChainChronologyUnknown.ProviderRetentionUnknown
+            },
+            AnalyzedAtUtc: DateTimeOffset.UtcNow);
+
+        var service = CreateService(
+            inspectionService,
+            new StubObservationRepository(),
+            new StubChronologyService { NextEvidence = chronology });
+
+        var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.NotNull(result.Provenance);
+        Assert.NotNull(result.Provenance!.OnChainChronology);
+        Assert.DoesNotContain(TokenIdentityProvenanceUnknown.OnChainCreationOrderNotVerified, result.Provenance.Unknowns);
+        Assert.Contains(TokenIdentityProvenanceUnknown.CanonicalCreationTimeNotProven, result.Provenance.Unknowns);
+        Assert.Contains(TokenIdentityProvenanceUnknown.ProviderRetentionUnknown, result.Provenance.Unknowns);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ChronologyFailure_DoesNotEraseObservedCollisionEvidence()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(
+                1,
+                new[]
+                {
+                    new TokenIdentityObservation(
+                        Mint: "Mint222",
+                        RawName: "Research Token",
+                        NormalizedName: "research token",
+                        RawSymbol: "RCH",
+                        NormalizedSymbol: "rch",
+                        TokenProgram: inspection.Program.ProgramId,
+                        FirstObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-20),
+                        LastObservedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-10),
+                        ObservationVersion: 1)
+                })
+        };
+
+        var service = CreateService(
+            inspectionService,
+            repository,
+            new StubChronologyService { ThrowUnexpected = true });
+
+        var result = await service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.NotNull(result.Provenance);
+        Assert.Equal(TokenIdentityProvenanceResultType.CollisionObserved, result.Provenance!.Result);
+        Assert.Single(result.Provenance.Collisions);
+        Assert.NotNull(result.Provenance.OnChainChronology);
+        Assert.Equal(OnChainChronologyCoverage.Unavailable, result.Provenance.OnChainChronology!.HistoryCoverage);
     }
 
     private static TokenInspection CreateInspection(string mint, string? name, string? symbol, ProtocolResearchContext? protocolContext = null)
@@ -225,8 +301,9 @@ public sealed class TokenIdentityProvenanceServiceTests
     }
 
     private static TokenIdentityProvenanceService CreateService(
-        ITokenInspectionService inspectionService,
+        ITokenInspectionDeterministicService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
+        IOnChainChronologyService chronologyService,
         TokenIdentityProvenanceOptions? options = null,
         DateTimeOffset? time = null)
     {
@@ -236,17 +313,18 @@ public sealed class TokenIdentityProvenanceServiceTests
         return new TokenIdentityProvenanceService(
             inspectionService,
             observationRepository,
+            chronologyService,
             new TokenIdentityNormalizer(),
             Options.Create(options),
             new FixedTimeProvider(now),
             NullLogger<TokenIdentityProvenanceService>.Instance);
     }
 
-    private sealed class StubInspectionService : ITokenInspectionService
+    private sealed class StubDeterministicInspectionService : ITokenInspectionDeterministicService
     {
         private readonly TokenInspectionResult _result;
 
-        public StubInspectionService(TokenInspectionResult result)
+        public StubDeterministicInspectionService(TokenInspectionResult result)
         {
             _result = result;
         }
@@ -254,6 +332,40 @@ public sealed class TokenIdentityProvenanceServiceTests
         public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
         {
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class StubChronologyService : IOnChainChronologyService
+    {
+        public OnChainChronologyEvidence NextEvidence { get; set; } = new(
+            EarliestObservedSignature: null,
+            EarliestObservedSlot: null,
+            EarliestObservedBlockTimeUtc: null,
+            HistoryCoverage: OnChainChronologyCoverage.Unavailable,
+            PaginationExhausted: false,
+            PagesScanned: 0,
+            SignaturesScanned: 0,
+            Source: "HELIUS_SOLANA_RPC",
+            Confidence: OnChainChronologyConfidence.None,
+            Precision: OnChainChronologyPrecision.ObservedTransactionOnly,
+            AccountCreationProven: false,
+            Unknowns: new[]
+            {
+                OnChainChronologyUnknown.CanonicalCreationTimeNotProven,
+                OnChainChronologyUnknown.ChainHistoryUnavailable
+            },
+            AnalyzedAtUtc: DateTimeOffset.UtcNow);
+
+        public bool ThrowUnexpected { get; set; }
+
+        public Task<OnChainChronologyEvidence> AnalyzeAsync(string mint, CancellationToken cancellationToken)
+        {
+            if (ThrowUnexpected)
+            {
+                throw new InvalidOperationException("chronology failed");
+            }
+
+            return Task.FromResult(NextEvidence);
         }
     }
 

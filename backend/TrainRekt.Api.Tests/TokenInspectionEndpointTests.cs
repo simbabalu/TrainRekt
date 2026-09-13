@@ -3,8 +3,11 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Contracts;
+using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Abstractions;
+using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Domain.Constants;
 using TrainRekt.Api.Domain.Models;
 
@@ -255,6 +258,161 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.Contains("GLOBAL_HISTORY_NOT_CHECKED", payload.Unknowns);
     }
 
+    [Fact]
+    public async Task PostTokenInspectionProvenance_UsesDeterministicInspectionBoundary_NotFinalInspectionService()
+    {
+        var deterministicInspection = ResearchTestData.CreateInspection() with
+        {
+            Identity = ResearchTestData.CreateInspection().Identity with { Mint = "So11111111111111111111111111111111111111112" }
+        };
+
+        var deterministic = new CountingDeterministicInspectionService(TokenInspectionResult.Success(deterministicInspection));
+        var finalInspection = new ThrowingFinalInspectionService();
+
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenIdentityProvenanceService>();
+                services.RemoveAll<ITokenInspectionDeterministicService>();
+                services.RemoveAll<ITokenInspectionService>();
+                services.RemoveAll<ITokenIdentityObservationRepository>();
+                services.RemoveAll<IOnChainChronologyService>();
+
+                services.AddSingleton<ITokenInspectionDeterministicService>(deterministic);
+                services.AddSingleton<ITokenInspectionService>(finalInspection);
+                services.AddSingleton<ITokenIdentityObservationRepository>(new NoOpTokenIdentityObservationRepository());
+                services.AddSingleton<IOnChainChronologyService>(new StubChronologyService());
+                services.AddSingleton<ITokenIdentityProvenanceService>(serviceProvider =>
+                    new TokenIdentityProvenanceService(
+                        serviceProvider.GetRequiredService<ITokenInspectionDeterministicService>(),
+                        serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
+                        serviceProvider.GetRequiredService<IOnChainChronologyService>(),
+                        new TokenIdentityNormalizer(),
+                        Options.Create(new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 25 }),
+                        TimeProvider.System,
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenIdentityProvenanceService>.Instance));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/So11111111111111111111111111111111111111112/provenance", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, deterministic.CallCount);
+        Assert.Equal(0, finalInspection.CallCount);
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_StillUsesFinalInspectionService()
+    {
+        var finalInspection = new StubInspectionService(TokenInspectionResult.Success(ResearchTestData.CreateInspection() with
+        {
+            Identity = ResearchTestData.CreateInspection().Identity with { Mint = "FinalMint111111111111111111111111111111111" }
+        }));
+
+        var deterministic = new CountingDeterministicInspectionService(TokenInspectionResult.Success(ResearchTestData.CreateInspection() with
+        {
+            Identity = ResearchTestData.CreateInspection().Identity with { Mint = "DeterministicMint111111111111111111111111111" }
+        }));
+
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.RemoveAll<ITokenInspectionDeterministicService>();
+                services.AddSingleton<ITokenInspectionService>(finalInspection);
+                services.AddSingleton<ITokenInspectionDeterministicService>(deterministic);
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = "So11111111111111111111111111111111111111112"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<TokenInspectionResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("FinalMint111111111111111111111111111111111", payload!.Identity.Mint);
+        Assert.Equal(0, deterministic.CallCount);
+    }
+
+    [Fact]
+    public async Task PostTokenInspectionProvenance_ResponseDoesNotExposeTrustedIdentityOrCopycatVerdictsInPhase3D2a()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenIdentityProvenanceService>();
+                services.AddSingleton<ITokenIdentityProvenanceService>(new StubProvenanceService(
+                    new TokenIdentityProvenanceResult(
+                        null,
+                        new TokenIdentityProvenance(
+                            Result: TokenIdentityProvenanceResultType.CollisionObserved,
+                            Confidence: TokenIdentityProvenanceConfidence.High,
+                            ScannedIdentity: new TokenIdentityProvenanceScannedIdentity(
+                                Mint: "ResearchMint1111111111111111111111111111111",
+                                RawName: "Research Token",
+                                NormalizedName: "research token",
+                                RawSymbol: "RCH",
+                                NormalizedSymbol: "rch",
+                                ObservedAtUtc: DateTimeOffset.UtcNow),
+                            EarliestObservedMatch: null,
+                            Collisions: Array.Empty<TokenIdentityCollision>(),
+                            TotalCollisionCount: 0,
+                            ReturnedCollisionCount: 0,
+                            IsTruncated: false,
+                            Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                            ConflictingEvidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                            Unknowns: new[] { TokenIdentityProvenanceUnknown.CanonicalCreationTimeNotProven },
+                            AnalyzedAtUtc: DateTimeOffset.UtcNow,
+                            OnChainChronology: new OnChainChronologyEvidence(
+                                EarliestObservedSignature: null,
+                                EarliestObservedSlot: null,
+                                EarliestObservedBlockTimeUtc: null,
+                                HistoryCoverage: OnChainChronologyCoverage.Unavailable,
+                                PaginationExhausted: false,
+                                PagesScanned: 0,
+                                SignaturesScanned: 0,
+                                Source: "HELIUS_SOLANA_RPC",
+                                Confidence: OnChainChronologyConfidence.None,
+                                Precision: OnChainChronologyPrecision.ObservedTransactionOnly,
+                                AccountCreationProven: false,
+                                Unknowns: new[] { OnChainChronologyUnknown.CanonicalCreationTimeNotProven },
+                                AnalyzedAtUtc: DateTimeOffset.UtcNow)))));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/ResearchMint1111111111111111111111111111111/provenance", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("onChainChronology", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("trustedIdentity", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("social", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("copycat", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("original", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("safe", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("scam", json, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static TokenInspection CreateInspectionWithProtocolContext()
     {
         var context = new ProtocolResearchContext(
@@ -329,6 +487,60 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         public Task<TokenIdentityProvenanceResult> AnalyzeAsync(string mint, CancellationToken cancellationToken)
         {
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class ThrowingFinalInspectionService : ITokenInspectionService
+    {
+        public int CallCount { get; private set; }
+
+        public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
+        {
+            CallCount += 1;
+            throw new InvalidOperationException("final inspection should not be used by provenance");
+        }
+    }
+
+    private sealed class CountingDeterministicInspectionService : ITokenInspectionDeterministicService
+    {
+        private readonly TokenInspectionResult _result;
+
+        public CountingDeterministicInspectionService(TokenInspectionResult result)
+        {
+            _result = result;
+        }
+
+        public int CallCount { get; private set; }
+
+        public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
+        {
+            CallCount += 1;
+            return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class StubChronologyService : IOnChainChronologyService
+    {
+        public Task<OnChainChronologyEvidence> AnalyzeAsync(string mint, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new OnChainChronologyEvidence(
+                EarliestObservedSignature: null,
+                EarliestObservedSlot: null,
+                EarliestObservedBlockTimeUtc: null,
+                HistoryCoverage: OnChainChronologyCoverage.Unavailable,
+                PaginationExhausted: false,
+                PagesScanned: 0,
+                SignaturesScanned: 0,
+                Source: "HELIUS_SOLANA_RPC",
+                Confidence: OnChainChronologyConfidence.None,
+                Precision: OnChainChronologyPrecision.ObservedTransactionOnly,
+                AccountCreationProven: false,
+                Unknowns: new[]
+                {
+                    OnChainChronologyUnknown.CanonicalCreationTimeNotProven,
+                    OnChainChronologyUnknown.ChainHistoryUnavailable
+                },
+                AnalyzedAtUtc: DateTimeOffset.UtcNow));
         }
     }
 }

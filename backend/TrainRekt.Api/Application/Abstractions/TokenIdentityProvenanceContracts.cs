@@ -35,6 +35,31 @@ public sealed record TokenIdentityProvenanceResult(
     TokenInspectionError? InspectionError,
     TokenIdentityProvenance? Provenance);
 
+public sealed record CachedTokenIdentityChronologySnapshot(
+    string Id,
+    string Mint,
+    int ChronologyVersion,
+    DateTimeOffset AnalyzedAtUtc,
+    DateTimeOffset CachedAtUtc,
+    DateTimeOffset ExpiresAtUtc,
+    OnChainChronologyEvidence Evidence);
+
+public interface ITokenIdentityChronologySnapshotRepository
+{
+    Task<CachedTokenIdentityChronologySnapshot?> GetFreshAsync(
+        string mint,
+        int chronologyVersion,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
+
+    Task InsertAsync(CachedTokenIdentityChronologySnapshot snapshot, CancellationToken cancellationToken);
+}
+
+public interface IOnChainChronologyService
+{
+    Task<OnChainChronologyEvidence> AnalyzeAsync(string mint, CancellationToken cancellationToken);
+}
+
 public interface ITokenIdentityProvenanceService
 {
     Task<TokenIdentityProvenanceResult> AnalyzeAsync(string mint, CancellationToken cancellationToken);

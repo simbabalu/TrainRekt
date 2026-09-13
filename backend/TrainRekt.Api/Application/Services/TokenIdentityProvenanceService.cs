@@ -10,16 +10,18 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     private const int ObservationVersion = 1;
     private const string EarliestObservedSemantics = "Among identities observed by TrainRekt, this mint was observed first for the matching normalized identity.";
 
-    private readonly ITokenInspectionService _inspectionService;
+    private readonly ITokenInspectionDeterministicService _inspectionService;
     private readonly ITokenIdentityObservationRepository _observationRepository;
+    private readonly IOnChainChronologyService _chronologyService;
     private readonly TokenIdentityNormalizer _normalizer;
     private readonly TokenIdentityProvenanceOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<TokenIdentityProvenanceService> _logger;
 
     public TokenIdentityProvenanceService(
-        ITokenInspectionService inspectionService,
+        ITokenInspectionDeterministicService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
+        IOnChainChronologyService chronologyService,
         TokenIdentityNormalizer normalizer,
         IOptions<TokenIdentityProvenanceOptions> options,
         TimeProvider timeProvider,
@@ -27,6 +29,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     {
         _inspectionService = inspectionService;
         _observationRepository = observationRepository;
+        _chronologyService = chronologyService;
         _normalizer = normalizer;
         _options = options.Value;
         _timeProvider = timeProvider;
@@ -129,6 +132,24 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         var conflictingEvidence = BuildConflictingEvidence(collisions);
         var evidence = BuildEvidence(observation, collisions, earliest, isTruncated);
 
+        OnChainChronologyEvidence chronology;
+        try
+        {
+            chronology = await _chronologyService.AnalyzeAsync(inspection.Identity.Mint, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "On-chain chronology analysis failed for mint {Mint}. Returning local observed provenance evidence.",
+                inspection.Identity.Mint);
+            chronology = CreateUnavailableChronology(nowUtc);
+        }
+
         var unknowns = new List<TokenIdentityProvenanceUnknown>
         {
             TokenIdentityProvenanceUnknown.GlobalHistoryNotChecked,
@@ -142,6 +163,8 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         {
             unknowns.Add(TokenIdentityProvenanceUnknown.ScannedIdentityFieldsMissing);
         }
+
+        ApplyChronologyUnknowns(unknowns, chronology);
 
         var (resultType, confidence) = DetermineResult(observation, collisions, isTruncated);
 
@@ -168,9 +191,57 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             Evidence: evidence,
             ConflictingEvidence: conflictingEvidence,
             Unknowns: unknowns,
-            AnalyzedAtUtc: nowUtc);
+            AnalyzedAtUtc: nowUtc,
+            OnChainChronology: chronology);
 
         return new TokenIdentityProvenanceResult(null, provenance);
+    }
+
+    private static void ApplyChronologyUnknowns(List<TokenIdentityProvenanceUnknown> unknowns, OnChainChronologyEvidence chronology)
+    {
+        foreach (var chronologyUnknown in chronology.Unknowns)
+        {
+            var mapped = chronologyUnknown switch
+            {
+                OnChainChronologyUnknown.CanonicalCreationTimeNotProven => TokenIdentityProvenanceUnknown.CanonicalCreationTimeNotProven,
+                OnChainChronologyUnknown.ChainHistoryPartial => TokenIdentityProvenanceUnknown.ChainHistoryPartial,
+                OnChainChronologyUnknown.ChainHistoryUnavailable => TokenIdentityProvenanceUnknown.ChainHistoryUnavailable,
+                OnChainChronologyUnknown.BlockTimeUnavailable => TokenIdentityProvenanceUnknown.BlockTimeUnavailable,
+                _ => TokenIdentityProvenanceUnknown.ProviderRetentionUnknown
+            };
+
+            if (!unknowns.Contains(mapped))
+            {
+                unknowns.Add(mapped);
+            }
+        }
+
+        if (chronology.EarliestObservedSlot is not null)
+        {
+            unknowns.Remove(TokenIdentityProvenanceUnknown.OnChainCreationOrderNotVerified);
+        }
+    }
+
+    private static OnChainChronologyEvidence CreateUnavailableChronology(DateTimeOffset analyzedAtUtc)
+    {
+        return new OnChainChronologyEvidence(
+            EarliestObservedSignature: null,
+            EarliestObservedSlot: null,
+            EarliestObservedBlockTimeUtc: null,
+            HistoryCoverage: OnChainChronologyCoverage.Unavailable,
+            PaginationExhausted: false,
+            PagesScanned: 0,
+            SignaturesScanned: 0,
+            Source: "HELIUS_SOLANA_RPC",
+            Confidence: OnChainChronologyConfidence.None,
+            Precision: OnChainChronologyPrecision.ObservedTransactionOnly,
+            AccountCreationProven: false,
+            Unknowns: new[]
+            {
+                OnChainChronologyUnknown.CanonicalCreationTimeNotProven,
+                OnChainChronologyUnknown.ChainHistoryUnavailable
+            },
+            AnalyzedAtUtc: analyzedAtUtc);
     }
 
     private static (TokenIdentityProvenanceResultType Result, TokenIdentityProvenanceConfidence Confidence) DetermineResult(

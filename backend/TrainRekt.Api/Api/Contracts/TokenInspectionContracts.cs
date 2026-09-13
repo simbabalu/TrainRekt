@@ -93,7 +93,8 @@ public sealed record TokenIdentityProvenanceResponse(
     IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> Evidence,
     IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> ConflictingEvidence,
     IReadOnlyList<string> Unknowns,
-    DateTimeOffset AnalyzedAtUtc)
+    DateTimeOffset AnalyzedAtUtc,
+    OnChainChronologyEvidenceResponse? OnChainChronology)
 {
     public static TokenIdentityProvenanceResponse FromDomain(TokenIdentityProvenance provenance)
     {
@@ -111,7 +112,10 @@ public sealed record TokenIdentityProvenanceResponse(
             Evidence: provenance.Evidence.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
             ConflictingEvidence: provenance.ConflictingEvidence.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
             Unknowns: provenance.Unknowns.Select(ToUnknownValue).ToArray(),
-            AnalyzedAtUtc: provenance.AnalyzedAtUtc);
+            AnalyzedAtUtc: provenance.AnalyzedAtUtc,
+            OnChainChronology: provenance.OnChainChronology is null
+                ? null
+                : OnChainChronologyEvidenceResponse.FromDomain(provenance.OnChainChronology));
     }
 
     private static string ToResultValue(TokenIdentityProvenanceResultType value)
@@ -145,7 +149,92 @@ public sealed record TokenIdentityProvenanceResponse(
             TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified => "OFFICIAL_IDENTITY_NOT_VERIFIED",
             TokenIdentityProvenanceUnknown.SocialTrendNotAnalyzed => "SOCIAL_TREND_NOT_ANALYZED",
             TokenIdentityProvenanceUnknown.CopycatStatusNotDetermined => "COPYCAT_STATUS_NOT_DETERMINED",
-            _ => "SCANNED_IDENTITY_FIELDS_MISSING"
+            TokenIdentityProvenanceUnknown.ScannedIdentityFieldsMissing => "SCANNED_IDENTITY_FIELDS_MISSING",
+            TokenIdentityProvenanceUnknown.CanonicalCreationTimeNotProven => "CANONICAL_CREATION_TIME_NOT_PROVEN",
+            TokenIdentityProvenanceUnknown.ChainHistoryPartial => "CHAIN_HISTORY_PARTIAL",
+            TokenIdentityProvenanceUnknown.ChainHistoryUnavailable => "CHAIN_HISTORY_UNAVAILABLE",
+            TokenIdentityProvenanceUnknown.BlockTimeUnavailable => "BLOCK_TIME_UNAVAILABLE",
+            _ => "PROVIDER_RETENTION_UNKNOWN"
+        };
+    }
+}
+
+public sealed record OnChainChronologyEvidenceResponse(
+    string? EarliestObservedSignature,
+    long? EarliestObservedSlot,
+    DateTimeOffset? EarliestObservedBlockTimeUtc,
+    string HistoryCoverage,
+    bool PaginationExhausted,
+    int PagesScanned,
+    int SignaturesScanned,
+    string Source,
+    string Confidence,
+    string Precision,
+    bool AccountCreationProven,
+    IReadOnlyList<string> Unknowns,
+    DateTimeOffset AnalyzedAtUtc)
+{
+    public static OnChainChronologyEvidenceResponse FromDomain(OnChainChronologyEvidence evidence)
+    {
+        return new OnChainChronologyEvidenceResponse(
+            EarliestObservedSignature: evidence.EarliestObservedSignature,
+            EarliestObservedSlot: evidence.EarliestObservedSlot,
+            EarliestObservedBlockTimeUtc: evidence.EarliestObservedBlockTimeUtc,
+            HistoryCoverage: ToCoverageValue(evidence.HistoryCoverage),
+            PaginationExhausted: evidence.PaginationExhausted,
+            PagesScanned: evidence.PagesScanned,
+            SignaturesScanned: evidence.SignaturesScanned,
+            Source: evidence.Source,
+            Confidence: ToConfidenceValue(evidence.Confidence),
+            Precision: ToPrecisionValue(evidence.Precision),
+            AccountCreationProven: evidence.AccountCreationProven,
+            Unknowns: evidence.Unknowns.Select(ToUnknownValue).ToArray(),
+            AnalyzedAtUtc: evidence.AnalyzedAtUtc);
+    }
+
+    private static string ToCoverageValue(OnChainChronologyCoverage value)
+    {
+        return value switch
+        {
+            OnChainChronologyCoverage.CompleteWithinProviderResult => "COMPLETE_WITHIN_PROVIDER_RESULT",
+            OnChainChronologyCoverage.PartialPageLimit => "PARTIAL_PAGE_LIMIT",
+            OnChainChronologyCoverage.PartialSignatureLimit => "PARTIAL_SIGNATURE_LIMIT",
+            OnChainChronologyCoverage.PartialProviderFailure => "PARTIAL_PROVIDER_FAILURE",
+            OnChainChronologyCoverage.PartialTimeout => "PARTIAL_TIMEOUT",
+            _ => "UNAVAILABLE"
+        };
+    }
+
+    private static string ToConfidenceValue(OnChainChronologyConfidence value)
+    {
+        return value switch
+        {
+            OnChainChronologyConfidence.High => "HIGH",
+            OnChainChronologyConfidence.Medium => "MEDIUM",
+            OnChainChronologyConfidence.Low => "LOW",
+            _ => "NONE"
+        };
+    }
+
+    private static string ToPrecisionValue(OnChainChronologyPrecision value)
+    {
+        return value switch
+        {
+            OnChainChronologyPrecision.BlockTime => "BLOCK_TIME",
+            OnChainChronologyPrecision.SlotOnly => "SLOT_ONLY",
+            _ => "OBSERVED_TRANSACTION_ONLY"
+        };
+    }
+
+    private static string ToUnknownValue(OnChainChronologyUnknown value)
+    {
+        return value switch
+        {
+            OnChainChronologyUnknown.CanonicalCreationTimeNotProven => "CANONICAL_CREATION_TIME_NOT_PROVEN",
+            OnChainChronologyUnknown.ChainHistoryPartial => "CHAIN_HISTORY_PARTIAL",
+            OnChainChronologyUnknown.ChainHistoryUnavailable => "CHAIN_HISTORY_UNAVAILABLE",
+            OnChainChronologyUnknown.BlockTimeUnavailable => "BLOCK_TIME_UNAVAILABLE",
+            _ => "PROVIDER_RETENTION_UNKNOWN"
         };
     }
 }

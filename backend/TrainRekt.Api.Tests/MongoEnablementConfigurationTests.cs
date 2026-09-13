@@ -32,6 +32,7 @@ public sealed class MongoEnablementConfigurationTests
         Assert.NotNull(scope.ServiceProvider.GetService<PassthroughTokenInspectionService>());
         Assert.IsType<NoOpAiSafetyCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.IsType<NoOpTokenIdentityObservationRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityObservationRepository>());
+        Assert.IsType<NoOpTokenIdentityChronologySnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityChronologySnapshotRepository>());
         Assert.Null(scope.ServiceProvider.GetService<IMongoClient>());
     }
 
@@ -60,7 +61,29 @@ public sealed class MongoEnablementConfigurationTests
         Assert.NotNull(scope.ServiceProvider.GetService<CachedTokenInspectionService>());
         Assert.IsType<MongoTokenInspectionCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.IsType<MongoTokenIdentityObservationRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityObservationRepository>());
+        Assert.IsType<MongoTokenIdentityChronologySnapshotRepository>(scope.ServiceProvider.GetRequiredService<ITokenIdentityChronologySnapshotRepository>());
         Assert.NotNull(scope.ServiceProvider.GetService<IMongoClient>());
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingTokenIdentityChronologyCollectionName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections",
+                ["MongoDb:TokenResearchCollectionName"] = "tokenResearch",
+                ["MongoDb:TokenInspectionCoachCollectionName"] = "tokenInspectionCoach",
+                ["MongoDb:TokenIdentityObservationCollectionName"] = "tokenIdentityObservations",
+                ["MongoDb:TokenIdentityChronologyCollectionName"] = ""
+            })));
+
+        Assert.Contains("MongoDb:TokenIdentityChronologyCollectionName", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

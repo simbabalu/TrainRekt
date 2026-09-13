@@ -98,6 +98,23 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         };
 
         await observationCollection.Indexes.CreateManyAsync(observationIndexes, cancellationToken);
+
+        var chronologyCollection = _database.GetCollection<TokenIdentityChronologySnapshotDocument>(_options.TokenIdentityChronologyCollectionName);
+        var chronologyIndexes = new[]
+        {
+            new CreateIndexModel<TokenIdentityChronologySnapshotDocument>(
+                Builders<TokenIdentityChronologySnapshotDocument>.IndexKeys.Ascending(entry => entry.Mint),
+                new CreateIndexOptions { Name = "ix_tokenIdentityChronology_mint" }),
+            new CreateIndexModel<TokenIdentityChronologySnapshotDocument>(
+                Builders<TokenIdentityChronologySnapshotDocument>.IndexKeys
+                    .Ascending(entry => entry.Mint)
+                    .Ascending(entry => entry.ChronologyVersion)
+                    .Descending(entry => entry.ExpiresAtUtc)
+                    .Descending(entry => entry.AnalyzedAtUtc),
+                new CreateIndexOptions { Name = "ix_tokenIdentityChronology_cache_lookup" })
+        };
+
+        await chronologyCollection.Indexes.CreateManyAsync(chronologyIndexes, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

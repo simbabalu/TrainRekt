@@ -79,6 +79,18 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services
+            .AddOptions<OnChainChronologyOptions>()
+            .Bind(configuration.GetSection(OnChainChronologyOptions.SectionName))
+            .Validate(options => options.PageSize > 0, "OnChainChronology:PageSize must be greater than zero.")
+            .Validate(options => options.MaxPages > 0, "OnChainChronology:MaxPages must be greater than zero.")
+            .Validate(options => options.MaxSignatures > 0, "OnChainChronology:MaxSignatures must be greater than zero.")
+            .Validate(options => options.TimeoutSeconds > 0, "OnChainChronology:TimeoutSeconds must be greater than zero.")
+            .Validate(options => options.CompleteFreshnessHours > 0, "OnChainChronology:CompleteFreshnessHours must be greater than zero.")
+            .Validate(options => options.PartialFreshnessMinutes > 0, "OnChainChronology:PartialFreshnessMinutes must be greater than zero.")
+            .Validate(options => options.FailureFreshnessMinutes > 0, "OnChainChronology:FailureFreshnessMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<MongoDbOptions>()
             .Bind(configuration.GetSection(MongoDbOptions.SectionName))
             .PostConfigure(options =>
@@ -109,6 +121,9 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenIdentityObservationCollectionName),
                 "MongoDb:TokenIdentityObservationCollectionName must be configured when MongoDb:Enabled is true.")
+            .Validate(
+                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenIdentityChronologyCollectionName),
+                "MongoDb:TokenIdentityChronologyCollectionName must be configured when MongoDb:Enabled is true.")
             .ValidateOnStart();
 
         services
@@ -168,6 +183,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
         services.AddSingleton<TokenIdentityNormalizer>();
+        services.AddScoped<IOnChainChronologyService, OnChainChronologyService>();
         services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
         services.AddScoped<AiSafetyCoachResponseValidator>();
@@ -265,6 +281,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, MongoTokenInspectionCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, MongoTokenIdentityObservationRepository>();
+            services.AddScoped<ITokenIdentityChronologySnapshotRepository, MongoTokenIdentityChronologySnapshotRepository>();
             services.AddScoped<CachedTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
@@ -277,6 +294,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, NoOpAiSafetyCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, NoOpTokenIdentityObservationRepository>();
+            services.AddScoped<ITokenIdentityChronologySnapshotRepository, NoOpTokenIdentityChronologySnapshotRepository>();
             services.AddScoped<PassthroughTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(

@@ -42,7 +42,50 @@ public enum TokenIdentityProvenanceUnknown
     OfficialIdentityNotVerified,
     SocialTrendNotAnalyzed,
     CopycatStatusNotDetermined,
-    ScannedIdentityFieldsMissing
+    ScannedIdentityFieldsMissing,
+    CanonicalCreationTimeNotProven,
+    ChainHistoryPartial,
+    ChainHistoryUnavailable,
+    BlockTimeUnavailable,
+    ProviderRetentionUnknown
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OnChainChronologyCoverage
+{
+    CompleteWithinProviderResult,
+    PartialPageLimit,
+    PartialSignatureLimit,
+    PartialProviderFailure,
+    PartialTimeout,
+    Unavailable
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OnChainChronologyPrecision
+{
+    BlockTime,
+    SlotOnly,
+    ObservedTransactionOnly
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OnChainChronologyConfidence
+{
+    None,
+    Low,
+    Medium,
+    High
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OnChainChronologyUnknown
+{
+    CanonicalCreationTimeNotProven,
+    ChainHistoryPartial,
+    ChainHistoryUnavailable,
+    BlockTimeUnavailable,
+    ProviderRetentionUnknown
 }
 
 public sealed record TokenIdentityProvenanceScannedIdentity(
@@ -71,6 +114,21 @@ public sealed record TokenIdentityProvenanceEvidence(
     string Id,
     string Detail);
 
+public sealed record OnChainChronologyEvidence(
+    string? EarliestObservedSignature,
+    long? EarliestObservedSlot,
+    DateTimeOffset? EarliestObservedBlockTimeUtc,
+    OnChainChronologyCoverage HistoryCoverage,
+    bool PaginationExhausted,
+    int PagesScanned,
+    int SignaturesScanned,
+    string Source,
+    OnChainChronologyConfidence Confidence,
+    OnChainChronologyPrecision Precision,
+    bool AccountCreationProven,
+    IReadOnlyList<OnChainChronologyUnknown> Unknowns,
+    DateTimeOffset AnalyzedAtUtc);
+
 public sealed record TokenIdentityProvenance(
     TokenIdentityProvenanceResultType Result,
     TokenIdentityProvenanceConfidence Confidence,
@@ -83,4 +141,5 @@ public sealed record TokenIdentityProvenance(
     IReadOnlyList<TokenIdentityProvenanceEvidence> Evidence,
     IReadOnlyList<TokenIdentityProvenanceEvidence> ConflictingEvidence,
     IReadOnlyList<TokenIdentityProvenanceUnknown> Unknowns,
-    DateTimeOffset AnalyzedAtUtc);
+    DateTimeOffset AnalyzedAtUtc,
+    OnChainChronologyEvidence? OnChainChronology = null);

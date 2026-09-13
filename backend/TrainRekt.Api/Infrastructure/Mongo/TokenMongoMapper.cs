@@ -141,4 +141,29 @@ internal static class TokenMongoMapper
             LastObservedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.LastObservedAtUtc, DateTimeKind.Utc)),
             ObservationVersion: document.ObservationVersion);
     }
+
+    public static TokenIdentityChronologySnapshotDocument ToDocument(CachedTokenIdentityChronologySnapshot model)
+    {
+        return new TokenIdentityChronologySnapshotDocument
+        {
+            Mint = model.Mint,
+            ChronologyVersion = model.ChronologyVersion,
+            AnalyzedAtUtc = DateTime.SpecifyKind(model.AnalyzedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            CachedAtUtc = DateTime.SpecifyKind(model.CachedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            ExpiresAtUtc = DateTime.SpecifyKind(model.ExpiresAtUtc.UtcDateTime, DateTimeKind.Utc),
+            Evidence = model.Evidence
+        };
+    }
+
+    public static CachedTokenIdentityChronologySnapshot ToModel(TokenIdentityChronologySnapshotDocument document)
+    {
+        return new CachedTokenIdentityChronologySnapshot(
+            Id: document.Id,
+            Mint: document.Mint,
+            ChronologyVersion: document.ChronologyVersion,
+            AnalyzedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.AnalyzedAtUtc, DateTimeKind.Utc)),
+            CachedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.CachedAtUtc, DateTimeKind.Utc)),
+            ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
+            Evidence: document.Evidence);
+    }
 }
