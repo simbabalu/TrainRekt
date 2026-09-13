@@ -19,6 +19,10 @@ public sealed class AiSafetyCoachResponseValidator
         "\\b(safe|scam|buy|sell|entry|exit|price target|guaranteed return|expected return|profit target|sign this|approve this wallet|approve this transaction|send transaction|submit transaction|execute transaction)\\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex ProhibitedIdentityVerdicts = new(
+        "\\b(confirmed copycat|definitely\\s+(a\\s+)?copycat|definitely\\s+(a\\s+)?fake|definitely\\s+(a\\s+)?scam|this\\s+is\\s+the\\s+original|this\\s+token\\s+is\\s+authentic|copying\\s+intent\\s+is\\s+proven|malicious\\s+intent\\s+is\\s+proven)\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private readonly AiSafetyCoachOptions _options;
 
     public AiSafetyCoachResponseValidator(IOptions<AiSafetyCoachOptions> options)
@@ -68,6 +72,12 @@ public sealed class AiSafetyCoachResponseValidator
         if (ProhibitedLanguage.IsMatch(combined))
         {
             reason = "Coach output contained prohibited guidance or verdict language.";
+            return false;
+        }
+
+        if (ProhibitedIdentityVerdicts.IsMatch(combined))
+        {
+            reason = "Coach output contained prohibited identity verdict assertions.";
             return false;
         }
 

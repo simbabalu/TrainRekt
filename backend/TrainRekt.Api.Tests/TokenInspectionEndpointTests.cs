@@ -567,6 +567,11 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         {
             return Task.FromResult(_result);
         }
+
+        public Task<TokenIdentityProvenanceResult> AnalyzeFromInspectionAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_result);
+        }
     }
 
     private sealed class ThrowingFinalInspectionService : ITokenInspectionService

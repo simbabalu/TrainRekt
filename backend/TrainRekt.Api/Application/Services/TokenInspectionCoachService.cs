@@ -2,12 +2,14 @@ using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Domain.Constants;
+using TrainRekt.Api.Domain.Models;
 
 namespace TrainRekt.Api.Application.Services;
 
 public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
 {
     private readonly ITokenInspectionService _inspectionService;
+    private readonly ITokenIdentityProvenanceService _provenanceService;
     private readonly IAiSafetyCoach _coach;
     private readonly IAiSafetyCoachSnapshotRepository _snapshotRepository;
     private readonly AiSafetyCoachInputFactory _inputFactory;
@@ -18,6 +20,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
 
     public TokenInspectionCoachService(
         ITokenInspectionService inspectionService,
+        ITokenIdentityProvenanceService provenanceService,
         IAiSafetyCoach coach,
         IAiSafetyCoachSnapshotRepository snapshotRepository,
         AiSafetyCoachInputFactory inputFactory,
@@ -27,6 +30,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         ILogger<TokenInspectionCoachService> logger)
     {
         _inspectionService = inspectionService;
+        _provenanceService = provenanceService;
         _coach = coach;
         _snapshotRepository = snapshotRepository;
         _inputFactory = inputFactory;
@@ -53,8 +57,26 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         }
 
         var inspection = inspectionResult.Inspection;
+        TokenIdentityProvenance? provenance = null;
+        try
+        {
+            var provenanceResult = await _provenanceService.AnalyzeFromInspectionAsync(inspection, cancellationToken);
+            provenance = provenanceResult.Provenance;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Identity provenance enrichment was unavailable for AI coach mint {Mint}. Continuing with deterministic base facts only.",
+                inspection.Identity.Mint);
+        }
+
         var nowUtc = _timeProvider.GetUtcNow();
-        var input = _inputFactory.Create(inspection);
+        var input = _inputFactory.Create(inspection, provenance);
         var language = _options.Language;
         var fingerprint = AiSafetyCoachFingerprint.Compute(input);
 

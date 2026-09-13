@@ -13,7 +13,23 @@ public sealed record AiSafetyCoachInput(
     string DeterministicStatus,
     IReadOnlyList<AiSafetyCoachReviewSignalInput> ReviewSignals,
     IReadOnlyList<AiSafetyCoachClaimSummaryInput> TrustedClaimSummaries,
-    IReadOnlyList<string> UncertaintyMarkers);
+    IReadOnlyList<string> UncertaintyMarkers,
+    AiSafetyCoachIdentityInput? Identity = null);
+
+public sealed record AiSafetyCoachIdentityInput(
+    string Classification,
+    string Confidence,
+    bool HasMeaningfulCollision,
+    string IdentityMatchStrength,
+    bool? ScannedAppearsLaterOnChain,
+    bool ChronologyComparisonComplete,
+    bool TrustedSourceReferencesCompetingMint,
+    bool TrustedSourceReferencesScannedMint,
+    bool TrustedIdentityConflict,
+    bool CopyingIntentNotProven,
+    bool GlobalFirstTokenNotProven,
+    bool ProviderHistoryMayBeIncomplete,
+    bool SocialContextNotAnalyzed);
 
 public sealed record AiSafetyCoachAgeInput(
     long? AgeSeconds,

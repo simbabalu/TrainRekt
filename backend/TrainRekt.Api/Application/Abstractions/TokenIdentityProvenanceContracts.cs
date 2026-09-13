@@ -106,4 +106,6 @@ public interface ITokenIdentityClassifier
 public interface ITokenIdentityProvenanceService
 {
     Task<TokenIdentityProvenanceResult> AnalyzeAsync(string mint, CancellationToken cancellationToken);
+
+    Task<TokenIdentityProvenanceResult> AnalyzeFromInspectionAsync(TokenInspection inspection, CancellationToken cancellationToken);
 }

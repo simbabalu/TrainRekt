@@ -64,6 +64,40 @@ public sealed class AiSafetyCoachInputFactoryTests
         Assert.Single(input.UncertaintyMarkers);
     }
 
+    [Fact]
+    public void Create_WithIdentityClassification_MapsCompactIdentityContext()
+    {
+        var factory = CreateFactory();
+        var inspection = ResearchTestData.CreateInspection(protocolContext: CreateProtocolContext());
+        var provenance = CreateProvenance(TokenIdentityClassificationType.PossibleCopycat);
+
+        var input = factory.Create(inspection, provenance);
+
+        Assert.NotNull(input.Identity);
+        Assert.Equal("POSSIBLE_COPYCAT", input.Identity!.Classification);
+        Assert.Equal("MEDIUM", input.Identity.Confidence);
+        Assert.True(input.Identity.HasMeaningfulCollision);
+        Assert.Equal("name-and-symbol", input.Identity.IdentityMatchStrength);
+        Assert.True(input.Identity.TrustedSourceReferencesCompetingMint);
+        Assert.True(input.Identity.CopyingIntentNotProven);
+        Assert.True(input.Identity.GlobalFirstTokenNotProven);
+        Assert.True(input.Identity.SocialContextNotAnalyzed);
+    }
+
+    [Fact]
+    public void Create_WithIdentityClassification_DoesNotSerializeMintAddresses()
+    {
+        var factory = CreateFactory();
+        var inspection = ResearchTestData.CreateInspection(protocolContext: CreateProtocolContext());
+        var provenance = CreateProvenance(TokenIdentityClassificationType.PossibleCopycat);
+
+        var input = factory.Create(inspection, provenance);
+        var json = JsonSerializer.Serialize(input);
+
+        Assert.DoesNotContain("ScannedMint11111111111111111111111111111111", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("CompetingMint2222222222222222222222222222", json, StringComparison.Ordinal);
+    }
+
     private static AiSafetyCoachInputFactory CreateFactory(AiSafetyCoachOptions? options = null)
     {
         return new AiSafetyCoachInputFactory(Options.Create(options ?? new AiSafetyCoachOptions()));
@@ -113,5 +147,73 @@ public sealed class AiSafetyCoachInputFactoryTests
             RawAmount: "100",
             Percentage: 10m,
             Classification: new TokenAccountClassification(role, protocol, "strong", Array.Empty<TokenAccountClassificationEvidence>()));
+    }
+
+    private static TokenIdentityProvenance CreateProvenance(TokenIdentityClassificationType classificationType)
+    {
+        return new TokenIdentityProvenance(
+            Result: TokenIdentityProvenanceResultType.CollisionObserved,
+            Confidence: TokenIdentityProvenanceConfidence.Medium,
+            ScannedIdentity: new TokenIdentityProvenanceScannedIdentity(
+                "ScannedMint11111111111111111111111111111111",
+                "Name",
+                "name",
+                "SYM",
+                "sym",
+                DateTimeOffset.UtcNow),
+            EarliestObservedMatch: null,
+            Collisions: new[]
+            {
+                new TokenIdentityCollision(
+                    "CompetingMint2222222222222222222222222222",
+                    "Name",
+                    "SYM",
+                    new[] { TokenIdentityMatchDimension.Name, TokenIdentityMatchDimension.Symbol },
+                    TokenIdentityMatchLevel.Exact,
+                    DateTimeOffset.UtcNow.AddHours(-1),
+                    DateTimeOffset.UtcNow)
+            },
+            TotalCollisionCount: 1,
+            ReturnedCollisionCount: 1,
+            IsTruncated: false,
+            Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            ConflictingEvidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+            Unknowns: Array.Empty<TokenIdentityProvenanceUnknown>(),
+            AnalyzedAtUtc: DateTimeOffset.UtcNow,
+            OnChainChronology: null,
+            TrustedIdentityProvenance: new TrustedIdentityProvenance(
+                Sources: new[]
+                {
+                    new IdentitySourceEvidence(
+                        Url: "https://example.com",
+                        Publisher: "pub",
+                        SourceTrust: IdentitySourceTrust.Trusted,
+                        MintLinkStatus: IdentityMintLinkStatus.ReferencesCompetingMint,
+                        ReferencedRelevantMints: new[] { "CompetingMint2222222222222222222222222222" },
+                        EvidenceSummary: "Trusted index references competing mint")
+                },
+                Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Conflicts: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                Unknowns: Array.Empty<TrustedIdentityProvenanceUnknown>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CompetingMintChronologies: null,
+            IdentityClassification: new TokenIdentityClassification(
+                Classification: classificationType,
+                Confidence: TokenIdentityClassificationConfidence.Medium,
+                RelevantCompetingMint: "CompetingMint2222222222222222222222222222",
+                Evidence: new[]
+                {
+                    TokenIdentityClassificationEvidence.SameNormalizedName,
+                    TokenIdentityClassificationEvidence.SameNormalizedSymbol,
+                    TokenIdentityClassificationEvidence.CompetingMintObserved,
+                    TokenIdentityClassificationEvidence.TrustedSourceReferencesCompetingMint
+                },
+                Limitations: new[]
+                {
+                    TokenIdentityClassificationLimitation.CopyingIntentNotProven,
+                    TokenIdentityClassificationLimitation.GlobalFirstTokenNotProven,
+                    TokenIdentityClassificationLimitation.ProviderHistoryMayBeIncomplete,
+                    TokenIdentityClassificationLimitation.SocialContextNotAnalyzed
+                }));
     }
 }

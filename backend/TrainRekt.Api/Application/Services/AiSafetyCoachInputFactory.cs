@@ -14,12 +14,13 @@ public sealed class AiSafetyCoachInputFactory
         _options = options.Value;
     }
 
-    public AiSafetyCoachInput Create(TokenInspection inspection)
+    public AiSafetyCoachInput Create(TokenInspection inspection, TokenIdentityProvenance? provenance = null)
     {
         var protocols = BuildProtocolBreakdown(inspection);
         var reviewSignals = BuildReviewSignals(inspection.ReviewSignals);
         var claimSummaries = BuildClaimSummaries(inspection.ProtocolContext);
         var uncertaintyMarkers = BuildUncertaintyMarkers(inspection, claimSummaries);
+        var identity = BuildIdentityContext(provenance);
 
         return new AiSafetyCoachInput(
             TokenName: Truncate(inspection.Identity.Name),
@@ -46,7 +47,82 @@ public sealed class AiSafetyCoachInputFactory
             DeterministicStatus: inspection.ProtocolContext is null ? "deterministic-only" : "deterministic-with-trusted-context",
             ReviewSignals: reviewSignals,
             TrustedClaimSummaries: claimSummaries,
-            UncertaintyMarkers: uncertaintyMarkers);
+            UncertaintyMarkers: uncertaintyMarkers,
+            Identity: identity);
+    }
+
+    private static AiSafetyCoachIdentityInput? BuildIdentityContext(TokenIdentityProvenance? provenance)
+    {
+        if (provenance?.IdentityClassification is null)
+        {
+            return null;
+        }
+
+        var classification = provenance.IdentityClassification;
+
+        var hasNameEvidence = classification.Evidence.Contains(TokenIdentityClassificationEvidence.SameNormalizedName);
+        var hasSymbolEvidence = classification.Evidence.Contains(TokenIdentityClassificationEvidence.SameNormalizedSymbol);
+        var strength = hasNameEvidence && hasSymbolEvidence
+            ? "name-and-symbol"
+            : hasNameEvidence
+                ? "name-only"
+                : hasSymbolEvidence
+                    ? "symbol-only"
+                    : "none";
+
+        var trustedCompeting = classification.Evidence.Contains(TokenIdentityClassificationEvidence.TrustedSourceReferencesCompetingMint);
+        var trustedScanned = provenance.TrustedIdentityProvenance?.Sources.Any(source =>
+            source.SourceTrust == IdentitySourceTrust.Trusted
+            && source.MintLinkStatus == IdentityMintLinkStatus.ReferencesScannedMint) == true;
+        var trustedConflict = classification.Classification == TokenIdentityClassificationType.IdentityConflict
+            || classification.Evidence.Contains(TokenIdentityClassificationEvidence.TrustedIdentityConflict);
+
+        var scannedLaterOnChain = classification.Evidence.Contains(TokenIdentityClassificationEvidence.ScannedMintLaterOnChain)
+            ? true
+            : (bool?)null;
+        var chronologyComplete = scannedLaterOnChain == true
+            && !classification.Limitations.Contains(TokenIdentityClassificationLimitation.ChronologyComparisonUnavailable)
+            && !classification.Limitations.Contains(TokenIdentityClassificationLimitation.ProviderHistoryMayBeIncomplete);
+
+        return new AiSafetyCoachIdentityInput(
+            Classification: ToClassificationValue(classification.Classification),
+            Confidence: ToConfidenceValue(classification.Confidence),
+            HasMeaningfulCollision: classification.Classification is TokenIdentityClassificationType.CollisionDetected
+                or TokenIdentityClassificationType.PossibleCopycat
+                or TokenIdentityClassificationType.IdentityConflict,
+            IdentityMatchStrength: strength,
+            ScannedAppearsLaterOnChain: scannedLaterOnChain,
+            ChronologyComparisonComplete: chronologyComplete,
+            TrustedSourceReferencesCompetingMint: trustedCompeting,
+            TrustedSourceReferencesScannedMint: trustedScanned,
+            TrustedIdentityConflict: trustedConflict,
+            CopyingIntentNotProven: classification.Limitations.Contains(TokenIdentityClassificationLimitation.CopyingIntentNotProven),
+            GlobalFirstTokenNotProven: classification.Limitations.Contains(TokenIdentityClassificationLimitation.GlobalFirstTokenNotProven),
+            ProviderHistoryMayBeIncomplete: classification.Limitations.Contains(TokenIdentityClassificationLimitation.ProviderHistoryMayBeIncomplete),
+            SocialContextNotAnalyzed: classification.Limitations.Contains(TokenIdentityClassificationLimitation.SocialContextNotAnalyzed));
+    }
+
+    private static string ToClassificationValue(TokenIdentityClassificationType value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationType.NoCollisionEvidence => "NO_COLLISION_EVIDENCE",
+            TokenIdentityClassificationType.CollisionDetected => "COLLISION_DETECTED",
+            TokenIdentityClassificationType.PossibleCopycat => "POSSIBLE_COPYCAT",
+            TokenIdentityClassificationType.IdentityConflict => "IDENTITY_CONFLICT",
+            _ => "INSUFFICIENT_EVIDENCE"
+        };
+    }
+
+    private static string ToConfidenceValue(TokenIdentityClassificationConfidence value)
+    {
+        return value switch
+        {
+            TokenIdentityClassificationConfidence.High => "HIGH",
+            TokenIdentityClassificationConfidence.Medium => "MEDIUM",
+            TokenIdentityClassificationConfidence.Low => "LOW",
+            _ => "NONE"
+        };
     }
 
     private IReadOnlyList<AiSafetyCoachProtocolBreakdownItem> BuildProtocolBreakdown(TokenInspection inspection)

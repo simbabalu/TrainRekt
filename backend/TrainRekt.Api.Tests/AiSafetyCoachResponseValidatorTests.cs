@@ -47,6 +47,35 @@ public sealed class AiSafetyCoachResponseValidatorTests
         Assert.False(result);
     }
 
+    [Theory]
+    [InlineData("This is a confirmed copycat token.")]
+    [InlineData("Copying intent is proven by this evidence.")]
+    [InlineData("This token is authentic and original.")]
+    [InlineData("This is definitely a fake token.")]
+    public void TryValidate_ProhibitedIdentityVerdicts_FailsClosed(string summary)
+    {
+        var validator = CreateValidator();
+        var content = CreateContent() with { Summary = summary };
+
+        var result = validator.TryValidate(content, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryValidate_CautiousPossibleCopycatLanguage_Passes()
+    {
+        var validator = CreateValidator();
+        var content = CreateContent() with
+        {
+            Summary = "Identity overlap can indicate a possible copycat pattern, but intent is not proven."
+        };
+
+        var result = validator.TryValidate(content, out _);
+
+        Assert.True(result);
+    }
+
     [Fact]
     public void TryValidate_OversizedListItem_Fails()
     {

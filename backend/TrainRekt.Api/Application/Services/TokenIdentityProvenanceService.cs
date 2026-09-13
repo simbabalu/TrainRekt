@@ -60,7 +60,11 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
                 null);
         }
 
-        var inspection = inspectionResult.Inspection;
+        return await AnalyzeFromInspectionAsync(inspectionResult.Inspection, cancellationToken);
+    }
+
+    public async Task<TokenIdentityProvenanceResult> AnalyzeFromInspectionAsync(TokenInspection inspection, CancellationToken cancellationToken)
+    {
         var nowUtc = _timeProvider.GetUtcNow();
         var normalizedName = _normalizer.NormalizeName(inspection.Identity.Name);
         var normalizedSymbol = _normalizer.NormalizeSymbol(inspection.Identity.Symbol);
