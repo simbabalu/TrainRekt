@@ -215,13 +215,21 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenRepository, MongoTokenRepository>();
             services.AddScoped<ITokenInspectionSnapshotRepository, MongoTokenInspectionSnapshotRepository>();
             services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
-            services.AddScoped<ITokenInspectionService, CachedTokenInspectionService>();
+            services.AddScoped<CachedTokenInspectionService>();
+            services.AddScoped<ITokenInspectionService>(serviceProvider =>
+                ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
+                    serviceProvider,
+                    serviceProvider.GetRequiredService<CachedTokenInspectionService>()));
             services.AddHostedService<MongoIndexInitializerHostedService>();
         }
         else
         {
             services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
-            services.AddScoped<ITokenInspectionService, PassthroughTokenInspectionService>();
+            services.AddScoped<PassthroughTokenInspectionService>();
+            services.AddScoped<ITokenInspectionService>(serviceProvider =>
+                ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
+                    serviceProvider,
+                    serviceProvider.GetRequiredService<PassthroughTokenInspectionService>()));
         }
 
         return services;

@@ -11,7 +11,7 @@ namespace TrainRekt.Api.Tests;
 public sealed class MongoEnablementConfigurationTests
 {
     [Fact]
-    public void AddApiServices_EnabledFalse_SelectsPassthroughInspectionService()
+    public void AddApiServices_EnabledFalse_SelectsResearchingInspectionDecoratorOverPassthrough()
     {
         var services = new ServiceCollection();
         var configuration = BuildConfiguration(new Dictionary<string, string?>
@@ -27,12 +27,13 @@ public sealed class MongoEnablementConfigurationTests
 
         var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
 
-        Assert.IsType<PassthroughTokenInspectionService>(service);
+        Assert.IsType<ResearchingTokenInspectionService>(service);
+        Assert.NotNull(scope.ServiceProvider.GetService<PassthroughTokenInspectionService>());
         Assert.Null(scope.ServiceProvider.GetService<IMongoClient>());
     }
 
     [Fact]
-    public void AddApiServices_EnabledTrueWithValidConfiguration_SelectsCachedInspectionService()
+    public void AddApiServices_EnabledTrueWithValidConfiguration_SelectsResearchingInspectionDecoratorOverCached()
     {
         var services = new ServiceCollection();
         var configuration = BuildConfiguration(new Dictionary<string, string?>
@@ -52,7 +53,8 @@ public sealed class MongoEnablementConfigurationTests
 
         var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
 
-        Assert.IsType<CachedTokenInspectionService>(service);
+        Assert.IsType<ResearchingTokenInspectionService>(service);
+        Assert.NotNull(scope.ServiceProvider.GetService<CachedTokenInspectionService>());
         Assert.NotNull(scope.ServiceProvider.GetService<IMongoClient>());
     }
 
@@ -145,7 +147,8 @@ public sealed class MongoEnablementConfigurationTests
         var service = scope.ServiceProvider.GetRequiredService<ITokenInspectionService>();
 
         Assert.IsNotType<PassthroughTokenInspectionService>(service);
-        Assert.IsType<CachedTokenInspectionService>(service);
+        Assert.IsType<ResearchingTokenInspectionService>(service);
+        Assert.NotNull(scope.ServiceProvider.GetService<CachedTokenInspectionService>());
     }
 
     [Fact]

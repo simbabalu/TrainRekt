@@ -22,6 +22,20 @@ public sealed class TokenResearchOrchestratorTests
 
         Assert.Equal(ResearchOutcomeStatus.NotRequired, outcome.Status);
         Assert.Equal(0, provider.CallCount);
+        Assert.Equal(0, repository.GetLatestFreshCallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_ResearchCacheReadFailure_ReturnsFailedWithoutProviderCall()
+    {
+        var provider = new FakeProvider(CreateValidCandidateResult());
+        var repository = new FakeRepository { ThrowOnFreshRead = true };
+        var orchestrator = CreateOrchestrator(provider, repository);
+
+        var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(0, provider.CallCount);
     }
 
     [Fact]
@@ -144,6 +158,51 @@ public sealed class TokenResearchOrchestratorTests
         await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(TokenResearchVersion.Current, repository.Inserted.Single().ResearchVersion);
+        Assert.Equal(TokenResearchVersion.Current, repository.LastFreshLookupResearchVersion);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProviderThrowsUnexpected_ReturnsFailed()
+    {
+        var provider = new FakeProvider(CreateValidCandidateResult())
+        {
+            ThrowOnResearch = true
+        };
+        var repository = new FakeRepository();
+        var orchestrator = CreateOrchestrator(provider, repository, CreateTrustedAssessment());
+
+        var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+    }
+
+    [Fact]
+    public async Task RunAsync_TrustAssessorThrowsUnexpected_ReturnsFailed()
+    {
+        var provider = new FakeProvider(CreateValidCandidateResult());
+        var repository = new FakeRepository();
+        var orchestrator = CreateOrchestrator(
+            provider,
+            repository,
+            createTrustAssessor: _ => new ThrowingTrustAssessor());
+
+        var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+    }
+
+    [Fact]
+    public async Task RunAsync_InsertFailure_ReturnsCompletedWithCurrentEnrichment()
+    {
+        var provider = new FakeProvider(CreateValidCandidateResult());
+        var repository = new FakeRepository { ThrowOnInsert = true };
+        var orchestrator = CreateOrchestrator(provider, repository, CreateTrustedAssessment());
+
+        var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Completed, outcome.Status);
+        Assert.NotNull(outcome.Context);
+        Assert.Equal(1, repository.InsertCount);
     }
 
     [Fact]
@@ -217,7 +276,8 @@ public sealed class TokenResearchOrchestratorTests
     private static TokenResearchOrchestrator CreateOrchestrator(
         FakeProvider provider,
         FakeRepository repository,
-        ResearchTrustAssessment? assessment = null)
+        ResearchTrustAssessment? assessment = null,
+        Func<ResearchTrustAssessment?, IResearchTrustAssessor>? createTrustAssessor = null)
     {
         var options = Options.Create(new TokenResearchOptions
         {
@@ -235,7 +295,7 @@ public sealed class TokenResearchOrchestratorTests
 
         return new TokenResearchOrchestrator(
             provider,
-            new FakeTrustAssessor(assessment ?? CreateFailClosedAssessment()),
+            (createTrustAssessor ?? (resolvedAssessment => new FakeTrustAssessor(resolvedAssessment ?? CreateFailClosedAssessment())))(assessment),
             repository,
             new ResearchNeedDetector(options.Value),
             new ResearchRequestFactory(),
@@ -458,10 +518,18 @@ public sealed class TokenResearchOrchestratorTests
 
         public int CallCount { get; private set; }
 
+        public bool ThrowOnResearch { get; set; }
+
         public Task<CandidateResearchResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
+
+            if (ThrowOnResearch)
+            {
+                throw new InvalidOperationException("research provider failure");
+            }
+
             return Task.FromResult(_result);
         }
     }
@@ -491,15 +559,31 @@ public sealed class TokenResearchOrchestratorTests
 
         public bool ThrowOnReadIfCancelled { get; set; }
 
+        public bool ThrowOnFreshRead { get; set; }
+
+        public bool ThrowOnInsert { get; set; }
+
+        public int GetLatestFreshCallCount { get; private set; }
+
+        public int? LastFreshLookupResearchVersion { get; private set; }
+
         public int InsertCount { get; private set; }
 
         public List<CachedTokenResearchSnapshot> Inserted { get; } = new();
 
         public Task<CachedTokenResearchSnapshot?> GetLatestFreshAsync(string mint, int researchVersion, DateTimeOffset nowUtc, CancellationToken cancellationToken)
         {
+            GetLatestFreshCallCount++;
+            LastFreshLookupResearchVersion = researchVersion;
+
             if (ThrowOnReadIfCancelled)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (ThrowOnFreshRead)
+            {
+                throw new InvalidOperationException("cache unavailable");
             }
 
             return Task.FromResult(FreshSnapshot);
@@ -513,8 +597,26 @@ public sealed class TokenResearchOrchestratorTests
         public Task InsertAsync(CachedTokenResearchSnapshot snapshot, CancellationToken cancellationToken)
         {
             InsertCount++;
+
+            if (ThrowOnInsert)
+            {
+                throw new InvalidOperationException("cache write failed");
+            }
+
             Inserted.Add(snapshot);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingTrustAssessor : IResearchTrustAssessor
+    {
+        public Task<ResearchTrustAssessment> AssessAsync(
+            ResearchRequest request,
+            CandidateResearchResult candidate,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("trust assessor failure");
         }
     }
 }

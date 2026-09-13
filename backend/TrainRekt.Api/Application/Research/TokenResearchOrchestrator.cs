@@ -55,11 +55,28 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         }
 
         var nowUtc = _timeProvider.GetUtcNow();
-        var freshSnapshot = await _repository.GetLatestFreshAsync(
-            inspection.Identity.Mint,
-            TokenResearchVersion.Current,
-            nowUtc,
-            cancellationToken);
+        CachedTokenResearchSnapshot? freshSnapshot;
+        try
+        {
+            freshSnapshot = await _repository.GetLatestFreshAsync(
+                inspection.Identity.Mint,
+                TokenResearchVersion.Current,
+                nowUtc,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Token research cache lookup failed for mint {Mint}. Research enrichment skipped.",
+                inspection.Identity.Mint);
+
+            return CreateFailedOutcome(needs, inspection);
+        }
 
         if (freshSnapshot is not null)
         {
@@ -68,8 +85,25 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         }
 
         var request = _requestFactory.Create(inspection, needs);
-        using var timeoutCts = CreateTimeoutCancellation(cancellationToken);
-        var candidate = await _provider.ResearchAsync(request, timeoutCts.Token);
+        CandidateResearchResult candidate;
+        try
+        {
+            using var timeoutCts = CreateTimeoutCancellation(cancellationToken);
+            candidate = await _provider.ResearchAsync(request, timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Token research provider failed for mint {Mint}. Research enrichment skipped.",
+                request.Mint);
+
+            return CreateFailedOutcome(needs, inspection);
+        }
 
         _logger.LogInformation(
             "Token research candidate received for mint {Mint}. Candidate sources {SourceCount}, claims {ClaimCount}.",
@@ -77,7 +111,24 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
             candidate.Sources.Count,
             candidate.Claims.Count);
 
-        var trustAssessment = await _trustAssessor.AssessAsync(request, candidate, cancellationToken);
+        ResearchTrustAssessment trustAssessment;
+        try
+        {
+            trustAssessment = await _trustAssessor.AssessAsync(request, candidate, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Token research trust assessment failed for mint {Mint}. Research enrichment skipped.",
+                request.Mint);
+
+            return CreateFailedOutcome(needs, inspection);
+        }
 
         var promoted = _promoter.Promote(request, candidate, trustAssessment);
         if (!promoted.IsValid)
@@ -113,7 +164,21 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
                 ExpiresAtUtc: expiresAtUtc,
                 Context: merged.Context);
 
-            await _repository.InsertAsync(snapshot, cancellationToken);
+            try
+            {
+                await _repository.InsertAsync(snapshot, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Token research cache persist failed for mint {Mint}. Returning current enrichment without cache write.",
+                    inspection.Identity.Mint);
+            }
         }
 
         return new ResearchOutcome(
@@ -136,5 +201,17 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.ProviderTimeoutSeconds));
         return timeoutCts;
+    }
+
+    private static ResearchOutcome CreateFailedOutcome(IReadOnlyList<ResearchNeed> needs, TokenInspection inspection)
+    {
+        return new ResearchOutcome(
+            ResearchOutcomeStatus.Failed,
+            needs,
+            0,
+            0,
+            0,
+            inspection.ProtocolContext,
+            false);
     }
 }
