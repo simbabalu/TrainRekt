@@ -32,6 +32,34 @@ public sealed class ProductionResearchTrustAssessorTests
     }
 
     [Fact]
+    public async Task AssessAsync_RegisteredSkrWebsitePathWithExactMint_IsConfirmed()
+    {
+        var assessor = CreateAssessor(source => SuccessFetch(source.Url, "text/plain", ProtocolConstants.SolanaMobileSkrMint));
+        var request = CreateRequest(ProtocolConstants.SolanaMobileSkrMint);
+        var candidate = Candidate("https://solanamobile.com/skr");
+
+        var assessment = await assessor.AssessAsync(request, candidate, CancellationToken.None);
+
+        Assert.Equal(ResearchIdentityMatch.Confirmed, assessment.Identity.Match);
+        Assert.Equal(ResearchSourceAssessmentDecision.Accepted, assessment.Sources[0].Decision);
+        Assert.Equal(ResearchSourceType.ProjectWebsite, assessment.Sources[0].EffectiveSourceType);
+    }
+
+    [Fact]
+    public async Task AssessAsync_RegisteredSkrWebsitePathWithoutMint_IsNotConfirmed()
+    {
+        var assessor = CreateAssessor(source => SuccessFetch(source.Url, "text/plain", "no mint"));
+        var request = CreateRequest(ProtocolConstants.SolanaMobileSkrMint);
+        var candidate = Candidate("https://solanamobile.com/skr");
+
+        var assessment = await assessor.AssessAsync(request, candidate, CancellationToken.None);
+
+        Assert.NotEqual(ResearchIdentityMatch.Confirmed, assessment.Identity.Match);
+        Assert.Equal(ResearchSourceAssessmentDecision.Rejected, assessment.Sources[0].Decision);
+        Assert.Equal(ResearchSourceAssessmentReason.MintNotReferenced, assessment.Sources[0].Reason);
+    }
+
+    [Fact]
     public async Task AssessAsync_UnregisteredDomainWithExactMint_IsPartial()
     {
         var assessor = CreateAssessor(source => SuccessFetch(source.Url, "text/plain", ProtocolConstants.SolanaMobileSkrMint));

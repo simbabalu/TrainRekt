@@ -25,6 +25,7 @@ public sealed class TrustedMintSourceRegistry : ITrustedMintSourceRegistry
                 },
                 TrustedUrlPrefixes: new Dictionary<string, ResearchSourceType>(StringComparer.Ordinal)
                 {
+                    ["https://solanamobile.com/skr"] = ResearchSourceType.ProjectWebsite,
                     ["https://docs.solanamobile.com/solana-mobile-stack/skr"] = ResearchSourceType.OfficialDocumentation,
                     ["https://github.com/solana-mobile/react-native-samples/"] = ResearchSourceType.OfficialRepository,
                     ["https://raw.githubusercontent.com/solana-mobile/react-native-samples/"] = ResearchSourceType.OfficialRepository,

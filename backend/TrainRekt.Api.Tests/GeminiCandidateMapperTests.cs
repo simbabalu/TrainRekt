@@ -122,6 +122,40 @@ public sealed class GeminiCandidateMapperTests
         Assert.Empty(result.Value!.Claims);
     }
 
+      [Fact]
+      public void MapStructuredJson_ArbitraryClaimIdPattern_IsDropped()
+      {
+        var mapper = CreateMapper();
+
+        const string json = "{" +
+          "\"identityEvidence\":[]," +
+          "\"sources\":[{\"sourceId\":\"src\",\"url\":\"https://docs.example.com\",\"title\":\"t\",\"publisher\":\"p\",\"claimedSourceType\":\"ThirdParty\",\"claimedCanonicalWebsite\":false}]," +
+          "\"claims\":[{\"claimId\":\"claim-1\",\"category\":\"issuance\",\"statement\":\"x\",\"sourceIds\":[\"src\"]}]" +
+          "}";
+
+        var result = mapper.MapStructuredJson(json);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.Value!.Claims);
+      }
+
+      [Fact]
+      public void MapStructuredJson_SupportedClaimIdWithWrongCategory_ReturnsSchemaViolation()
+      {
+        var mapper = CreateMapper();
+
+        const string json = "{" +
+          "\"identityEvidence\":[]," +
+          "\"sources\":[{\"sourceId\":\"src\",\"url\":\"https://docs.example.com\",\"title\":\"t\",\"publisher\":\"p\",\"claimedSourceType\":\"ThirdParty\",\"claimedCanonicalWebsite\":false}]," +
+          "\"claims\":[{\"claimId\":\"DOCUMENTED_INFLATIONARY_ISSUANCE\",\"category\":\"tokenomics\",\"statement\":\"x\",\"sourceIds\":[\"src\"]}]" +
+          "}";
+
+        var result = mapper.MapStructuredJson(json);
+
+        Assert.False(result.Success);
+        Assert.Equal(GeminiFailureReason.SchemaViolation, result.FailureReason);
+      }
+
     [Fact]
     public void MapStructuredJson_DuplicateSourceIds_ReturnsSchemaViolation()
     {

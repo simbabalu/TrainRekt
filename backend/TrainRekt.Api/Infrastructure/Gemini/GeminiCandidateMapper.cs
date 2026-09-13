@@ -8,17 +8,6 @@ namespace TrainRekt.Api.Infrastructure.Gemini;
 
 public sealed class GeminiCandidateMapper
 {
-    private static readonly HashSet<string> AllowedClaimIds =
-    [
-        ResearchClaimIds.DocumentedInflationaryIssuance,
-        ResearchClaimIds.MintAuthorityIdentityMatchesDocumentedIssuanceControl,
-        ResearchClaimIds.DocumentedMintAuthorityPurpose,
-        ResearchClaimIds.DocumentedFreezeAuthorityPurpose,
-        ResearchClaimIds.DocumentedStakingVault,
-        ResearchClaimIds.DocumentedProtocolVault,
-        ResearchClaimIds.DocumentedTokenomics
-    ];
-
     private static readonly HashSet<string> AllowedObservedFactIds =
     [
         ObservedFactIds.MintAuthorityActive,
@@ -227,9 +216,14 @@ public sealed class GeminiCandidateMapper
             return false;
         }
 
-        if (!AllowedClaimIds.Contains(claimId))
+        if (!ResearchClaimContract.IsSupportedClaimId(claimId))
         {
             return true;
+        }
+
+        if (!ResearchClaimContract.IsClaimCategoryCompatible(claimId, category))
+        {
+            return false;
         }
 
         var referencedSourceIds = new List<string>();

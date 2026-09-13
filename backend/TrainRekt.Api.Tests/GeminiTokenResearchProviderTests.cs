@@ -70,8 +70,8 @@ public sealed class GeminiTokenResearchProviderTests
                 true,
                 "{" +
                 "\"identityEvidence\":[{\"evidenceType\":\"MintAddressMentioned\",\"value\":\"mint\",\"note\":\"note\"}]," +
-                "\"sources\":[{\"sourceId\":\"src\",\"url\":\"https://docs.example.com\",\"title\":\"Docs\",\"publisher\":\"Org\",\"claimedSourceType\":\"OfficialDocumentation\",\"claimedCanonicalWebsite\":true}]," +
-                "\"claims\":[{\"claimId\":\"DOCUMENTED_INFLATIONARY_ISSUANCE\",\"category\":\"issuance\",\"statement\":\"s\",\"sourceIds\":[\"src\"]}]" +
+                "\"sources\":[{\"sourceId\":\"grounding-source-1\",\"url\":\"https://docs.example.com\",\"title\":\"Docs\",\"publisher\":\"Org\",\"claimedSourceType\":\"OfficialDocumentation\",\"claimedCanonicalWebsite\":true}]," +
+                "\"claims\":[{\"claimId\":\"DOCUMENTED_INFLATIONARY_ISSUANCE\",\"category\":\"issuance\",\"statement\":\"s\",\"sourceIds\":[\"grounding-source-1\"]}]" +
                 "}",
                 null,
                 null)
@@ -85,6 +85,65 @@ public sealed class GeminiTokenResearchProviderTests
         Assert.Single(result.Claims);
         Assert.Equal(1, fakeClient.GroundedCallCount);
         Assert.Equal(1, fakeClient.ExtractionCallCount);
+    }
+
+    [Fact]
+    public async Task ResearchAsync_UnknownGroundedSourceId_FailsClosed()
+    {
+        var fakeClient = new FakeGeminiClient
+        {
+            GroundedResult = new GeminiClientResult<GeminiGroundedResearch>(
+                true,
+                new GeminiGroundedResearch("text", new[] { new GeminiCitation("https://docs.example.com", "docs") }),
+                null,
+                null),
+            ExtractionResult = new GeminiClientResult<string>(
+                true,
+                "{" +
+                "\"identityEvidence\":[]," +
+                "\"sources\":[{\"sourceId\":\"unknown-source\",\"url\":\"https://evil.example.com\",\"title\":\"Docs\",\"publisher\":\"Org\",\"claimedSourceType\":\"ThirdParty\",\"claimedCanonicalWebsite\":false}]," +
+                "\"claims\":[{\"claimId\":\"DOCUMENTED_INFLATIONARY_ISSUANCE\",\"category\":\"issuance\",\"statement\":\"s\",\"sourceIds\":[\"unknown-source\"]}]" +
+                "}",
+                null,
+                null)
+        };
+
+        var provider = CreateProvider(fakeClient, options => options.Enabled = true);
+
+        var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
+
+        Assert.Empty(result.Sources);
+        Assert.Empty(result.Claims);
+    }
+
+    [Fact]
+    public async Task ResearchAsync_KnownGroundedSourceId_RebindsToGroundedUrl()
+    {
+        var fakeClient = new FakeGeminiClient
+        {
+            GroundedResult = new GeminiClientResult<GeminiGroundedResearch>(
+                true,
+                new GeminiGroundedResearch("text", new[] { new GeminiCitation("https://docs.example.com/canonical", "docs") }),
+                null,
+                null),
+            ExtractionResult = new GeminiClientResult<string>(
+                true,
+                "{" +
+                "\"identityEvidence\":[]," +
+                "\"sources\":[{\"sourceId\":\"grounding-source-1\",\"url\":\"https://evil.example.com/forged\",\"title\":\"Docs\",\"publisher\":\"Org\",\"claimedSourceType\":\"ThirdParty\",\"claimedCanonicalWebsite\":false}]," +
+                "\"claims\":[{\"claimId\":\"DOCUMENTED_INFLATIONARY_ISSUANCE\",\"category\":\"issuance\",\"statement\":\"s\",\"sourceIds\":[\"grounding-source-1\"]}]" +
+                "}",
+                null,
+                null)
+        };
+
+        var provider = CreateProvider(fakeClient, options => options.Enabled = true);
+
+        var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
+
+        var source = Assert.Single(result.Sources);
+        Assert.Equal("https://docs.example.com/canonical", source.Url);
+        Assert.Single(result.Claims);
     }
 
     [Fact]

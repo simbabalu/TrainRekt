@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Research;
+using TrainRekt.Api.Domain.Constants;
 using TrainRekt.Api.Domain.Models;
 using TrainRekt.Api.Infrastructure.Gemini;
 
@@ -131,6 +132,42 @@ public sealed class GeminiInteractionClientTests
     }
 
     [Fact]
+    public async Task RunGroundedResearchAsync_EightDistinctGroundedSources_RemainIndividuallyIdentifiable()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            const string payload = "{" +
+                "\"steps\":[" +
+                "{\"type\":\"google_search_result\",\"results\":[" +
+                "{\"url\":\"https://example.com/a\",\"title\":\"a\"}," +
+                "{\"url\":\"https://example.com/b\",\"title\":\"b\"}," +
+                "{\"url\":\"https://example.com/c\",\"title\":\"c\"}," +
+                "{\"url\":\"https://example.com/d\",\"title\":\"d\"}," +
+                "{\"url\":\"https://example.com/e\",\"title\":\"e\"}," +
+                "{\"url\":\"https://example.com/f\",\"title\":\"f\"}," +
+                "{\"url\":\"https://example.com/g\",\"title\":\"g\"}," +
+                "{\"url\":\"https://example.com/h\",\"title\":\"h\"}" +
+                "]}," +
+                "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"grounded text\"}]}" +
+                "]}";
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var client = CreateClient(handler);
+
+        var result = await client.RunGroundedResearchAsync(CreateRequest(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(8, result.Value!.Sources.Count);
+        Assert.Contains(result.Value.Sources, source => source.Url == "https://example.com/a");
+        Assert.Contains(result.Value.Sources, source => source.Url == "https://example.com/h");
+    }
+
+    [Fact]
     public async Task RunGroundedResearchAsync_NoCitations_ReturnsGroundingUnavailable()
     {
         var handler = new StubHttpMessageHandler((_, _) =>
@@ -215,6 +252,63 @@ public sealed class GeminiInteractionClientTests
         Assert.Contains("identityEvidence", result.Value);
     }
 
+    [Theory]
+    [InlineData("{\"identityEvidence\":[],\"sources\":[],\"claims\":[]}")]
+    [InlineData("  {\"identityEvidence\":[],\"sources\":[],\"claims\":[]}  ")]
+    [InlineData("\"{\\\"identityEvidence\\\":[],\\\"sources\\\":[],\\\"claims\\\":[]}\"")]
+    [InlineData("```json\n{\"identityEvidence\":[],\"sources\":[],\"claims\":[]}\n```")]
+    public async Task RunStructuredExtractionAsync_SupportedStrictTextShapes_ReturnsNormalizedJsonObject(string text)
+    {
+        var client = CreateClient(CreateExtractionResponseHandler(text));
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), CreateGroundedResearch(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("{\"identityEvidence\":[],\"sources\":[],\"claims\":[]}", result.Value);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("prefix {\"identityEvidence\":[],\"sources\":[],\"claims\":[]} suffix")]
+    [InlineData("{\"identityEvidence\":[]} {\"sources\":[],\"claims\":[]}")]
+    [InlineData("[\"identityEvidence\",\"sources\",\"claims\"]")]
+    [InlineData("")]
+    public async Task RunStructuredExtractionAsync_InvalidStrictTextShapes_FailsClosed(string text)
+    {
+        var client = CreateClient(CreateExtractionResponseHandler(text));
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), CreateGroundedResearch(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(GeminiFailureReason.MalformedResponse, result.FailureReason);
+        Assert.NotNull(result.Detail);
+        Assert.Contains("stage=extraction", result.Detail, StringComparison.Ordinal);
+        if (text.Length > 0)
+        {
+            Assert.DoesNotContain(text, result.Detail, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task RunStructuredExtractionAsync_MultipleFragmentsFormingOneObject_ReturnsNormalizedJsonObject()
+    {
+        var client = CreateClient(CreateExtractionResponseHandler(
+            "{\"identityEvidence\":[],",
+            "\"sources\":[],\"claims\":[]}"));
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), CreateGroundedResearch(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("{\"identityEvidence\":[],\n\"sources\":[],\"claims\":[]}", result.Value);
+    }
+
+    [Fact]
+    public async Task RunStructuredExtractionAsync_UnrelatedMultipleFragments_FailsClosed()
+    {
+        var client = CreateClient(CreateExtractionResponseHandler("first fragment", "second fragment"));
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), CreateGroundedResearch(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(GeminiFailureReason.MalformedResponse, result.FailureReason);
+    }
+
     [Fact]
     public async Task RunStructuredExtractionAsync_RequestSchema_UsesResponseFormatSchemaAndNoLegacyFields()
     {
@@ -238,6 +332,137 @@ public sealed class GeminiInteractionClientTests
             Assert.Equal("application/json", responseFormat.GetProperty("mime_type").GetString());
             Assert.Equal(JsonValueKind.Object, responseFormat.GetProperty("schema").ValueKind);
 
+            var sourceIdEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("sources")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("sourceId")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(new[] { "grounding-source-1", "grounding-source-2" }, sourceIdEnum);
+
+            var claimSourceIdEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("claims")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("sourceIds")
+                .GetProperty("items")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(new[] { "grounding-source-1", "grounding-source-2" }, claimSourceIdEnum);
+
+            var claimIdEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("claims")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("claimId")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(
+                new[]
+                {
+                    ResearchClaimIds.DocumentedInflationaryIssuance,
+                    ResearchClaimIds.DocumentedMintAuthorityPurpose,
+                    ResearchClaimIds.DocumentedTokenomics,
+                    ResearchClaimIds.MintAuthorityIdentityMatchesDocumentedIssuanceControl
+                },
+                claimIdEnum);
+            Assert.DoesNotContain("claim-1", claimIdEnum, StringComparer.Ordinal);
+
+            var categoryEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("claims")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("category")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(
+                new[]
+                {
+                    ResearchClaimContract.CategoryIssuance,
+                    ResearchClaimContract.CategoryMintAuthority,
+                    ResearchClaimContract.CategoryTokenomics
+                },
+                categoryEnum);
+
+            const string payload = "{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"identityEvidence\\\":[],\\\"sources\\\":[],\\\"claims\\\":[]}\"}]}]}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler);
+        var grounded = new GeminiGroundedResearch("grounded", new[]
+        {
+            new GeminiCitation("https://docs.example.com", "docs"),
+            new GeminiCitation("https://repo.example.com", "repo")
+        });
+
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(), grounded, CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task RunStructuredExtractionAsync_RequestWithoutNeeds_AllowsAllSupportedClaimIdsAndCategories()
+    {
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var responseFormat = json.RootElement.GetProperty("response_format");
+
+            var claimIdEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("claims")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("claimId")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(ResearchClaimContract.GetAllSupportedClaimIds(), claimIdEnum);
+
+            var categoryEnum = responseFormat
+                .GetProperty("schema")
+                .GetProperty("properties")
+                .GetProperty("claims")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("category")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+
+            Assert.Equal(ResearchClaimContract.GetAllSupportedCategories(), categoryEnum);
+
             const string payload = "{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"identityEvidence\\\":[],\\\"sources\\\":[],\\\"claims\\\":[]}\"}]}]}";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -251,7 +476,7 @@ public sealed class GeminiInteractionClientTests
             new GeminiCitation("https://docs.example.com", "docs")
         });
 
-        var result = await client.RunStructuredExtractionAsync(CreateRequest(), grounded, CancellationToken.None);
+        var result = await client.RunStructuredExtractionAsync(CreateRequest(Array.Empty<ResearchNeed>()), grounded, CancellationToken.None);
 
         Assert.True(result.Success);
     }
@@ -304,7 +529,7 @@ public sealed class GeminiInteractionClientTests
         Assert.True(result.Detail.Length <= 420);
     }
 
-    private static ResearchRequest CreateRequest()
+    private static ResearchRequest CreateRequest(IReadOnlyList<ResearchNeed>? needs = null)
     {
         return new ResearchRequest(
             Mint: "So11111111111111111111111111111111111111112",
@@ -313,15 +538,15 @@ public sealed class GeminiInteractionClientTests
             TokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
             Authorities: new TokenAuthorities("mint-auth", false, "freeze-auth", false),
             ClassifiedProtocols: new[] { "sample-protocol" },
-            Needs: new[]
-            {
+            Needs: needs ??
+            [
                 new ResearchNeed(
                     "ACTIVE_MINT_AUTHORITY_WITHOUT_CONTEXT",
                     ResearchNeedCategory.ActiveMintAuthorityWithoutContext,
                     ResearchNeedPriority.High,
                     Array.Empty<ObservedFactReference>(),
                     "reason")
-            },
+            ],
             ExistingSourceIds: Array.Empty<string>(),
             ExistingClaimIds: Array.Empty<string>());
     }
@@ -347,6 +572,26 @@ public sealed class GeminiInteractionClientTests
             Options.Create(options),
             new GeminiGroundingNormalizer(),
             NullLogger<GeminiInteractionClient>.Instance);
+    }
+
+    private static GeminiGroundedResearch CreateGroundedResearch()
+    {
+        return new GeminiGroundedResearch("research text", new[]
+        {
+            new GeminiCitation("https://docs.example.com", "docs")
+        });
+    }
+
+    private static HttpMessageHandler CreateExtractionResponseHandler(params string[] textBlocks)
+    {
+        var content = string.Join(",", textBlocks.Select(text =>
+            $"{{\"type\":\"text\",\"text\":{JsonSerializer.Serialize(text)}}}"));
+        var payload = $"{{\"steps\":[{{\"type\":\"model_output\",\"content\":[{content}]}}]}}";
+
+        return new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        }));
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

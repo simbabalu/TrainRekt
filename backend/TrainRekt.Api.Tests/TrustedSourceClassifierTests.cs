@@ -7,6 +7,87 @@ namespace TrainRekt.Api.Tests;
 public sealed class TrustedSourceClassifierTests
 {
     [Fact]
+    public void Classify_ExactSkrWebsitePath_IsTrustedProjectWebsite()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var registry = new TrustedMintSourceRegistry();
+        var found = registry.TryGetByMint(ProtocolConstants.SolanaMobileSkrMint, out var entry);
+
+        Assert.True(found);
+
+        var uri = new Uri("https://solanamobile.com/skr");
+        var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.True(decision.IsTrusted);
+        Assert.Equal(ResearchSourceType.ProjectWebsite, decision.EffectiveType);
+        Assert.True(decision.IsCanonicalProjectWebsite);
+    }
+
+    [Fact]
+    public void Classify_SkrWebsitePathSuffixSpoof_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var registry = new TrustedMintSourceRegistry();
+        var found = registry.TryGetByMint(ProtocolConstants.SolanaMobileSkrMint, out var entry);
+
+        Assert.True(found);
+
+        var uri = new Uri("https://solanamobile.com/skr-evil");
+        var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_SkrWebsiteHostSpoof_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var registry = new TrustedMintSourceRegistry();
+        var found = registry.TryGetByMint(ProtocolConstants.SolanaMobileSkrMint, out var entry);
+
+        Assert.True(found);
+
+        var uri = new Uri("https://solanamobile.com.evil.example/skr");
+        var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_SkrWebsitePathOnUntrustedHost_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var registry = new TrustedMintSourceRegistry();
+        var found = registry.TryGetByMint(ProtocolConstants.SolanaMobileSkrMint, out var entry);
+
+        Assert.True(found);
+
+        var uri = new Uri("https://evil.example/solanamobile.com/skr");
+        var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_SkrWebsiteEncodedPathSpoof_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var registry = new TrustedMintSourceRegistry();
+        var found = registry.TryGetByMint(ProtocolConstants.SolanaMobileSkrMint, out var entry);
+
+        Assert.True(found);
+
+        var uri = new Uri("https://solanamobile.com/%2f../skr");
+        var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
     public void Classify_ExactTrustedIdlPath_IsOfficialIdl()
     {
         var classifier = new TrustedSourceClassifier();

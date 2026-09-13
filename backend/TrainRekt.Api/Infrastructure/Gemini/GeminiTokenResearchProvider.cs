@@ -65,14 +65,21 @@ public sealed class GeminiTokenResearchProvider : ITokenResearchProvider
             return EmptyResult;
         }
 
+        var bound = BindSourcesToGroundedCatalog(mapped.Value, grounded.Value.Sources);
+        if (!bound.Success || bound.Value is null)
+        {
+            LogFailure(request.Mint, "extraction", bound.FailureReason, null, bound.Detail);
+            return EmptyResult;
+        }
+
         _logger.LogInformation(
             "Gemini provider produced candidate result for mint {Mint}. Model={Model}, Sources={SourceCount}, Claims={ClaimCount}.",
             request.Mint,
             _options.Model,
-            mapped.Value.Sources.Count,
-            mapped.Value.Claims.Count);
+            bound.Value.Sources.Count,
+            bound.Value.Claims.Count);
 
-        return mapped.Value;
+        return bound.Value;
     }
 
     private void LogFailure(string mint, string stage, GeminiFailureReason? reason, int? httpStatusCode, string? detail)
@@ -85,5 +92,39 @@ public sealed class GeminiTokenResearchProvider : ITokenResearchProvider
             reason,
             httpStatusCode,
             detail);
+    }
+
+    private static GeminiClientResult<CandidateResearchResult> BindSourcesToGroundedCatalog(
+        CandidateResearchResult candidate,
+        IReadOnlyList<GeminiCitation> groundedSources)
+    {
+        var groundedCatalog = groundedSources
+            .Select((source, index) => new
+            {
+                Id = $"grounding-source-{index + 1}",
+                source.Url
+            })
+            .ToDictionary(entry => entry.Id, entry => entry.Url, StringComparer.Ordinal);
+
+        var reboundSources = new List<CandidateResearchSource>(candidate.Sources.Count);
+        foreach (var source in candidate.Sources)
+        {
+            if (!groundedCatalog.TryGetValue(source.Id, out var groundedUrl))
+            {
+                return new GeminiClientResult<CandidateResearchResult>(
+                    false,
+                    null,
+                    GeminiFailureReason.SchemaViolation,
+                    $"Extraction sourceId '{source.Id}' was not present in grounded source catalog.");
+            }
+
+            reboundSources.Add(source with { Url = groundedUrl });
+        }
+
+        return new GeminiClientResult<CandidateResearchResult>(
+            true,
+            candidate with { Sources = reboundSources },
+            null,
+            null);
     }
 }

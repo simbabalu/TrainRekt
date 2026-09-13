@@ -86,8 +86,8 @@ public sealed class ResearchNeedDetector
     private static bool HasMintAuthorityContext(ProtocolResearchContext? context)
     {
         return context?.Claims.Any(claim =>
-            string.Equals(claim.Category, "issuance", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(claim.Category, "mint_authority", StringComparison.OrdinalIgnoreCase)
+            string.Equals(claim.Category, ResearchClaimContract.CategoryIssuance, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(claim.Category, ResearchClaimContract.CategoryMintAuthority, StringComparison.OrdinalIgnoreCase)
             || claim.ObservedFactReferences.Any(fact =>
                 fact.FactId == ObservedFactIds.MintAuthorityActive
                 || fact.FactId == ObservedFactIds.MintAuthorityAddress)) == true;
@@ -96,7 +96,7 @@ public sealed class ResearchNeedDetector
     private static bool HasFreezeAuthorityContext(ProtocolResearchContext? context)
     {
         return context?.Claims.Any(claim =>
-            string.Equals(claim.Category, "freeze_authority", StringComparison.OrdinalIgnoreCase)
+            string.Equals(claim.Category, ResearchClaimContract.CategoryFreezeAuthority, StringComparison.OrdinalIgnoreCase)
             || claim.ObservedFactReferences.Any(fact =>
                 fact.FactId == ObservedFactIds.FreezeAuthorityActive
                 || fact.FactId == ObservedFactIds.FreezeAuthorityAddress)) == true;

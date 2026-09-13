@@ -62,7 +62,7 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
         var textBlocks = new List<string>();
         var citations = new List<GeminiCitation>();
 
-        if (!TryExtractModelOutput(responseDocument.RootElement, textBlocks, citations))
+        if (!TryExtractModelOutput(responseDocument.RootElement, textBlocks, citations, out _))
         {
             return new GeminiClientResult<GeminiGroundedResearch>(
                 false,
@@ -98,18 +98,24 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
         GeminiGroundedResearch groundedResearch,
         CancellationToken cancellationToken)
     {
+        var groundedSourceCatalog = BuildGroundedSourceCatalog(groundedResearch.Sources);
+        var allowedClaimIds = ResearchClaimContract.GetAllowedClaimIdsForNeeds(request.Needs);
+        var allowedClaimCategories = ResearchClaimContract.GetAllowedCategoriesForClaimIds(allowedClaimIds);
         var payload = new Dictionary<string, object?>
         {
             ["model"] = _options.Model,
             ["store"] = false,
             ["system_instruction"] = BuildExtractionSystemInstruction(),
-            ["input"] = BuildExtractionPrompt(request, groundedResearch),
+            ["input"] = BuildExtractionPrompt(request, groundedResearch, groundedSourceCatalog, allowedClaimIds),
             ["generation_config"] = new Dictionary<string, object?>
             {
                 ["temperature"] = 0.0,
                 ["max_output_tokens"] = _options.MaxExtractionOutputTokens
             },
-            ["response_format"] = BuildResponseFormat()
+            ["response_format"] = BuildResponseFormat(
+                groundedSourceCatalog.Select(source => source.Id).ToArray(),
+                allowedClaimIds,
+                allowedClaimCategories)
         };
 
         var response = await PostInteractionAsync(payload, "extraction", cancellationToken);
@@ -121,28 +127,47 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
         using var responseDocument = response.Value;
 
         var textBlocks = new List<string>();
-        if (!TryExtractModelOutput(responseDocument.RootElement, textBlocks, citations: null))
+        if (!TryExtractModelOutput(responseDocument.RootElement, textBlocks, citations: null, out var extractionShape))
         {
             return new GeminiClientResult<string>(
                 false,
                 null,
                 GeminiFailureReason.MalformedResponse,
-                "Extraction response did not contain expected model output.",
+                BuildStructuredOutputDiagnostic(extractionShape, 0, "not_attempted", "not_attempted", "none"),
                 response.HttpStatusCode);
         }
 
-        var combined = string.Join("\n", textBlocks.Where(block => !string.IsNullOrWhiteSpace(block))).Trim();
-        if (string.IsNullOrWhiteSpace(combined))
+        if (!TryNormalizeStructuredOutput(
+                textBlocks,
+                out var normalized,
+                out var normalizationResult,
+                out var jsonParseResult,
+                out var topLevelKind))
         {
             return new GeminiClientResult<string>(
                 false,
                 null,
-                GeminiFailureReason.NoUsefulSources,
-                "Extraction response was empty.",
+                GeminiFailureReason.MalformedResponse,
+                BuildStructuredOutputDiagnostic(
+                    extractionShape,
+                    textBlocks.Sum(block => block.Length),
+                    normalizationResult,
+                    jsonParseResult,
+                    topLevelKind),
                 response.HttpStatusCode);
         }
 
-        return new GeminiClientResult<string>(true, combined, null, null, response.HttpStatusCode);
+        _logger.LogDebug(
+            "Gemini extraction output normalized. Stage=extraction, Steps={StepCount}, ModelOutputs={ModelOutputCount}, TextFragments={TextFragmentCount}, TextLength={TextLength}, Normalization={Normalization}, JsonParse={JsonParse}, TopLevel={TopLevel}.",
+            extractionShape.StepCount,
+            extractionShape.ModelOutputCount,
+            extractionShape.TextFragmentCount,
+            textBlocks.Sum(block => block.Length),
+            normalizationResult,
+            jsonParseResult,
+            topLevelKind);
+
+        return new GeminiClientResult<string>(true, normalized, null, null, response.HttpStatusCode);
     }
 
     private async Task<GeminiClientResult<JsonDocument>> PostInteractionAsync(
@@ -278,12 +303,17 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
     private static bool TryExtractModelOutput(
         JsonElement root,
         List<string> textBlocks,
-        List<GeminiCitation>? citations)
+        List<GeminiCitation>? citations,
+        out ModelOutputShapeDiagnostics diagnostics)
     {
+        diagnostics = new ModelOutputShapeDiagnostics(0, 0, 0);
         if (!root.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
         {
             return false;
         }
+
+        var modelOutputCount = 0;
+        var initialTextBlockCount = textBlocks.Count;
 
         foreach (var step in stepsElement.EnumerateArray())
         {
@@ -306,6 +336,8 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             {
                 continue;
             }
+
+            modelOutputCount++;
 
             if (!step.TryGetProperty("content", out var contentElement) || contentElement.ValueKind != JsonValueKind.Array)
             {
@@ -366,7 +398,142 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             }
         }
 
+        diagnostics = new ModelOutputShapeDiagnostics(
+            stepsElement.GetArrayLength(),
+            modelOutputCount,
+            textBlocks.Count - initialTextBlockCount);
         return true;
+    }
+
+    private static bool TryNormalizeStructuredOutput(
+        IReadOnlyList<string> textBlocks,
+        out string normalized,
+        out string normalizationResult,
+        out string jsonParseResult,
+        out string topLevelKind)
+    {
+        normalized = string.Empty;
+        normalizationResult = "failed";
+        jsonParseResult = "failed";
+        topLevelKind = "none";
+
+        var combined = string.Join("\n", textBlocks.Where(block => !string.IsNullOrWhiteSpace(block))).Trim();
+        if (combined.Length == 0)
+        {
+            normalizationResult = "empty";
+            return false;
+        }
+
+        var candidate = combined;
+        if (TryUnwrapSingleJsonFence(candidate, out var unfenced))
+        {
+            candidate = unfenced;
+            normalizationResult = "json_fence_unwrapped";
+        }
+
+        if (!TryParseJsonObject(candidate, out var parsed, out topLevelKind))
+        {
+            return false;
+        }
+
+        if (parsed.RootElement.ValueKind == JsonValueKind.String)
+        {
+            var stringValue = parsed.RootElement.GetString()?.Trim();
+            parsed.Dispose();
+            if (string.IsNullOrWhiteSpace(stringValue))
+            {
+                normalizationResult = "empty_json_string";
+                topLevelKind = "string";
+                return false;
+            }
+
+            candidate = stringValue;
+            if (!TryParseJsonObject(candidate, out var unwrapped, out topLevelKind)
+                || unwrapped.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                unwrapped?.Dispose();
+                normalizationResult = "json_string_unwrapped_but_invalid_object";
+                return false;
+            }
+
+            parsed = unwrapped;
+            normalizationResult = "json_string_unwrapped";
+        }
+
+        if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            topLevelKind = parsed.RootElement.ValueKind.ToString().ToLowerInvariant();
+            parsed.Dispose();
+            normalizationResult = "non_object_rejected";
+            return false;
+        }
+
+        jsonParseResult = "success";
+        normalized = parsed.RootElement.GetRawText();
+        parsed.Dispose();
+        if (normalizationResult == "failed")
+        {
+            normalizationResult = "object_accepted";
+        }
+
+        return true;
+    }
+
+    private static bool TryParseJsonObject(
+        string candidate,
+        out JsonDocument parsed,
+        out string topLevelKind)
+    {
+        parsed = null!;
+        topLevelKind = "none";
+        try
+        {
+            parsed = JsonDocument.Parse(candidate);
+            topLevelKind = parsed.RootElement.ValueKind.ToString().ToLowerInvariant();
+            return true;
+        }
+        catch (JsonException)
+        {
+            topLevelKind = "invalid";
+            return false;
+        }
+    }
+
+    private static bool TryUnwrapSingleJsonFence(string candidate, out string unfenced)
+    {
+        unfenced = string.Empty;
+        if (!candidate.StartsWith("```", StringComparison.Ordinal)
+            || !candidate.EndsWith("```", StringComparison.Ordinal)
+            || candidate.Length <= 6)
+        {
+            return false;
+        }
+
+        var firstLineEnd = candidate.IndexOf('\n');
+        if (firstLineEnd <= 0)
+        {
+            return false;
+        }
+
+        var language = candidate[3..firstLineEnd].Trim();
+        if (!string.Equals(language, "json", StringComparison.OrdinalIgnoreCase)
+            && language.Length != 0)
+        {
+            return false;
+        }
+
+        unfenced = candidate[(firstLineEnd + 1)..^3].Trim();
+        return unfenced.Length > 0;
+    }
+
+    private static string BuildStructuredOutputDiagnostic(
+        ModelOutputShapeDiagnostics shape,
+        int textLength,
+        string normalizationResult,
+        string jsonParseResult,
+        string topLevelKind)
+    {
+        return $"Gemini stage=extraction; steps={shape.StepCount}; model_output={shape.ModelOutputCount}; text_fragments={shape.TextFragmentCount}; text_length={textLength}; normalization={normalizationResult}; json_parse={jsonParseResult}; top_level={topLevelKind}.";
     }
 
     private static void TryExtractGoogleSearchResultCitations(JsonElement step, List<GeminiCitation> citations)
@@ -494,10 +661,24 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             + "whether protocol-controlled token accounts are documented, and which tokenomics statements are relevant to unresolved needs.";
     }
 
-    private static string BuildExtractionPrompt(ResearchRequest request, GeminiGroundedResearch grounded)
+    private static string BuildExtractionPrompt(
+        ResearchRequest request,
+        GeminiGroundedResearch grounded,
+        IReadOnlyList<GroundedSourceCatalogEntry> sourceCatalog,
+        IReadOnlyList<string> allowedClaimIds)
     {
-        var sourceLines = grounded.Sources
-            .Select((source, index) => $"[{index + 1}] {source.Url} | title={source.Title ?? "unknown"}")
+        var sourceLines = sourceCatalog
+            .Select(source => $"- {source.Id}: url={source.Url} | title={source.Title}")
+            .ToArray();
+
+        var allowedClaimLines = allowedClaimIds
+            .Select(claimId =>
+            {
+                var category = ResearchClaimContract.TryGetCategoryForClaimId(claimId, out var mappedCategory)
+                    ? mappedCategory
+                    : "unknown";
+                return $"- {claimId} | category={category}";
+            })
             .ToArray();
 
         var needs = request.Needs.Count == 0
@@ -505,7 +686,8 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             : string.Join("\n", request.Needs.Select(need => $"- {need.Id}: {need.Reason}"));
 
         return $"Use only the supplied grounded notes and source list to produce candidate research JSON. "
-            + "Do not add data that is not present. Unknown claim IDs must be omitted."
+            + "Do not add data that is not present. Unknown claim IDs must be omitted. "
+            + "Source IDs must be selected only from the grounded source catalog and each source URL must exactly match its grounded catalog URL."
             + "\n\nToken:\n"
             + $"Mint: {request.Mint}\n"
             + $"Name: {request.TokenName ?? "unknown"}\n"
@@ -515,11 +697,16 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             + needs
             + "\n\nGrounded sources:\n"
             + string.Join("\n", sourceLines)
+            + "\n\nAllowed claim IDs:\n"
+            + string.Join("\n", allowedClaimLines)
             + "\n\nGrounded research text:\n"
             + grounded.Text;
     }
 
-    private static object BuildResponseFormat()
+    private static object BuildResponseFormat(
+        IReadOnlyList<string> allowedSourceIds,
+        IReadOnlyList<string> allowedClaimIds,
+        IReadOnlyList<string> allowedClaimCategories)
     {
         return new Dictionary<string, object?>
         {
@@ -558,7 +745,11 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
                             ["required"] = new[] { "sourceId", "url", "title", "publisher", "claimedSourceType", "claimedCanonicalWebsite" },
                             ["properties"] = new Dictionary<string, object?>
                             {
-                                ["sourceId"] = new Dictionary<string, object?> { ["type"] = "string" },
+                                ["sourceId"] = new Dictionary<string, object?>
+                                {
+                                    ["type"] = "string",
+                                    ["enum"] = allowedSourceIds
+                                },
                                 ["url"] = new Dictionary<string, object?> { ["type"] = "string" },
                                 ["title"] = new Dictionary<string, object?> { ["type"] = "string" },
                                 ["publisher"] = new Dictionary<string, object?> { ["type"] = "string" },
@@ -578,13 +769,25 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
                             ["required"] = new[] { "claimId", "category", "statement", "sourceIds" },
                             ["properties"] = new Dictionary<string, object?>
                             {
-                                ["claimId"] = new Dictionary<string, object?> { ["type"] = "string" },
-                                ["category"] = new Dictionary<string, object?> { ["type"] = "string" },
+                                ["claimId"] = new Dictionary<string, object?>
+                                {
+                                    ["type"] = "string",
+                                    ["enum"] = allowedClaimIds
+                                },
+                                ["category"] = new Dictionary<string, object?>
+                                {
+                                    ["type"] = "string",
+                                    ["enum"] = allowedClaimCategories
+                                },
                                 ["statement"] = new Dictionary<string, object?> { ["type"] = "string" },
                                 ["sourceIds"] = new Dictionary<string, object?>
                                 {
                                     ["type"] = "array",
-                                    ["items"] = new Dictionary<string, object?> { ["type"] = "string" }
+                                    ["items"] = new Dictionary<string, object?>
+                                    {
+                                        ["type"] = "string",
+                                        ["enum"] = allowedSourceIds
+                                    }
                                 },
                                 ["extractionNote"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
                                 ["observedFactReferences"] = new Dictionary<string, object?>
@@ -611,4 +814,18 @@ public sealed class GeminiInteractionClient : IGeminiInteractionClient
             }
         };
     }
+
+    private static IReadOnlyList<GroundedSourceCatalogEntry> BuildGroundedSourceCatalog(IReadOnlyList<GeminiCitation> sources)
+    {
+        return sources
+            .Select((source, index) => new GroundedSourceCatalogEntry(
+                Id: $"grounding-source-{index + 1}",
+                Url: source.Url,
+                Title: source.Title ?? "unknown"))
+            .ToArray();
+    }
+
+    private sealed record GroundedSourceCatalogEntry(string Id, string Url, string Title);
+
+    private sealed record ModelOutputShapeDiagnostics(int StepCount, int ModelOutputCount, int TextFragmentCount);
 }
