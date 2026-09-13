@@ -79,6 +79,25 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         };
 
         await coachCollection.Indexes.CreateManyAsync(coachIndexes, cancellationToken);
+
+        var observationCollection = _database.GetCollection<TokenIdentityObservationDocument>(_options.TokenIdentityObservationCollectionName);
+        var observationIndexes = new[]
+        {
+            new CreateIndexModel<TokenIdentityObservationDocument>(
+                Builders<TokenIdentityObservationDocument>.IndexKeys
+                    .Ascending(entry => entry.LastNormalizedName)
+                    .Ascending(entry => entry.FirstObservedAtUtc)
+                    .Ascending(entry => entry.Mint),
+                new CreateIndexOptions { Name = "ix_tokenIdentityObservations_name_lookup" }),
+            new CreateIndexModel<TokenIdentityObservationDocument>(
+                Builders<TokenIdentityObservationDocument>.IndexKeys
+                    .Ascending(entry => entry.LastNormalizedSymbol)
+                    .Ascending(entry => entry.FirstObservedAtUtc)
+                    .Ascending(entry => entry.Mint),
+                new CreateIndexOptions { Name = "ix_tokenIdentityObservations_symbol_lookup" })
+        };
+
+        await observationCollection.Indexes.CreateManyAsync(observationIndexes, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

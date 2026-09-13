@@ -73,6 +73,12 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services
+            .AddOptions<TokenIdentityProvenanceOptions>()
+            .Bind(configuration.GetSection(TokenIdentityProvenanceOptions.SectionName))
+            .Validate(options => options.MaxReturnedCollisions > 0, "TokenIdentityProvenance:MaxReturnedCollisions must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<MongoDbOptions>()
             .Bind(configuration.GetSection(MongoDbOptions.SectionName))
             .PostConfigure(options =>
@@ -100,6 +106,9 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenInspectionCoachCollectionName),
                 "MongoDb:TokenInspectionCoachCollectionName must be configured when MongoDb:Enabled is true.")
+            .Validate(
+                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenIdentityObservationCollectionName),
+                "MongoDb:TokenIdentityObservationCollectionName must be configured when MongoDb:Enabled is true.")
             .ValidateOnStart();
 
         services
@@ -158,6 +167,8 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
+        services.AddSingleton<TokenIdentityNormalizer>();
+        services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
         services.AddScoped<AiSafetyCoachResponseValidator>();
         services.AddScoped<ITokenInspectionCoachService, TokenInspectionCoachService>();
@@ -253,6 +264,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenInspectionSnapshotRepository, MongoTokenInspectionSnapshotRepository>();
             services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, MongoTokenInspectionCoachSnapshotRepository>();
+            services.AddScoped<ITokenIdentityObservationRepository, MongoTokenIdentityObservationRepository>();
             services.AddScoped<CachedTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
@@ -264,6 +276,7 @@ public static class ServiceCollectionExtensions
         {
             services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, NoOpAiSafetyCoachSnapshotRepository>();
+            services.AddScoped<ITokenIdentityObservationRepository, NoOpTokenIdentityObservationRepository>();
             services.AddScoped<PassthroughTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(

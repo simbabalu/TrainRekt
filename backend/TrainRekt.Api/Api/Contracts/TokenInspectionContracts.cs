@@ -80,3 +80,143 @@ public sealed record TokenInspectionCoachContentResponse(
             GeneratedAtUtc: payload.GeneratedAtUtc);
     }
 }
+
+public sealed record TokenIdentityProvenanceResponse(
+    string Result,
+    string Confidence,
+    TokenIdentityProvenanceScannedIdentityResponse ScannedIdentity,
+    EarliestObservedIdentityMatchResponse? EarliestObservedMatch,
+    IReadOnlyList<TokenIdentityCollisionResponse> Collisions,
+    int TotalCollisionCount,
+    int ReturnedCollisionCount,
+    bool IsTruncated,
+    IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> Evidence,
+    IReadOnlyList<TokenIdentityProvenanceEvidenceResponse> ConflictingEvidence,
+    IReadOnlyList<string> Unknowns,
+    DateTimeOffset AnalyzedAtUtc)
+{
+    public static TokenIdentityProvenanceResponse FromDomain(TokenIdentityProvenance provenance)
+    {
+        return new TokenIdentityProvenanceResponse(
+            Result: ToResultValue(provenance.Result),
+            Confidence: ToConfidenceValue(provenance.Confidence),
+            ScannedIdentity: TokenIdentityProvenanceScannedIdentityResponse.FromDomain(provenance.ScannedIdentity),
+            EarliestObservedMatch: provenance.EarliestObservedMatch is null
+                ? null
+                : EarliestObservedIdentityMatchResponse.FromDomain(provenance.EarliestObservedMatch),
+            Collisions: provenance.Collisions.Select(TokenIdentityCollisionResponse.FromDomain).ToArray(),
+            TotalCollisionCount: provenance.TotalCollisionCount,
+            ReturnedCollisionCount: provenance.ReturnedCollisionCount,
+            IsTruncated: provenance.IsTruncated,
+            Evidence: provenance.Evidence.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
+            ConflictingEvidence: provenance.ConflictingEvidence.Select(TokenIdentityProvenanceEvidenceResponse.FromDomain).ToArray(),
+            Unknowns: provenance.Unknowns.Select(ToUnknownValue).ToArray(),
+            AnalyzedAtUtc: provenance.AnalyzedAtUtc);
+    }
+
+    private static string ToResultValue(TokenIdentityProvenanceResultType value)
+    {
+        return value switch
+        {
+            TokenIdentityProvenanceResultType.NoMeaningfulCollisionFound => "NO_MEANINGFUL_COLLISION_FOUND",
+            TokenIdentityProvenanceResultType.CollisionObserved => "COLLISION_OBSERVED",
+            TokenIdentityProvenanceResultType.Ambiguous => "AMBIGUOUS",
+            _ => "INSUFFICIENT_EVIDENCE"
+        };
+    }
+
+    private static string ToConfidenceValue(TokenIdentityProvenanceConfidence value)
+    {
+        return value switch
+        {
+            TokenIdentityProvenanceConfidence.High => "HIGH",
+            TokenIdentityProvenanceConfidence.Medium => "MEDIUM",
+            TokenIdentityProvenanceConfidence.Low => "LOW",
+            _ => "NONE"
+        };
+    }
+
+    private static string ToUnknownValue(TokenIdentityProvenanceUnknown value)
+    {
+        return value switch
+        {
+            TokenIdentityProvenanceUnknown.GlobalHistoryNotChecked => "GLOBAL_HISTORY_NOT_CHECKED",
+            TokenIdentityProvenanceUnknown.OnChainCreationOrderNotVerified => "ON_CHAIN_CREATION_ORDER_NOT_VERIFIED",
+            TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified => "OFFICIAL_IDENTITY_NOT_VERIFIED",
+            TokenIdentityProvenanceUnknown.SocialTrendNotAnalyzed => "SOCIAL_TREND_NOT_ANALYZED",
+            TokenIdentityProvenanceUnknown.CopycatStatusNotDetermined => "COPYCAT_STATUS_NOT_DETERMINED",
+            _ => "SCANNED_IDENTITY_FIELDS_MISSING"
+        };
+    }
+}
+
+public sealed record TokenIdentityProvenanceScannedIdentityResponse(
+    string Mint,
+    string? RawName,
+    string? NormalizedName,
+    string? RawSymbol,
+    string? NormalizedSymbol,
+    DateTimeOffset ObservedAtUtc)
+{
+    public static TokenIdentityProvenanceScannedIdentityResponse FromDomain(TokenIdentityProvenanceScannedIdentity value)
+    {
+        return new TokenIdentityProvenanceScannedIdentityResponse(
+            Mint: value.Mint,
+            RawName: value.RawName,
+            NormalizedName: value.NormalizedName,
+            RawSymbol: value.RawSymbol,
+            NormalizedSymbol: value.NormalizedSymbol,
+            ObservedAtUtc: value.ObservedAtUtc);
+    }
+}
+
+public sealed record EarliestObservedIdentityMatchResponse(
+    string Mint,
+    DateTimeOffset ObservedAtUtc,
+    string Semantics)
+{
+    public static EarliestObservedIdentityMatchResponse FromDomain(EarliestObservedIdentityMatch value)
+    {
+        return new EarliestObservedIdentityMatchResponse(
+            Mint: value.Mint,
+            ObservedAtUtc: value.ObservedAtUtc,
+            Semantics: value.Semantics);
+    }
+}
+
+public sealed record TokenIdentityCollisionResponse(
+    string CandidateMint,
+    string? RawName,
+    string? RawSymbol,
+    IReadOnlyList<string> MatchDimensions,
+    string MatchLevel,
+    DateTimeOffset FirstObservedAtUtc,
+    DateTimeOffset LastObservedAtUtc)
+{
+    public static TokenIdentityCollisionResponse FromDomain(TokenIdentityCollision value)
+    {
+        return new TokenIdentityCollisionResponse(
+            CandidateMint: value.CandidateMint,
+            RawName: value.RawName,
+            RawSymbol: value.RawSymbol,
+            MatchDimensions: value.MatchDimensions.Select(ToDimensionValue).ToArray(),
+            MatchLevel: value.MatchLevel == TokenIdentityMatchLevel.Exact ? "EXACT" : "NORMALIZED_EXACT",
+            FirstObservedAtUtc: value.FirstObservedAtUtc,
+            LastObservedAtUtc: value.LastObservedAtUtc);
+    }
+
+    private static string ToDimensionValue(TokenIdentityMatchDimension value)
+    {
+        return value == TokenIdentityMatchDimension.Name ? "NAME" : "SYMBOL";
+    }
+}
+
+public sealed record TokenIdentityProvenanceEvidenceResponse(
+    string Id,
+    string Detail)
+{
+    public static TokenIdentityProvenanceEvidenceResponse FromDomain(TokenIdentityProvenanceEvidence value)
+    {
+        return new TokenIdentityProvenanceEvidenceResponse(value.Id, value.Detail);
+    }
+}

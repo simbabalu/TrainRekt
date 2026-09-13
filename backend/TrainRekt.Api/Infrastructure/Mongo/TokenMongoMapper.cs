@@ -107,4 +107,38 @@ internal static class TokenMongoMapper
             ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
             Coach: document.Coach);
     }
+
+    public static TokenIdentityObservationDocument ToDocument(TokenIdentityObservation model)
+    {
+        return new TokenIdentityObservationDocument
+        {
+            Mint = model.Mint,
+            FirstRawName = model.RawName,
+            FirstNormalizedName = model.NormalizedName,
+            FirstRawSymbol = model.RawSymbol,
+            FirstNormalizedSymbol = model.NormalizedSymbol,
+            LastRawName = model.RawName,
+            LastNormalizedName = model.NormalizedName,
+            LastRawSymbol = model.RawSymbol,
+            LastNormalizedSymbol = model.NormalizedSymbol,
+            TokenProgram = model.TokenProgram,
+            FirstObservedAtUtc = DateTime.SpecifyKind(model.FirstObservedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            LastObservedAtUtc = DateTime.SpecifyKind(model.LastObservedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            ObservationVersion = model.ObservationVersion
+        };
+    }
+
+    public static TokenIdentityObservation ToModel(TokenIdentityObservationDocument document)
+    {
+        return new TokenIdentityObservation(
+            Mint: document.Mint,
+            RawName: document.LastRawName,
+            NormalizedName: document.LastNormalizedName,
+            RawSymbol: document.LastRawSymbol,
+            NormalizedSymbol: document.LastNormalizedSymbol,
+            TokenProgram: document.TokenProgram,
+            FirstObservedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.FirstObservedAtUtc, DateTimeKind.Utc)),
+            LastObservedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.LastObservedAtUtc, DateTimeKind.Utc)),
+            ObservationVersion: document.ObservationVersion);
+    }
 }

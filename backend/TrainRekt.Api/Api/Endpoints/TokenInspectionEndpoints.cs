@@ -12,6 +12,7 @@ public static class TokenInspectionEndpoints
 
         endpoints.MapPost("/api/token-inspections", HandleInspectionRequestAsync);
         endpoints.MapPost("/api/token-inspections/{mint}/coach", HandleInspectionCoachRequestAsync);
+        endpoints.MapPost("/api/token-inspections/{mint}/provenance", HandleInspectionProvenanceRequestAsync);
 
         return endpoints;
     }
@@ -52,6 +53,29 @@ public static class TokenInspectionEndpoints
         }
 
         return Results.Ok(TokenInspectionCoachResponse.FromDomain(result));
+    }
+
+    private static async Task<IResult> HandleInspectionProvenanceRequestAsync(
+        string mint,
+        ITokenIdentityProvenanceService provenanceService,
+        CancellationToken cancellationToken)
+    {
+        var result = await provenanceService.AnalyzeAsync(mint, cancellationToken);
+
+        if (result.InspectionError is not null)
+        {
+            return MapInspectionError(result.InspectionError);
+        }
+
+        if (result.Provenance is null)
+        {
+            return Results.Problem(
+                title: "Provenance analysis failed",
+                detail: "Token identity provenance produced no result.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+
+        return Results.Ok(TokenIdentityProvenanceResponse.FromDomain(result.Provenance));
     }
 
     private static IResult MapInspectionError(TokenInspectionError error)

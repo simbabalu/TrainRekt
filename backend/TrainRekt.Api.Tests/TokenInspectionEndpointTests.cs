@@ -159,6 +159,102 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.Null(payload.Coach);
     }
 
+    [Fact]
+    public async Task PostTokenInspectionProvenance_WithInspectionFailure_ReturnsMappedInspectionError()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenIdentityProvenanceService>();
+                services.AddSingleton<ITokenIdentityProvenanceService>(new StubProvenanceService(
+                    new TokenIdentityProvenanceResult(
+                        new TokenInspectionError(TokenInspectionErrorCode.InvalidMint, "bad mint"),
+                        null)));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/not-a-solana-address/provenance", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostTokenInspectionProvenance_WithValidResult_ReturnsEnvelope()
+    {
+        var now = new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero);
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenIdentityProvenanceService>();
+                services.AddSingleton<ITokenIdentityProvenanceService>(new StubProvenanceService(
+                    new TokenIdentityProvenanceResult(
+                        null,
+                        new TokenIdentityProvenance(
+                            Result: TokenIdentityProvenanceResultType.CollisionObserved,
+                            Confidence: TokenIdentityProvenanceConfidence.High,
+                            ScannedIdentity: new TokenIdentityProvenanceScannedIdentity(
+                                Mint: "ResearchMint1111111111111111111111111111111",
+                                RawName: "Research Token",
+                                NormalizedName: "research token",
+                                RawSymbol: "RCH",
+                                NormalizedSymbol: "rch",
+                                ObservedAtUtc: now),
+                            EarliestObservedMatch: new EarliestObservedIdentityMatch(
+                                Mint: "EarlierMint11111111111111111111111111111111",
+                                ObservedAtUtc: now.AddMinutes(-10),
+                                Semantics: "local-observed"),
+                            Collisions: new[]
+                            {
+                                new TokenIdentityCollision(
+                                    CandidateMint: "EarlierMint11111111111111111111111111111111",
+                                    RawName: "Research Token",
+                                    RawSymbol: "RCH",
+                                    MatchDimensions: new[] { TokenIdentityMatchDimension.Name, TokenIdentityMatchDimension.Symbol },
+                                    MatchLevel: TokenIdentityMatchLevel.Exact,
+                                    FirstObservedAtUtc: now.AddMinutes(-10),
+                                    LastObservedAtUtc: now.AddMinutes(-5))
+                            },
+                            TotalCollisionCount: 1,
+                            ReturnedCollisionCount: 1,
+                            IsTruncated: false,
+                            Evidence: new[] { new TokenIdentityProvenanceEvidence("OBSERVED_MATCH", "Found local observed collision.") },
+                            ConflictingEvidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
+                            Unknowns: new[]
+                            {
+                                TokenIdentityProvenanceUnknown.GlobalHistoryNotChecked,
+                                TokenIdentityProvenanceUnknown.OnChainCreationOrderNotVerified,
+                                TokenIdentityProvenanceUnknown.OfficialIdentityNotVerified,
+                                TokenIdentityProvenanceUnknown.SocialTrendNotAnalyzed,
+                                TokenIdentityProvenanceUnknown.CopycatStatusNotDetermined
+                            },
+                            AnalyzedAtUtc: now))));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/ResearchMint1111111111111111111111111111111/provenance", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<TokenIdentityProvenanceResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("COLLISION_OBSERVED", payload!.Result);
+        Assert.Equal("HIGH", payload.Confidence);
+        Assert.Single(payload.Collisions);
+        Assert.Equal("EXACT", payload.Collisions[0].MatchLevel);
+        Assert.Contains("GLOBAL_HISTORY_NOT_CHECKED", payload.Unknowns);
+    }
+
     private static TokenInspection CreateInspectionWithProtocolContext()
     {
         var context = new ProtocolResearchContext(
@@ -216,6 +312,21 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         }
 
         public Task<TokenInspectionCoachResult> GenerateAsync(string mint, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class StubProvenanceService : ITokenIdentityProvenanceService
+    {
+        private readonly TokenIdentityProvenanceResult _result;
+
+        public StubProvenanceService(TokenIdentityProvenanceResult result)
+        {
+            _result = result;
+        }
+
+        public Task<TokenIdentityProvenanceResult> AnalyzeAsync(string mint, CancellationToken cancellationToken)
         {
             return Task.FromResult(_result);
         }
