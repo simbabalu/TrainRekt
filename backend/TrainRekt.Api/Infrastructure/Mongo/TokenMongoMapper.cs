@@ -80,4 +80,31 @@ internal static class TokenMongoMapper
             ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
             Context: document.Context);
     }
+
+    public static TokenInspectionCoachSnapshotDocument ToDocument(CachedTokenInspectionCoachSnapshot model)
+    {
+        return new TokenInspectionCoachSnapshotDocument
+        {
+            Mint = model.Mint,
+            Language = model.Language,
+            CoachVersion = model.CoachVersion,
+            InputFingerprint = model.InputFingerprint,
+            CachedAtUtc = DateTime.SpecifyKind(model.CachedAtUtc.UtcDateTime, DateTimeKind.Utc),
+            ExpiresAtUtc = DateTime.SpecifyKind(model.ExpiresAtUtc.UtcDateTime, DateTimeKind.Utc),
+            Coach = model.Coach
+        };
+    }
+
+    public static CachedTokenInspectionCoachSnapshot ToModel(TokenInspectionCoachSnapshotDocument document)
+    {
+        return new CachedTokenInspectionCoachSnapshot(
+            Id: document.Id,
+            Mint: document.Mint,
+            Language: document.Language,
+            CoachVersion: document.CoachVersion,
+            InputFingerprint: document.InputFingerprint,
+            CachedAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.CachedAtUtc, DateTimeKind.Utc)),
+            ExpiresAtUtc: new DateTimeOffset(DateTime.SpecifyKind(document.ExpiresAtUtc, DateTimeKind.Utc)),
+            Coach: document.Coach);
+    }
 }

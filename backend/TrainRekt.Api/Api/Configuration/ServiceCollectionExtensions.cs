@@ -55,6 +55,24 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services
+            .AddOptions<AiSafetyCoachOptions>()
+            .Bind(configuration.GetSection(AiSafetyCoachOptions.SectionName))
+            .Validate(options => string.Equals(options.Language, "en", StringComparison.OrdinalIgnoreCase), "AiSafetyCoach:Language must be 'en' for Phase 4A.")
+            .Validate(options => options.FreshnessHours > 0, "AiSafetyCoach:FreshnessHours must be greater than zero.")
+            .Validate(options => options.MaxOutputTokens > 0, "AiSafetyCoach:MaxOutputTokens must be greater than zero.")
+            .Validate(options => options.MaxSummaryLength > 0, "AiSafetyCoach:MaxSummaryLength must be greater than zero.")
+            .Validate(options => options.MaxListItemLength > 0, "AiSafetyCoach:MaxListItemLength must be greater than zero.")
+            .Validate(options => options.MaxRiskExplanations > 0, "AiSafetyCoach:MaxRiskExplanations must be greater than zero.")
+            .Validate(options => options.MaxWhatToCheckNext > 0, "AiSafetyCoach:MaxWhatToCheckNext must be greater than zero.")
+            .Validate(options => options.MaxUncertaintyItems > 0, "AiSafetyCoach:MaxUncertaintyItems must be greater than zero.")
+            .Validate(options => options.MaxReviewSignals > 0, "AiSafetyCoach:MaxReviewSignals must be greater than zero.")
+            .Validate(options => options.MaxEvidencePerSignal > 0, "AiSafetyCoach:MaxEvidencePerSignal must be greater than zero.")
+            .Validate(options => options.MaxClaimSummaries > 0, "AiSafetyCoach:MaxClaimSummaries must be greater than zero.")
+            .Validate(options => options.MaxProtocolBreakdownItems > 0, "AiSafetyCoach:MaxProtocolBreakdownItems must be greater than zero.")
+            .Validate(options => options.MaxSourcesPerClaim > 0, "AiSafetyCoach:MaxSourcesPerClaim must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<MongoDbOptions>()
             .Bind(configuration.GetSection(MongoDbOptions.SectionName))
             .PostConfigure(options =>
@@ -79,6 +97,9 @@ public static class ServiceCollectionExtensions
             .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenResearchCollectionName),
                 "MongoDb:TokenResearchCollectionName must be configured when MongoDb:Enabled is true.")
+            .Validate(
+                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenInspectionCoachCollectionName),
+                "MongoDb:TokenInspectionCoachCollectionName must be configured when MongoDb:Enabled is true.")
             .ValidateOnStart();
 
         services
@@ -137,6 +158,9 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
+        services.AddScoped<AiSafetyCoachInputFactory>();
+        services.AddScoped<AiSafetyCoachResponseValidator>();
+        services.AddScoped<ITokenInspectionCoachService, TokenInspectionCoachService>();
         services.AddScoped<ITokenResearchOrchestrator, TokenResearchOrchestrator>();
         services.AddScoped<IResearchTrustAssessor, ProductionResearchTrustAssessor>();
         services.AddScoped<NoOpResearchTrustAssessor>();
@@ -156,6 +180,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ResearchUrlSafetyPolicy>();
         services.AddSingleton<IResearchDnsResolver, DefaultResearchDnsResolver>();
         services.AddHttpClient<IGeminiInteractionClient, GeminiInteractionClient>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
+                client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.None
+            })
+            // Request payloads and headers may contain sensitive metadata; suppress automatic logging.
+            .RemoveAllLoggers();
+        services.AddHttpClient<IAiSafetyCoach, GeminiAiSafetyCoach>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
                 client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
@@ -215,6 +252,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenRepository, MongoTokenRepository>();
             services.AddScoped<ITokenInspectionSnapshotRepository, MongoTokenInspectionSnapshotRepository>();
             services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
+            services.AddScoped<IAiSafetyCoachSnapshotRepository, MongoTokenInspectionCoachSnapshotRepository>();
             services.AddScoped<CachedTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
@@ -225,6 +263,7 @@ public static class ServiceCollectionExtensions
         else
         {
             services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
+            services.AddScoped<IAiSafetyCoachSnapshotRepository, NoOpAiSafetyCoachSnapshotRepository>();
             services.AddScoped<PassthroughTokenInspectionService>();
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(

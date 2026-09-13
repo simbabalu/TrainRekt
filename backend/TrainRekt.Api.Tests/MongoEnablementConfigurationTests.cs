@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Application.Services;
+using TrainRekt.Api.Infrastructure.Mongo;
 
 namespace TrainRekt.Api.Tests;
 
@@ -29,6 +30,7 @@ public sealed class MongoEnablementConfigurationTests
 
         Assert.IsType<ResearchingTokenInspectionService>(service);
         Assert.NotNull(scope.ServiceProvider.GetService<PassthroughTokenInspectionService>());
+        Assert.IsType<NoOpAiSafetyCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.Null(scope.ServiceProvider.GetService<IMongoClient>());
     }
 
@@ -55,7 +57,27 @@ public sealed class MongoEnablementConfigurationTests
 
         Assert.IsType<ResearchingTokenInspectionService>(service);
         Assert.NotNull(scope.ServiceProvider.GetService<CachedTokenInspectionService>());
+        Assert.IsType<MongoTokenInspectionCoachSnapshotRepository>(scope.ServiceProvider.GetRequiredService<IAiSafetyCoachSnapshotRepository>());
         Assert.NotNull(scope.ServiceProvider.GetService<IMongoClient>());
+    }
+
+    [Fact]
+    public void AddApiServices_EnabledTrueMissingTokenInspectionCoachCollectionName_ValidationFails()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => BuildAndGetMongoOptions(
+            BuildConfiguration(new Dictionary<string, string?>
+            {
+                ["Helius:RpcBaseUrl"] = "https://mainnet.helius-rpc.com",
+                ["MongoDb:Enabled"] = "true",
+                ["MongoDb:ConnectionString"] = "mongodb://localhost:27017",
+                ["MongoDb:DatabaseName"] = "trainrekt",
+                ["MongoDb:TokenCollectionName"] = "tokens",
+                ["MongoDb:TokenInspectionCollectionName"] = "tokenInspections",
+                ["MongoDb:TokenResearchCollectionName"] = "tokenResearch",
+                ["MongoDb:TokenInspectionCoachCollectionName"] = ""
+            })));
+
+        Assert.Contains("MongoDb:TokenInspectionCoachCollectionName", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

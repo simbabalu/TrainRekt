@@ -65,6 +65,100 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.NotEmpty(payload.ProtocolContext!.Claims);
     }
 
+    [Fact]
+    public async Task PostTokenInspectionCoach_WithInspectionFailure_ReturnsMappedInspectionError()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionCoachService>();
+                services.AddSingleton<ITokenInspectionCoachService>(new StubCoachService(
+                    new TokenInspectionCoachResult(
+                        new TokenInspectionError(TokenInspectionErrorCode.InvalidMint, "bad mint"),
+                        AiSafetyCoachStatus.Unavailable,
+                        null)));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/not-a-solana-address/coach", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostTokenInspectionCoach_WithAvailableCoach_ReturnsEnvelope()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionCoachService>();
+                services.AddSingleton<ITokenInspectionCoachService>(new StubCoachService(
+                    new TokenInspectionCoachResult(
+                        null,
+                        AiSafetyCoachStatus.Available,
+                        new AiSafetyCoachPayload(
+                            new AiSafetyCoachContent(
+                                "summary",
+                                new[] { "risk" },
+                                new[] { "check" },
+                                new[] { "uncertainty" },
+                                "token-2022"),
+                            1,
+                            new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)))));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/ResearchMint1111111111111111111111111111111/coach", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<TokenInspectionCoachResponse>();
+        Assert.NotNull(payload);
+        Assert.True(payload!.Available);
+        Assert.Equal("available", payload.Status);
+        Assert.NotNull(payload.Coach);
+        Assert.Equal("token-2022", payload.Coach!.RecommendedTrainingTopicId);
+    }
+
+    [Fact]
+    public async Task PostTokenInspectionCoach_WhenUnavailable_ReturnsSafeUnavailableEnvelope()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionCoachService>();
+                services.AddSingleton<ITokenInspectionCoachService>(new StubCoachService(
+                    new TokenInspectionCoachResult(null, AiSafetyCoachStatus.Disabled, null)));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsync("/api/token-inspections/ResearchMint1111111111111111111111111111111/coach", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<TokenInspectionCoachResponse>();
+        Assert.NotNull(payload);
+        Assert.False(payload!.Available);
+        Assert.Equal("disabled", payload.Status);
+        Assert.Null(payload.Coach);
+    }
+
     private static TokenInspection CreateInspectionWithProtocolContext()
     {
         var context = new ProtocolResearchContext(
@@ -107,6 +201,21 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         }
 
         public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class StubCoachService : ITokenInspectionCoachService
+    {
+        private readonly TokenInspectionCoachResult _result;
+
+        public StubCoachService(TokenInspectionCoachResult result)
+        {
+            _result = result;
+        }
+
+        public Task<TokenInspectionCoachResult> GenerateAsync(string mint, CancellationToken cancellationToken)
         {
             return Task.FromResult(_result);
         }

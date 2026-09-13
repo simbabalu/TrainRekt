@@ -11,6 +11,7 @@ public static class TokenInspectionEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapPost("/api/token-inspections", HandleInspectionRequestAsync);
+        endpoints.MapPost("/api/token-inspections/{mint}/coach", HandleInspectionCoachRequestAsync);
 
         return endpoints;
     }
@@ -35,39 +36,59 @@ public static class TokenInspectionEndpoints
                 statusCode: StatusCodes.Status502BadGateway);
         }
 
-        return result.Error.Code switch
+        return MapInspectionError(result.Error);
+    }
+
+    private static async Task<IResult> HandleInspectionCoachRequestAsync(
+        string mint,
+        ITokenInspectionCoachService coachService,
+        CancellationToken cancellationToken)
+    {
+        var result = await coachService.GenerateAsync(mint, cancellationToken);
+
+        if (result.InspectionError is not null)
+        {
+            return MapInspectionError(result.InspectionError);
+        }
+
+        return Results.Ok(TokenInspectionCoachResponse.FromDomain(result));
+    }
+
+    private static IResult MapInspectionError(TokenInspectionError error)
+    {
+        return error.Code switch
         {
             TokenInspectionErrorCode.InvalidMint => Results.BadRequest(CreateProblem(
                 title: "Invalid mint",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status400BadRequest)),
             TokenInspectionErrorCode.MintNotFound => Results.NotFound(CreateProblem(
                 title: "Mint not found",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status404NotFound)),
             TokenInspectionErrorCode.NotFungibleTokenMint => Results.UnprocessableEntity(CreateProblem(
                 title: "Unsupported account type",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status422UnprocessableEntity)),
             TokenInspectionErrorCode.ProviderUnavailable => Results.Problem(
                 title: "Provider unavailable",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status503ServiceUnavailable),
             TokenInspectionErrorCode.ProviderRejectedRequest => Results.Problem(
                 title: "Provider rejected request",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status502BadGateway),
             TokenInspectionErrorCode.ProviderMalformedResponse => Results.Problem(
                 title: "Provider response invalid",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status502BadGateway),
             TokenInspectionErrorCode.PersistenceUnavailable => Results.Problem(
                 title: "Persistence unavailable",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: StatusCodes.Status503ServiceUnavailable),
             TokenInspectionErrorCode.Cancelled => Results.Problem(
                 title: "Request cancelled",
-                detail: result.Error.Message,
+                detail: error.Message,
                 statusCode: 499),
             _ => Results.Problem(
                 title: "Inspection failed",
