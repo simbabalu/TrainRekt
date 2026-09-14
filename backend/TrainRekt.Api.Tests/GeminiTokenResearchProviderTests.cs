@@ -18,7 +18,9 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Sources);
+        Assert.Equal(ResearchExecutionStatus.Unavailable, result.Status);
+        Assert.Equal(ResearchFailureCategory.Disabled, result.FailureCategory);
+        Assert.Empty(result.Candidate.Sources);
         Assert.Equal(0, fakeClient.GroundedCallCount);
         Assert.Equal(0, fakeClient.ExtractionCallCount);
     }
@@ -35,7 +37,9 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Sources);
+        Assert.Equal(ResearchExecutionStatus.Unavailable, result.Status);
+        Assert.Equal(ResearchFailureCategory.MissingApiKey, result.FailureCategory);
+        Assert.Empty(result.Candidate.Sources);
         Assert.Equal(0, fakeClient.GroundedCallCount);
     }
 
@@ -51,7 +55,9 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Sources);
+        Assert.Equal(ResearchExecutionStatus.Unavailable, result.Status);
+        Assert.Equal(ResearchFailureCategory.InvalidProviderResponse, result.FailureCategory);
+        Assert.Empty(result.Candidate.Sources);
         Assert.Equal(1, fakeClient.GroundedCallCount);
         Assert.Equal(0, fakeClient.ExtractionCallCount);
     }
@@ -81,8 +87,9 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Single(result.Sources);
-        Assert.Single(result.Claims);
+        Assert.Equal(ResearchExecutionStatus.Complete, result.Status);
+        Assert.Single(result.Candidate.Sources);
+        Assert.Single(result.Candidate.Claims);
         Assert.Equal(1, fakeClient.GroundedCallCount);
         Assert.Equal(1, fakeClient.ExtractionCallCount);
     }
@@ -112,8 +119,10 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Sources);
-        Assert.Empty(result.Claims);
+        Assert.Equal(ResearchExecutionStatus.Partial, result.Status);
+        Assert.Equal(ResearchFailureCategory.InvalidProviderResponse, result.FailureCategory);
+        Assert.Empty(result.Candidate.Sources);
+        Assert.Empty(result.Candidate.Claims);
     }
 
     [Fact]
@@ -141,9 +150,10 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        var source = Assert.Single(result.Sources);
+        Assert.Equal(ResearchExecutionStatus.Complete, result.Status);
+        var source = Assert.Single(result.Candidate.Sources);
         Assert.Equal("https://docs.example.com/canonical", source.Url);
-        Assert.Single(result.Claims);
+        Assert.Single(result.Candidate.Claims);
     }
 
     [Fact]
@@ -167,8 +177,10 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Claims);
-        Assert.Empty(result.Sources);
+        Assert.Equal(ResearchExecutionStatus.Partial, result.Status);
+        Assert.Equal(ResearchFailureCategory.InvalidProviderResponse, result.FailureCategory);
+        Assert.Empty(result.Candidate.Claims);
+        Assert.Empty(result.Candidate.Sources);
     }
 
     [Fact]
@@ -192,8 +204,10 @@ public sealed class GeminiTokenResearchProviderTests
 
         var result = await provider.ResearchAsync(CreateRequest(), CancellationToken.None);
 
-        Assert.Empty(result.Sources);
-        Assert.Empty(result.Claims);
+        Assert.Equal(ResearchExecutionStatus.Partial, result.Status);
+        Assert.Equal(ResearchFailureCategory.InvalidProviderResponse, result.FailureCategory);
+        Assert.Empty(result.Candidate.Sources);
+        Assert.Empty(result.Candidate.Claims);
     }
 
     private static ResearchRequest CreateRequest()

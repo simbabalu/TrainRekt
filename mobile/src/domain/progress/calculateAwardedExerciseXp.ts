@@ -5,7 +5,7 @@ export const PRACTICE_XP_MULTIPLIER = 0.25;
 export interface AwardedExerciseXpInput {
   baseXp: number;
   mode: TrainingMode;
-  source?: 'adaptive' | 'wallet';
+  source?: 'adaptive' | 'wallet' | 'token-analysis';
   walletRewardAlreadyClaimed?: boolean;
 }
 

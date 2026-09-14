@@ -11,7 +11,7 @@ import { TrainingMode } from '@/types/training';
 import type { WalletTrainingTopic } from '@/types/walletTraining';
 
 interface UseTrainingScenarioOptions {
-  source?: 'adaptive' | 'wallet';
+  source?: 'adaptive' | 'wallet' | 'token-analysis';
   topic?: WalletTrainingTopic;
   initialExerciseId?: string;
 }

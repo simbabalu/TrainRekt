@@ -8,7 +8,7 @@ export interface TrainingCompletionMetadata {
   historyId: string;
   timestamp: string;
   mode: TrainingMode;
-  source?: 'adaptive' | 'wallet';
+  source?: 'adaptive' | 'wallet' | 'token-analysis';
 }
 
 export function applyTrainingResult(

@@ -137,6 +137,42 @@ public enum ResearchOutcomeStatus
     Failed
 }
 
+public enum ResearchAvailability
+{
+    NotAttempted,
+    Complete,
+    Partial,
+    Unavailable
+}
+
+public enum ResearchFailureCategory
+{
+    Timeout,
+    Cancelled,
+    ProviderUnavailable,
+    NetworkFailure,
+    InvalidProviderResponse,
+    RateLimited,
+    ProviderRejected,
+    Disabled,
+    MissingApiKey,
+    Unknown
+}
+
+public enum ResearchExecutionStatus
+{
+    Complete,
+    Partial,
+    Unavailable
+}
+
+public sealed record ResearchProviderResult(
+    ResearchExecutionStatus Status,
+    CandidateResearchResult Candidate,
+    ResearchFailureCategory? FailureCategory,
+    string? FailureStage,
+    string? Detail);
+
 public sealed record ResearchOutcome(
     ResearchOutcomeStatus Status,
     IReadOnlyList<ResearchNeed> Needs,
@@ -144,4 +180,8 @@ public sealed record ResearchOutcome(
     int ClaimsAccepted,
     int ClaimsRejected,
     ProtocolResearchContext? Context,
-    bool UsedCache);
+    bool UsedCache,
+    ResearchAvailability Availability = ResearchAvailability.NotAttempted,
+    ResearchFailureCategory? FailureCategory = null,
+    string? FailureStage = null,
+    string? Detail = null);

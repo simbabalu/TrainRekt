@@ -37,6 +37,12 @@ import { PermissionChallengeDecision, RedFlagIdentificationAnswer, ScamDetection
 import { isTrainingMode, TrainingMode } from '@/types/training';
 import { isWalletTrainingTopic, WalletTrainingTopic } from '@/types/walletTraining';
 
+type TrainingRouteSource = 'adaptive' | 'wallet' | 'token-analysis';
+
+function isTrainingRouteSource(value: string | undefined): value is TrainingRouteSource {
+  return value === 'adaptive' || value === 'wallet' || value === 'token-analysis';
+}
+
 function firstParam(value: string | string[] | undefined): string | undefined {
   if (!value) return undefined;
   return Array.isArray(value) ? value[0] : value;
@@ -45,13 +51,14 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 export default function TrainScreen() {
   const params = useLocalSearchParams<{ mode?: string | string[]; source?: string | string[]; topic?: string | string[]; exerciseId?: string | string[] }>();
   const requestedMode = firstParam(params.mode);
-  const source = firstParam(params.source);
+  const requestedSource = firstParam(params.source);
+  const source: TrainingRouteSource = isTrainingRouteSource(requestedSource) ? requestedSource : 'adaptive';
   const requestedTopic = firstParam(params.topic);
   const requestedExerciseId = firstParam(params.exerciseId);
   const topic: WalletTrainingTopic | null = isWalletTrainingTopic(requestedTopic) ? requestedTopic : null;
-  const isWalletLesson = source === 'wallet';
-  const mode = isWalletLesson ? 'practice' : (isTrainingMode(requestedMode) ? requestedMode : 'daily');
-  const walletExerciseId = isWalletLesson
+  const isGuidedLesson = source === 'wallet' || source === 'token-analysis';
+  const mode = isGuidedLesson ? 'practice' : (isTrainingMode(requestedMode) ? requestedMode : 'daily');
+  const walletExerciseId = isGuidedLesson
     ? (requestedExerciseId || (topic ? getWalletLessonExerciseIds(topic)[0] : undefined))
     : undefined;
   const { progress } = useTrainingProgress();
@@ -59,7 +66,7 @@ export default function TrainScreen() {
   if (mode === 'daily' && progress.daily.dailyGoalCompleted) {
     return <CompletedDailyTrainingScreen />;
   }
-  return <TrainSession key={`${mode}:${source ?? 'adaptive'}:${topic ?? ''}:${walletExerciseId ?? ''}`} mode={mode} source={isWalletLesson ? 'wallet' : 'adaptive'} topic={topic} initialExerciseId={walletExerciseId} />;
+  return <TrainSession key={`${mode}:${source}:${topic ?? ''}:${walletExerciseId ?? ''}`} mode={mode} source={source} topic={topic} initialExerciseId={walletExerciseId} />;
 }
 
 function CompletedDailyTrainingScreen() {
@@ -75,7 +82,7 @@ function CompletedDailyTrainingScreen() {
   );
 }
 
-function TrainSession({ mode, source, topic, initialExerciseId }: { mode: TrainingMode; source: 'adaptive' | 'wallet'; topic: WalletTrainingTopic | null; initialExerciseId?: string }) {
+function TrainSession({ mode, source, topic, initialExerciseId }: { mode: TrainingMode; source: TrainingRouteSource; topic: WalletTrainingTopic | null; initialExerciseId?: string }) {
   const { currentExercise, selectedAnswer, result, submitAnswer, nextExercise, debugSelectExercise } = useTrainingScenario(mode, { source, topic: topic ?? undefined, initialExerciseId });
   const { progress } = useTrainingProgress();
   const router = useRouter();
@@ -107,6 +114,10 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
       router.replace('/wallet-safety');
       return;
     }
+    if (source === 'token-analysis') {
+      router.back();
+      return;
+    }
     handleNextExercise();
   }
 
@@ -124,9 +135,9 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
 
   return (
     <Screen ref={scrollRef}>
-      {source === 'wallet' && topic ? (
+      {source !== 'adaptive' && topic ? (
         <SectionCard>
-          <View style={styles.walletLessonHeader}><AppIcon accessibilityLabel="Wallet lesson" name={{ ios: 'shield.lefthalf.filled', android: 'shield', web: 'shield' }} size={16} /><Text style={styles.walletLessonEyebrow}>RECOMMENDED FROM WALLET</Text></View>
+          <View style={styles.walletLessonHeader}><AppIcon accessibilityLabel="Wallet lesson" name={{ ios: 'shield.lefthalf.filled', android: 'shield', web: 'shield' }} size={16} /><Text style={styles.walletLessonEyebrow}>{source === 'token-analysis' ? 'RECOMMENDED FROM TOKEN ANALYSIS' : 'RECOMMENDED FROM WALLET'}</Text></View>
           <Text style={styles.walletLessonTopic}>{getWalletTrainingTopicLabel(topic)}</Text>
         </SectionCard>
       ) : null}
@@ -146,7 +157,7 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
             <DailyTrainingCompleteCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
           ) : (
             <PrimaryButton onPress={handleResultAction} variant="secondary">
-              {source === 'wallet' ? 'BACK TO WALLET SAFETY' : 'NEXT EXERCISE'}
+              {source === 'wallet' ? 'BACK TO WALLET SAFETY' : source === 'token-analysis' ? 'BACK TO TOKEN ANALYSIS' : 'NEXT EXERCISE'}
             </PrimaryButton>
           )}
         </View>

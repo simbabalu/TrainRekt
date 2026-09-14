@@ -89,7 +89,116 @@ public sealed class GeminiAiSafetyCoachTests
         Assert.Equal(AiSafetyCoachFailureReason.RateLimited, result.FailureReason);
     }
 
-    private static GeminiAiSafetyCoach CreateCoach(HttpMessageHandler handler)
+    [Fact]
+    public async Task GenerateAsync_ProviderTimeout_ReturnsTimeoutWithoutThrowing()
+    {
+        var handler = new StubHttpMessageHandler(async (_, cancellationToken) =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var coach = CreateCoach(
+            handler,
+            configureGemini: options => options.TimeoutSeconds = 1);
+
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.Timeout, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NetworkFailure_ReturnsProviderUnavailableWithoutThrowing()
+    {
+        var handler = new StubHttpMessageHandler((_, _) => throw new HttpRequestException("network failure"));
+        var coach = CreateCoach(handler);
+
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.ProviderUnavailable, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_InvalidJsonResponse_FailsClosedWithMalformedResponse()
+    {
+        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("not-json", Encoding.UTF8, "application/json")
+        }));
+
+        var coach = CreateCoach(handler);
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.MalformedResponse, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_StructurallyInvalidResponse_FailsClosedWithMalformedResponse()
+    {
+        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"steps\":[]}", Encoding.UTF8, "application/json")
+        }));
+
+        var coach = CreateCoach(handler);
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.MalformedResponse, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MissingApiKey_DoesNotCallProviderAndReturnsMissingApiKey()
+    {
+        var callCount = 0;
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            callCount++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        });
+
+        var coach = CreateCoach(
+            handler,
+            configureGemini: options => options.ApiKey = null);
+
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.MissingApiKey, result.FailureReason);
+        Assert.Equal(0, callCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CoachDisabled_DoesNotCallProviderAndReturnsDisabled()
+    {
+        var callCount = 0;
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            callCount++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        });
+
+        var coach = CreateCoach(
+            handler,
+            configureCoach: options => options.Enabled = false);
+
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AiSafetyCoachFailureReason.Disabled, result.FailureReason);
+        Assert.Equal(0, callCount);
+    }
+
+    private static GeminiAiSafetyCoach CreateCoach(
+        HttpMessageHandler handler,
+        Action<GeminiOptions>? configureGemini = null,
+        Action<AiSafetyCoachOptions>? configureCoach = null)
     {
         var geminiOptions = new GeminiOptions
         {
@@ -106,6 +215,9 @@ public sealed class GeminiAiSafetyCoachTests
             Enabled = true,
             Language = "en"
         };
+
+        configureGemini?.Invoke(geminiOptions);
+        configureCoach?.Invoke(coachOptions);
 
         return new GeminiAiSafetyCoach(
             new HttpClient(handler) { BaseAddress = new Uri(geminiOptions.BaseUrl) },

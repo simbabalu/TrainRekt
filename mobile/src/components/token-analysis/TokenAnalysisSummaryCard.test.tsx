@@ -1,0 +1,245 @@
+import React from 'react';
+import { act, create } from 'react-test-renderer';
+import { describe, expect, it, vi } from 'vitest';
+import { Text } from 'react-native';
+
+import { TokenAnalysisSummaryCard } from './TokenAnalysisSummaryCard';
+import type { TokenAnalysisReport } from '@/types/tokenAnalysis';
+
+vi.mock('react-native', () => ({
+  StyleSheet: { create: (styles: unknown) => styles },
+  Text: 'Text',
+  View: 'View',
+}));
+
+vi.mock('@/components/SectionCard', () => ({
+  SectionCard: ({ children }: { children: React.ReactNode }) => React.createElement('View', null, children),
+}));
+
+vi.mock('@/components/PrimaryButton', () => ({
+  PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Pressable', null, children),
+}));
+
+vi.mock('@/components/token-analysis/TokenAnalysisSignalRow', () => ({
+  TokenAnalysisSignalRow: ({ signal }: { signal: { label: string; value: string } }) => React.createElement('View', null, `${signal.label}:${signal.value}`),
+}));
+
+function report(): TokenAnalysisReport {
+  return {
+    mint: 'Mint1111111111111111111111111111111111',
+    inspection: {
+      identity: { mint: 'Mint1111111111111111111111111111111111', name: 'Token', symbol: 'TOK' },
+      authorities: { mintAuthorityRevoked: false, freezeAuthorityRevoked: true, mintAuthority: 'Auth111', freezeAuthority: null },
+      program: { programId: 'Tokenkeg', programType: 'spl-token' },
+      age: { ageSeconds: 1, isReliable: true, unavailableReason: null },
+      holderConcentration: { topHolderPercentage: 46.17, top5HoldersPercentage: 59.61, top10HoldersPercentage: 70.74, semanticsNote: 'note', unclassifiedTokenAccountConcentration: null },
+      largestTokenAccounts: [{ address: 'Pool111111111111111111111111111111111111', percentage: 46.17, classification: { classification: 'LIQUIDITY_POOL', protocol: 'pumpswap', confidence: 'HIGH' } }],
+      reviewSignals: [
+        { id: 'signal-1', category: 'Review', severity: 'info', explanation: 'First repeated severity.', evidence: {} },
+        { id: 'signal-2', category: 'Review', severity: 'info', explanation: 'Second repeated severity.', evidence: {} },
+      ],
+      inspectedAtUtc: new Date().toISOString(),
+    },
+    provenance: {
+      result: 'NO_COLLISION_EVIDENCE',
+      confidence: 'MEDIUM',
+      scannedIdentity: {
+        mint: 'Mint1111111111111111111111111111111111',
+        rawName: 'Token',
+        normalizedName: 'token',
+        rawSymbol: 'TOK',
+        normalizedSymbol: 'tok',
+        observedAtUtc: new Date().toISOString(),
+      },
+      earliestObservedMatch: null,
+      collisions: [],
+      totalCollisionCount: 0,
+      returnedCollisionCount: 0,
+      isTruncated: false,
+      evidence: [],
+      conflictingEvidence: [],
+      unknowns: [],
+      analyzedAtUtc: new Date().toISOString(),
+      onChainChronology: null,
+      trustedIdentityProvenance: null,
+      identityClassification: {
+        classification: 'NO_COLLISION_EVIDENCE',
+        confidence: 'MEDIUM',
+        relevantCompetingMint: null,
+        evidence: [],
+        limitations: [],
+      },
+    },
+    provenanceWarning: null,
+  };
+}
+
+function textContent(renderer: ReturnType<typeof create>): string {
+  return renderer.root.findAllByType(Text)
+    .map((node) => node.props.children)
+    .flat(Infinity)
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+}
+
+describe('TokenAnalysisSummaryCard keys', () => {
+  it('renders repeated findings without duplicate React key warnings', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    act(() => {
+      create(
+        <TokenAnalysisSummaryCard
+          report={report()}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    const duplicateKeyWarning = consoleErrorSpy.mock.calls
+      .map((call) => call.join(' '))
+      .find((message) => message.includes('Encountered two children with the same key'));
+
+    expect(duplicateKeyWarning).toBeUndefined();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('keeps existing behavior when researchStatus is missing', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={report()}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />, 
+      );
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('Deterministic inspection: complete.');
+    expect(content).not.toContain('Optional external research:');
+    expect(content).toContain('Mint1111111111111111111111111111111111');
+  });
+
+  it('shows complete optional research indicator', () => {
+    const withComplete: TokenAnalysisReport = {
+      ...report(),
+      inspection: {
+        ...report().inspection,
+        researchStatus: {
+          availability: 'complete',
+          failureCategory: null,
+          failureStage: null,
+          message: null,
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={withComplete}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    expect(textContent(renderer)).toContain('Optional external research: complete.');
+  });
+
+  it('shows partial optional research indicator', () => {
+    const withPartial: TokenAnalysisReport = {
+      ...report(),
+      inspection: {
+        ...report().inspection,
+        researchStatus: {
+          availability: 'partial',
+          failureCategory: 'invalid-provider-response',
+          failureStage: 'structured_extraction',
+          message: 'Optional research completed but did not produce trusted usable context.',
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={withPartial}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    expect(textContent(renderer)).toContain('Optional external research: partially available.');
+  });
+
+  it('shows unavailable optional research indicator while keeping deterministic inspection visible', () => {
+    const withUnavailable: TokenAnalysisReport = {
+      ...report(),
+      inspection: {
+        ...report().inspection,
+        researchStatus: {
+          availability: 'unavailable',
+          failureCategory: 'timeout',
+          failureStage: 'provider_timeout',
+          message: 'Optional research timed out.',
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={withUnavailable}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('Additional external research is unavailable. Deterministic inspection remains available.');
+    expect(content).toContain('Mint1111111111111111111111111111111111');
+  });
+
+  it('shows not-attempted optional research indicator', () => {
+    const withNotAttempted: TokenAnalysisReport = {
+      ...report(),
+      inspection: {
+        ...report().inspection,
+        researchStatus: {
+          availability: 'not-attempted',
+          failureCategory: null,
+          failureStage: null,
+          message: null,
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={withNotAttempted}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    expect(textContent(renderer)).toContain('Optional external research: not attempted.');
+  });
+});

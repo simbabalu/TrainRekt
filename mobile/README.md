@@ -78,6 +78,7 @@ Avoid treating `./gradlew clean assembleRelease` as the default command in this 
 - `/explore`: Progress
 - `/settings`: Settings and data controls
 - `/wallet-safety`: Wallet Safety screen (navigable route, hidden tab trigger)
+- `/token-analysis`: Token analysis screen (navigable route, hidden tab trigger)
 
 ## Architecture
 
@@ -152,4 +153,4 @@ These observations are used as educational signals and recommendation inputs; th
 - MWA auth token is held in memory and not persisted in training progress storage
 - Real wallet message signing path exists in service/context boundaries but is runtime-disabled (`REAL_MESSAGE_SIGNING_ENABLED = false`)
 - Disconnect intentionally clears local wallet state; native deauthorize is currently disabled pending verified-safe upstream behavior
-- No backend service is required for the current hackathon build
+- Token analysis integrates with the TrainRekt backend API when `EXPO_PUBLIC_TRAINREKT_API_BASE_URL` is configured

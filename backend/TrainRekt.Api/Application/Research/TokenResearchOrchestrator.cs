@@ -51,7 +51,15 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         var needs = _needDetector.Detect(inspection);
         if (needs.Count == 0)
         {
-            return new ResearchOutcome(ResearchOutcomeStatus.NotRequired, needs, 0, 0, 0, inspection.ProtocolContext, false);
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.NotRequired,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.NotAttempted);
         }
 
         var nowUtc = _timeProvider.GetUtcNow();
@@ -81,19 +89,47 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         if (freshSnapshot is not null)
         {
             var cacheMerge = _merger.Merge(inspection.ProtocolContext, freshSnapshot.Context);
-            return new ResearchOutcome(ResearchOutcomeStatus.Completed, needs, 0, 0, cacheMerge.ClaimsRejected, cacheMerge.Context, true);
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Completed,
+                needs,
+                0,
+                0,
+                cacheMerge.ClaimsRejected,
+                cacheMerge.Context,
+                true,
+                ResearchAvailability.Complete);
         }
 
         var request = _requestFactory.Create(inspection, needs);
-        CandidateResearchResult candidate;
+        ResearchProviderResult providerResult;
+        CancellationTokenSource? timeoutCts = null;
         try
         {
-            using var timeoutCts = CreateTimeoutCancellation(cancellationToken);
-            candidate = await _provider.ResearchAsync(request, timeoutCts.Token);
+            timeoutCts = CreateTimeoutCancellation(cancellationToken);
+            providerResult = await _provider.ResearchAsync(request, timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
-            throw;
+            _logger.LogWarning(
+                "Token research provider timed out for mint {Mint}. Returning deterministic inspection without optional enrichment.",
+                request.Mint);
+
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.Timeout,
+                "provider_timeout",
+                "Optional research timed out before completion.");
         }
         catch (Exception exception)
         {
@@ -102,8 +138,45 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
                 "Token research provider failed for mint {Mint}. Research enrichment skipped.",
                 request.Mint);
 
-            return CreateFailedOutcome(needs, inspection);
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.Unknown,
+                "provider",
+                "Optional research failed before producing usable enrichment.");
         }
+        finally
+        {
+            timeoutCts?.Dispose();
+        }
+
+        if (providerResult.Status != ResearchExecutionStatus.Complete)
+        {
+            var availability = providerResult.Status == ResearchExecutionStatus.Partial
+                ? ResearchAvailability.Partial
+                : ResearchAvailability.Unavailable;
+
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                availability,
+                providerResult.FailureCategory,
+                providerResult.FailureStage,
+                providerResult.Detail);
+        }
+
+        var candidate = providerResult.Candidate;
 
         _logger.LogInformation(
             "Token research candidate received for mint {Mint}. Candidate sources {SourceCount}, claims {ClaimCount}.",
@@ -133,7 +206,18 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
         var promoted = _promoter.Promote(request, candidate, trustAssessment);
         if (!promoted.IsValid)
         {
-            return new ResearchOutcome(ResearchOutcomeStatus.InvalidCandidateData, needs, 0, 0, candidate.Claims.Count, inspection.ProtocolContext, false);
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.InvalidCandidateData,
+                needs,
+                0,
+                0,
+                candidate.Claims.Count,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Partial,
+                ResearchFailureCategory.InvalidProviderResponse,
+                "validation",
+                "Optional research returned invalid candidate data.");
         }
 
         if (!promoted.HasUsableContent || promoted.Context is null)
@@ -145,7 +229,11 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
                 promoted.ClaimsAccepted,
                 promoted.ClaimsRejected,
                 inspection.ProtocolContext,
-                false);
+                false,
+                ResearchAvailability.Partial,
+                null,
+                "promotion",
+                "Optional research completed but did not produce trusted usable context.");
         }
 
         var reconciled = _verifier.Reconcile(inspection, promoted.Context);
@@ -188,7 +276,8 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
             promoted.ClaimsAccepted,
             promoted.ClaimsRejected + merged.ClaimsRejected,
             merged.Context,
-            false);
+            false,
+            ResearchAvailability.Complete);
     }
 
     private CancellationTokenSource CreateTimeoutCancellation(CancellationToken cancellationToken)
@@ -212,6 +301,10 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
             0,
             0,
             inspection.ProtocolContext,
-            false);
+            false,
+            ResearchAvailability.Unavailable,
+            ResearchFailureCategory.Unknown,
+            "orchestrator",
+            "Optional research was unavailable.");
     }
 }

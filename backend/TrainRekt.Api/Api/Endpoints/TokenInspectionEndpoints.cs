@@ -26,7 +26,7 @@ public static class TokenInspectionEndpoints
 
         if (result.Error is null && result.Inspection is not null)
         {
-            return Results.Ok(TokenInspectionResponse.FromDomain(result.Inspection));
+            return Results.Ok(TokenInspectionResponse.FromDomain(result.Inspection, result.ResearchStatus));
         }
 
         if (result.Error is null)

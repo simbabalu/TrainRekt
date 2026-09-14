@@ -8,6 +8,11 @@ const useWalletMock = vi.hoisted(() => vi.fn());
 const useWalletSnapshotMock = vi.hoisted(() => vi.fn());
 const useWalletSafetyInspectionMock = vi.hoisted(() => vi.fn());
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
+const pushMock = vi.hoisted(() => vi.fn());
+
+vi.mock('expo-router', () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
 
 vi.mock('@/hooks/useWallet', () => ({
   useWallet: useWalletMock,
@@ -42,6 +47,7 @@ vi.mock('@/components/wallet/WalletSafetyInspection', () => ({
 }));
 
 vi.mock('react-native', () => ({
+  Pressable: 'Pressable',
   StyleSheet: { create: (styles: unknown) => styles },
   Text: 'Text',
 }));
@@ -165,8 +171,10 @@ describe('WalletSafetyScreen', () => {
       renderer = create(<WalletSafetyScreen />);
     });
 
+    const refreshNode = renderer.root.find((node) => String(node.type) === 'Text' && typeof node.props.onPress === 'function');
+
     act(() => {
-      renderer.root.findAll((node) => String(node.type) === 'Text')[1].props.onPress();
+      refreshNode.props.onPress();
     });
 
     expect(refreshSnapshot).toHaveBeenCalledTimes(1);

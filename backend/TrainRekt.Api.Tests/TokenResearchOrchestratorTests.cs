@@ -21,6 +21,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(inspection, CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.NotRequired, outcome.Status);
+        Assert.Equal(ResearchAvailability.NotAttempted, outcome.Availability);
         Assert.Equal(0, provider.CallCount);
         Assert.Equal(0, repository.GetLatestFreshCallCount);
     }
@@ -62,6 +63,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(inspection, CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.NoUsableSources, outcome.Status);
+        Assert.Equal(ResearchAvailability.Partial, outcome.Availability);
         Assert.Equal(0, repository.InsertCount);
     }
 
@@ -76,6 +78,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(inspection, CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.Completed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Complete, outcome.Availability);
         Assert.NotNull(outcome.Context);
         var claim = Assert.Single(outcome.Context.Claims);
         Assert.Equal(ResearchClaimVerificationStatus.Documented, claim.VerificationStatus);
@@ -102,6 +105,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.InvalidCandidateData, outcome.Status);
+        Assert.Equal(ResearchAvailability.Partial, outcome.Availability);
         Assert.Equal(0, repository.InsertCount);
     }
 
@@ -132,6 +136,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.Completed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Complete, outcome.Availability);
         Assert.True(outcome.UsedCache);
         Assert.Equal(0, provider.CallCount);
     }
@@ -174,6 +179,25 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Unavailable, outcome.Availability);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProviderTimeoutCancellation_ReturnsFailedWithoutThrowing()
+    {
+        var provider = new FakeProvider(CreateValidCandidateResult())
+        {
+            ThrowOperationCanceled = true
+        };
+
+        var repository = new FakeRepository();
+        var orchestrator = CreateOrchestrator(provider, repository, CreateTrustedAssessment());
+
+        var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
+
+        Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Unavailable, outcome.Availability);
+        Assert.Equal(ResearchFailureCategory.Timeout, outcome.FailureCategory);
     }
 
     [Fact]
@@ -189,6 +213,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Unavailable, outcome.Availability);
     }
 
     [Fact]
@@ -215,6 +240,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(ResearchTestData.CreateInspection(mintAuthorityRevoked: false), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.NoUsableSources, outcome.Status);
+        Assert.Equal(ResearchAvailability.Partial, outcome.Availability);
         Assert.Equal(0, repository.InsertCount);
     }
 
@@ -238,6 +264,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(CreateInspectionForMint(mint), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.NoUsableSources, outcome.Status);
+        Assert.Equal(ResearchAvailability.Partial, outcome.Availability);
         Assert.Null(outcome.Context);
         Assert.Equal(0, repository.InsertCount);
     }
@@ -262,6 +289,7 @@ public sealed class TokenResearchOrchestratorTests
         var outcome = await orchestrator.RunAsync(CreateInspectionForMint(mint), CancellationToken.None);
 
         Assert.Equal(ResearchOutcomeStatus.Completed, outcome.Status);
+        Assert.Equal(ResearchAvailability.Complete, outcome.Availability);
         Assert.NotNull(outcome.Context);
         Assert.Single(outcome.Context!.Sources);
         Assert.Equal(ResearchSourceType.OfficialDocumentation, outcome.Context.Sources[0].SourceType);
@@ -520,17 +548,29 @@ public sealed class TokenResearchOrchestratorTests
 
         public bool ThrowOnResearch { get; set; }
 
-        public Task<CandidateResearchResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken)
+        public bool ThrowOperationCanceled { get; set; }
+
+        public Task<ResearchProviderResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
+
+            if (ThrowOperationCanceled)
+            {
+                throw new OperationCanceledException("provider timeout simulated");
+            }
 
             if (ThrowOnResearch)
             {
                 throw new InvalidOperationException("research provider failure");
             }
 
-            return Task.FromResult(_result);
+            return Task.FromResult(new ResearchProviderResult(
+                ResearchExecutionStatus.Complete,
+                _result,
+                null,
+                null,
+                null));
         }
     }
 

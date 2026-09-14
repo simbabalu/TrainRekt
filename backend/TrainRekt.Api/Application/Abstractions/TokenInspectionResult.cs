@@ -16,10 +16,14 @@ public enum TokenInspectionErrorCode
 
 public sealed record TokenInspectionError(TokenInspectionErrorCode Code, string Message);
 
-public sealed record TokenInspectionResult(TokenInspection? Inspection, TokenInspectionError? Error)
+public sealed record TokenInspectionResult(
+    TokenInspection? Inspection,
+    TokenInspectionError? Error,
+    TokenInspectionResearchStatus? ResearchStatus = null)
 {
-    public static TokenInspectionResult Success(TokenInspection inspection) => new(inspection, null);
+    public static TokenInspectionResult Success(TokenInspection inspection, TokenInspectionResearchStatus? researchStatus = null) =>
+        new(inspection, null, researchStatus);
 
     public static TokenInspectionResult Failure(TokenInspectionErrorCode code, string message) =>
-        new(null, new TokenInspectionError(code, message));
+        new(null, new TokenInspectionError(code, message), null);
 }

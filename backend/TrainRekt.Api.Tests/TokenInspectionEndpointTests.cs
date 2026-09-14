@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Contracts;
 using TrainRekt.Api.Api.Configuration;
@@ -67,6 +69,148 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.NotNull(payload);
         Assert.NotNull(payload!.ProtocolContext);
         Assert.NotEmpty(payload.ProtocolContext!.Claims);
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_DeterministicSuccess_WithOptionalResearchTimeout_ReturnsSuccessWithDegradedResearchStatus()
+    {
+        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
+        var orchestrator = new TimeoutResearchOrchestrator();
+
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.RemoveAll<ITokenResearchOrchestrator>();
+                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
+                services.AddScoped<ITokenInspectionService>(_ =>
+                    new ResearchingTokenInspectionService(
+                        deterministicService,
+                        orchestrator,
+                        NullLogger<ResearchingTokenInspectionService>.Instance));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = deterministicInspection.Identity.Mint
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+
+        Assert.Equal(deterministicInspection.Identity.Mint, root.GetProperty("identity").GetProperty("mint").GetString());
+        Assert.Equal(deterministicInspection.Authorities.MintAuthorityRevoked, root.GetProperty("authorities").GetProperty("mintAuthorityRevoked").GetBoolean());
+
+        var researchStatus = root.GetProperty("researchStatus");
+        Assert.Equal("unavailable", researchStatus.GetProperty("availability").GetString());
+        Assert.Equal("timeout", researchStatus.GetProperty("failureCategory").GetString());
+        Assert.Equal("provider_timeout", researchStatus.GetProperty("failureStage").GetString());
+        Assert.Equal("Optional research timed out.", researchStatus.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_DeterministicSuccess_WithCompletedResearch_ReturnsSuccessWithCompleteResearchStatus_AndStringEnumWireFormat()
+    {
+        var deterministicInspection = CreateInspectionWithProtocolContext();
+        var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
+        var orchestrator = new CompletedResearchOrchestrator(deterministicInspection.ProtocolContext!);
+
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.RemoveAll<ITokenResearchOrchestrator>();
+                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
+                services.AddScoped<ITokenInspectionService>(_ =>
+                    new ResearchingTokenInspectionService(
+                        deterministicService,
+                        orchestrator,
+                        NullLogger<ResearchingTokenInspectionService>.Instance));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = deterministicInspection.Identity.Mint
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+
+        Assert.Equal(deterministicInspection.Identity.Mint, root.GetProperty("identity").GetProperty("mint").GetString());
+        Assert.Equal(deterministicInspection.Identity.Symbol, root.GetProperty("identity").GetProperty("symbol").GetString());
+        Assert.Equal(deterministicInspection.Authorities.MintAuthorityRevoked, root.GetProperty("authorities").GetProperty("mintAuthorityRevoked").GetBoolean());
+
+        var researchStatus = root.GetProperty("researchStatus");
+        Assert.Equal("complete", researchStatus.GetProperty("availability").GetString());
+        Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureCategory").ValueKind);
+        Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureStage").ValueKind);
+
+        var protocolContext = root.GetProperty("protocolContext");
+        var source = protocolContext.GetProperty("sources")[0];
+        var claim = protocolContext.GetProperty("claims")[0];
+
+        Assert.Equal("OfficialDocumentation", source.GetProperty("sourceType").GetString());
+        Assert.Equal("Documented", claim.GetProperty("verificationStatus").GetString());
+        Assert.Equal("DocumentationOnly", claim.GetProperty("verificationMethod").GetString());
+        Assert.Equal("Unknown", claim.GetProperty("consistency").GetString());
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_CallerCancellation_PropagatesCancellation()
+    {
+        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
+        var orchestrator = new BlockingResearchOrchestrator();
+
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.RemoveAll<ITokenResearchOrchestrator>();
+                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
+                services.AddScoped<ITokenInspectionService>(_ =>
+                    new ResearchingTokenInspectionService(
+                        deterministicService,
+                        orchestrator,
+                        NullLogger<ResearchingTokenInspectionService>.Instance));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        using var cancellationSource = new CancellationTokenSource();
+        var requestTask = client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = deterministicInspection.Identity.Mint
+        }, cancellationSource.Token);
+
+        await orchestrator.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await cancellationSource.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
     }
 
     [Fact]
@@ -161,6 +305,36 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.False(payload!.Available);
         Assert.Equal("disabled", payload.Status);
         Assert.Null(payload.Coach);
+    }
+
+    [Fact]
+    public async Task PostTokenInspectionCoach_RequestCancellation_PropagatesCancellation()
+    {
+        var blockingService = new BlockingCoachService();
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionCoachService>();
+                services.AddSingleton<ITokenInspectionCoachService>(blockingService);
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        using var cts = new CancellationTokenSource();
+        var request = client.PostAsync(
+            "/api/token-inspections/ResearchMint1111111111111111111111111111111/coach",
+            content: null,
+            cancellationToken: cts.Token);
+
+        await blockingService.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await request);
     }
 
     [Fact]
@@ -554,6 +728,19 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         }
     }
 
+    private sealed class BlockingCoachService : ITokenInspectionCoachService
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<TokenInspectionCoachResult> GenerateAsync(string mint, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(true);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+            return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.Unavailable, null);
+        }
+    }
+
     private sealed class StubProvenanceService : ITokenIdentityProvenanceService
     {
         private readonly TokenIdentityProvenanceResult _result;
@@ -655,6 +842,63 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         {
             CallCount += 1;
             throw new InvalidOperationException("research orchestrator should not be used by provenance");
+        }
+    }
+
+    private sealed class TimeoutResearchOrchestrator : ITokenResearchOrchestrator
+    {
+        public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new OperationCanceledException("optional provider timeout simulated");
+        }
+    }
+
+    private sealed class CompletedResearchOrchestrator : ITokenResearchOrchestrator
+    {
+        private readonly ProtocolResearchContext _context;
+
+        public CompletedResearchOrchestrator(ProtocolResearchContext context)
+        {
+            _context = context;
+        }
+
+        public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new ResearchOutcome(
+                ResearchOutcomeStatus.Completed,
+                Array.Empty<ResearchNeed>(),
+                SourcesAccepted: 1,
+                ClaimsAccepted: 1,
+                ClaimsRejected: 0,
+                Context: _context,
+                UsedCache: false,
+                Availability: ResearchAvailability.Complete));
+        }
+    }
+
+    private sealed class BlockingResearchOrchestrator : ITokenResearchOrchestrator
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(true);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                Array.Empty<ResearchNeed>(),
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.Cancelled,
+                "provider",
+                "cancelled");
         }
     }
 }

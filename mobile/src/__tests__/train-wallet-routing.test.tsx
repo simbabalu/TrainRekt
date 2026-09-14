@@ -8,6 +8,7 @@ const useLocalSearchParamsMock = vi.hoisted(() => vi.fn());
 const useTrainingScenarioMock = vi.hoisted(() => vi.fn());
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 const routerReplaceMock = vi.hoisted(() => vi.fn());
+const routerBackMock = vi.hoisted(() => vi.fn());
 
 Object.defineProperty(globalThis, '__DEV__', {
   value: false,
@@ -20,7 +21,7 @@ Object.defineProperty(globalThis, 'requestAnimationFrame', {
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: useLocalSearchParamsMock,
-  useRouter: () => ({ replace: routerReplaceMock }),
+  useRouter: () => ({ replace: routerReplaceMock, back: routerBackMock }),
 }));
 
 vi.mock('@/hooks/useTrainingScenario', () => ({
@@ -203,6 +204,52 @@ describe('Train wallet routing', () => {
 
     expect(nextExercise).toHaveBeenCalledTimes(1);
     expect(routerReplaceMock).not.toHaveBeenCalledWith('/wallet-safety');
+  });
+
+  it('routes token-analysis source entries into guided practice and returns to token analysis on completion', () => {
+    const nextExercise = vi.fn();
+    routerBackMock.mockReset();
+    routerReplaceMock.mockReset();
+    useLocalSearchParamsMock.mockReturnValue({
+      mode: 'practice',
+      source: 'token-analysis',
+      topic: 'token-2022',
+      exerciseId: 'wallet-lesson-token-2022-program',
+    });
+    useTrainingScenarioMock.mockReturnValue({
+      currentExercise: {
+        id: 'wallet-lesson-token-2022-program',
+        type: 'transaction-inspection',
+        skill: 'walletSafety',
+        difficulty: 'Beginner',
+      },
+      selectedAnswer: 'inspect',
+      result: { title: 'Result', isCorrect: true, xpEarned: 5, explanation: 'Explanation' },
+      submitAnswer: vi.fn(),
+      nextExercise,
+      debugSelectExercise: vi.fn(),
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TrainScreen />);
+    });
+
+    expect(useTrainingScenarioMock).toHaveBeenCalledWith('practice', {
+      source: 'token-analysis',
+      topic: 'token-2022',
+      initialExerciseId: 'wallet-lesson-token-2022-program',
+    });
+
+    const backButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')
+      .find((node) => String(node.props.children?.props?.children ?? '').includes('BACK TO TOKEN ANALYSIS'));
+    expect(backButton).toBeDefined();
+
+    act(() => backButton?.props.onPress());
+
+    expect(routerBackMock).toHaveBeenCalledTimes(1);
+    expect(routerReplaceMock).not.toHaveBeenCalledWith('/wallet-safety');
+    expect(nextExercise).not.toHaveBeenCalled();
   });
 
   it('renders completed-day state without mounting an exercise session on re-entry', () => {

@@ -28,48 +28,50 @@ public sealed class GeminiTokenResearchProvider : ITokenResearchProvider
         _logger = logger;
     }
 
-    public async Task<CandidateResearchResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken)
+    public async Task<ResearchProviderResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!_options.Enabled)
         {
-            LogFailure(request.Mint, "research", GeminiFailureReason.Disabled, null, null);
-            return EmptyResult;
+            const string detail = "Optional Gemini research is disabled by configuration.";
+            LogFailure(request.Mint, "research", GeminiFailureReason.Disabled, null, detail);
+            return Unavailable(ResearchFailureCategory.Disabled, "research", detail);
         }
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
-            LogFailure(request.Mint, "research", GeminiFailureReason.MissingApiKey, null, null);
-            return EmptyResult;
+            const string detail = "Optional Gemini research is unavailable because the provider key is missing.";
+            LogFailure(request.Mint, "research", GeminiFailureReason.MissingApiKey, null, detail);
+            return Unavailable(ResearchFailureCategory.MissingApiKey, "research", detail);
         }
 
         var grounded = await _geminiClient.RunGroundedResearchAsync(request, cancellationToken);
         if (!grounded.Success || grounded.Value is null)
         {
             LogFailure(request.Mint, "research", grounded.FailureReason, grounded.HttpStatusCode, grounded.Detail);
-            return EmptyResult;
+            return Unavailable(MapFailureCategory(grounded.FailureReason), "grounded_research", grounded.Detail);
         }
 
         var extraction = await _geminiClient.RunStructuredExtractionAsync(request, grounded.Value, cancellationToken);
         if (!extraction.Success || string.IsNullOrWhiteSpace(extraction.Value))
         {
             LogFailure(request.Mint, "extraction", extraction.FailureReason, extraction.HttpStatusCode, extraction.Detail);
-            return EmptyResult;
+            return Partial(MapFailureCategory(extraction.FailureReason), "structured_extraction", extraction.Detail);
         }
 
         var mapped = _candidateMapper.MapStructuredJson(extraction.Value);
         if (!mapped.Success || mapped.Value is null)
         {
             LogFailure(request.Mint, "extraction", mapped.FailureReason, null, mapped.Detail);
-            return EmptyResult;
+            return Partial(ResearchFailureCategory.InvalidProviderResponse, "structured_extraction", mapped.Detail);
         }
 
         var bound = BindSourcesToGroundedCatalog(mapped.Value, grounded.Value.Sources);
         if (!bound.Success || bound.Value is null)
         {
             LogFailure(request.Mint, "extraction", bound.FailureReason, null, bound.Detail);
-            return EmptyResult;
+            return Partial(ResearchFailureCategory.InvalidProviderResponse, "structured_extraction", bound.Detail);
         }
 
         _logger.LogInformation(
@@ -79,12 +81,17 @@ public sealed class GeminiTokenResearchProvider : ITokenResearchProvider
             bound.Value.Sources.Count,
             bound.Value.Claims.Count);
 
-        return bound.Value;
+        return new ResearchProviderResult(
+            ResearchExecutionStatus.Complete,
+            bound.Value,
+            null,
+            null,
+            null);
     }
 
     private void LogFailure(string mint, string stage, GeminiFailureReason? reason, int? httpStatusCode, string? detail)
     {
-        _logger.LogInformation(
+        _logger.LogWarning(
             "Gemini provider call failed for mint {Mint}. Stage={Stage}, Model={Model}, Reason={Reason}, HttpStatus={HttpStatusCode}, Detail={Detail}.",
             mint,
             stage,
@@ -92,6 +99,44 @@ public sealed class GeminiTokenResearchProvider : ITokenResearchProvider
             reason,
             httpStatusCode,
             detail);
+    }
+
+    private static ResearchProviderResult Unavailable(ResearchFailureCategory category, string stage, string? detail)
+    {
+        return new ResearchProviderResult(
+            ResearchExecutionStatus.Unavailable,
+            EmptyResult,
+            category,
+            stage,
+            detail);
+    }
+
+    private static ResearchProviderResult Partial(ResearchFailureCategory category, string stage, string? detail)
+    {
+        return new ResearchProviderResult(
+            ResearchExecutionStatus.Partial,
+            EmptyResult,
+            category,
+            stage,
+            detail);
+    }
+
+    private static ResearchFailureCategory MapFailureCategory(GeminiFailureReason? reason)
+    {
+        return reason switch
+        {
+            GeminiFailureReason.Timeout => ResearchFailureCategory.Timeout,
+            GeminiFailureReason.RateLimited => ResearchFailureCategory.RateLimited,
+            GeminiFailureReason.ProviderUnavailable => ResearchFailureCategory.ProviderUnavailable,
+            GeminiFailureReason.ProviderRejected => ResearchFailureCategory.ProviderRejected,
+            GeminiFailureReason.MalformedResponse => ResearchFailureCategory.InvalidProviderResponse,
+            GeminiFailureReason.SchemaViolation => ResearchFailureCategory.InvalidProviderResponse,
+            GeminiFailureReason.GroundingUnavailable => ResearchFailureCategory.InvalidProviderResponse,
+            GeminiFailureReason.NoUsefulSources => ResearchFailureCategory.InvalidProviderResponse,
+            GeminiFailureReason.MissingApiKey => ResearchFailureCategory.MissingApiKey,
+            GeminiFailureReason.Disabled => ResearchFailureCategory.Disabled,
+            _ => ResearchFailureCategory.Unknown
+        };
     }
 
     private static GeminiClientResult<CandidateResearchResult> BindSourcesToGroundedCatalog(

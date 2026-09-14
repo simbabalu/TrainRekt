@@ -70,6 +70,7 @@ describe('AppTabs', () => {
       'progress:/explore',
       'settings:/settings',
       'wallet-safety:/wallet-safety',
+      'token-analysis:/(tabs)/token-analysis',
     ]);
   });
 
@@ -79,8 +80,11 @@ describe('AppTabs', () => {
       renderer = create(<AppTabs />);
     });
 
-    const hiddenWalletRoute = renderer.root.find((node) => String(node.type) === 'Pressable' && node.props.style?.display === 'none');
-    expect(hiddenWalletRoute.props.accessibilityElementsHidden).toBe(true);
-    expect(hiddenWalletRoute.props.importantForAccessibility).toBe('no-hide-descendants');
+    const hiddenRoutes = renderer.root.findAll((node) => String(node.type) === 'Pressable' && node.props.style?.display === 'none');
+    expect(hiddenRoutes).toHaveLength(2);
+    hiddenRoutes.forEach((route) => {
+      expect(route.props.accessibilityElementsHidden).toBe(true);
+      expect(route.props.importantForAccessibility).toBe('no-hide-descendants');
+    });
   });
 });

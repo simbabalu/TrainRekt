@@ -46,6 +46,8 @@ public sealed class ResearchingTokenInspectionServiceTests
         Assert.NotNull(result.Inspection);
         Assert.Equal(0, result.Inspection!.ReviewSignals.Count);
         Assert.Equal(inspection.ProtocolContext, result.Inspection.ProtocolContext);
+        Assert.NotNull(result.ResearchStatus);
+        Assert.Equal(TokenInspectionResearchAvailability.NotAttempted, result.ResearchStatus!.Availability);
     }
 
     [Fact]
@@ -70,7 +72,8 @@ public sealed class ResearchingTokenInspectionServiceTests
                 ClaimsAccepted: 1,
                 ClaimsRejected: 0,
                 Context: incomingContext,
-                UsedCache: false)));
+                UsedCache: false,
+                Availability: ResearchAvailability.Complete)));
 
         var service = CreateService(inner, orchestrator);
 
@@ -79,6 +82,8 @@ public sealed class ResearchingTokenInspectionServiceTests
         var enriched = Assert.IsType<TokenInspection>(result.Inspection);
         Assert.Same(incomingContext, enriched.ProtocolContext);
         Assert.Contains(enriched.ReviewSignals, signal => signal.Id == "DOCUMENTED_INFLATIONARY_ISSUANCE");
+        Assert.NotNull(result.ResearchStatus);
+        Assert.Equal(TokenInspectionResearchAvailability.Complete, result.ResearchStatus!.Availability);
     }
 
     [Fact]
@@ -118,7 +123,8 @@ public sealed class ResearchingTokenInspectionServiceTests
                 ClaimsAccepted: 1,
                 ClaimsRejected: 0,
                 Context: finalContext,
-                UsedCache: false)));
+                UsedCache: false,
+                Availability: ResearchAvailability.Complete)));
 
         var service = CreateService(inner, orchestrator);
 
@@ -145,13 +151,19 @@ public sealed class ResearchingTokenInspectionServiceTests
                 0,
                 0,
                 inspection.ProtocolContext,
-                false)));
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.ProviderUnavailable,
+                "provider",
+                "provider unavailable")));
 
         var service = CreateService(inner, orchestrator);
 
         var result = await service.InspectAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.Equal(inspection.ProtocolContext, result.Inspection!.ProtocolContext);
+        Assert.NotNull(result.ResearchStatus);
+        Assert.Equal(TokenInspectionResearchAvailability.Unavailable, result.ResearchStatus!.Availability);
     }
 
     [Theory]
@@ -169,25 +181,48 @@ public sealed class ResearchingTokenInspectionServiceTests
                 0,
                 0,
                 null,
-                false)));
+                false,
+                ResearchAvailability.Partial,
+                ResearchFailureCategory.InvalidProviderResponse,
+                "promotion",
+                "no usable claims")));
 
         var service = CreateService(inner, orchestrator);
 
         var result = await service.InspectAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.Equal(inspection.ProtocolContext, result.Inspection!.ProtocolContext);
+        Assert.NotNull(result.ResearchStatus);
+        Assert.Equal(TokenInspectionResearchAvailability.Partial, result.ResearchStatus!.Availability);
     }
 
     [Fact]
-    public async Task InspectAsync_ResearchCancellation_Propagates()
+    public async Task InspectAsync_ResearchCancellation_FromOrchestratorTimeout_DoesNotPropagate()
     {
         var inspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
         var inner = new StubInspectionService(TokenInspectionResult.Success(inspection));
         var orchestrator = new StubResearchOrchestrator(_ => throw new OperationCanceledException("cancelled"));
         var service = CreateService(inner, orchestrator);
 
+        var result = await service.InspectAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.NotNull(result.Inspection);
+        Assert.Equal(TokenInspectionResearchAvailability.Unavailable, result.ResearchStatus!.Availability);
+        Assert.Equal(TokenInspectionResearchFailureCategory.Timeout, result.ResearchStatus.FailureCategory);
+    }
+
+    [Fact]
+    public async Task InspectAsync_RequestCancellation_StillPropagates()
+    {
+        var inspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        var inner = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var orchestrator = new StubResearchOrchestrator(_ => throw new OperationCanceledException("cancelled"));
+        var service = CreateService(inner, orchestrator);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            service.InspectAsync(inspection.Identity.Mint, CancellationToken.None));
+            service.InspectAsync(inspection.Identity.Mint, cts.Token));
     }
 
     [Fact]
@@ -222,7 +257,8 @@ public sealed class ResearchingTokenInspectionServiceTests
                 0,
                 0,
                 cachedInspection.ProtocolContext,
-                true)));
+                true,
+                ResearchAvailability.Partial)));
 
         var service = CreateService(cachedService, orchestrator);
 

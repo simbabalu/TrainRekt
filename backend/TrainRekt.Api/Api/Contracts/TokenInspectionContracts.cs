@@ -15,9 +15,10 @@ public sealed record TokenInspectionResponse(
     PumpFunContext? PumpFunContext,
     ProtocolResearchContext? ProtocolContext,
     IReadOnlyList<TokenReviewSignal> ReviewSignals,
+    TokenInspectionResearchStatusResponse? ResearchStatus,
     DateTimeOffset InspectedAtUtc)
 {
-    public static TokenInspectionResponse FromDomain(TokenInspection inspection)
+    public static TokenInspectionResponse FromDomain(TokenInspection inspection, TokenInspectionResearchStatus? researchStatus)
     {
         return new TokenInspectionResponse(
             Identity: inspection.Identity,
@@ -29,7 +30,62 @@ public sealed record TokenInspectionResponse(
             PumpFunContext: inspection.PumpFunContext,
             ProtocolContext: inspection.ProtocolContext,
             ReviewSignals: inspection.ReviewSignals,
+            ResearchStatus: TokenInspectionResearchStatusResponse.FromDomain(researchStatus),
             InspectedAtUtc: inspection.InspectedAtUtc);
+    }
+}
+
+public sealed record TokenInspectionResearchStatusResponse(
+    string Availability,
+    string? FailureCategory,
+    string? FailureStage,
+    string? Message)
+{
+    public static TokenInspectionResearchStatusResponse? FromDomain(TokenInspectionResearchStatus? status)
+    {
+        if (status is null)
+        {
+            return null;
+        }
+
+        return new TokenInspectionResearchStatusResponse(
+            Availability: ToAvailabilityValue(status.Availability),
+            FailureCategory: ToFailureCategoryValue(status.FailureCategory),
+            FailureStage: status.FailureStage,
+            Message: status.Message);
+    }
+
+    private static string ToAvailabilityValue(TokenInspectionResearchAvailability availability)
+    {
+        return availability switch
+        {
+            TokenInspectionResearchAvailability.NotAttempted => "not-attempted",
+            TokenInspectionResearchAvailability.Complete => "complete",
+            TokenInspectionResearchAvailability.Partial => "partial",
+            _ => "unavailable"
+        };
+    }
+
+    private static string? ToFailureCategoryValue(TokenInspectionResearchFailureCategory? category)
+    {
+        if (category is null)
+        {
+            return null;
+        }
+
+        return category.Value switch
+        {
+            TokenInspectionResearchFailureCategory.Timeout => "timeout",
+            TokenInspectionResearchFailureCategory.Cancelled => "cancelled",
+            TokenInspectionResearchFailureCategory.ProviderUnavailable => "provider-unavailable",
+            TokenInspectionResearchFailureCategory.NetworkFailure => "network-failure",
+            TokenInspectionResearchFailureCategory.InvalidProviderResponse => "invalid-provider-response",
+            TokenInspectionResearchFailureCategory.RateLimited => "rate-limited",
+            TokenInspectionResearchFailureCategory.ProviderRejected => "provider-rejected",
+            TokenInspectionResearchFailureCategory.Disabled => "disabled",
+            TokenInspectionResearchFailureCategory.MissingApiKey => "missing-api-key",
+            _ => "unknown"
+        };
     }
 }
 

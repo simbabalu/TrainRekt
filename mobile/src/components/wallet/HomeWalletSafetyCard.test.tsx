@@ -422,4 +422,30 @@ describe('HomeWalletSafetyCard', () => {
 
     expect(connect).toHaveBeenCalledTimes(1);
   });
+
+  it('exposes ANALYZE TOKEN entry and routes to token analysis', () => {
+    useWalletMock.mockReturnValue({
+      status: 'connected',
+      wallet: { address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9WqP1FfGS6db5CwPH' },
+      connect: vi.fn(),
+    });
+    useWalletSafetyInspectionMock.mockReturnValue({
+      address: '7xKsKjA24sPuPqYxWwBfQ9cj2k9WqP1FfGS6db5CwPH',
+      inspection: null,
+      refresh: vi.fn(),
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<HomeWalletSafetyCard />);
+    });
+
+    const buttons = renderer.root.findAll((node) => String(node.type) === 'Pressable');
+    const analyzeButton = buttons[1];
+    act(() => {
+      analyzeButton.props.onPress();
+    });
+
+    expect(pushMock).toHaveBeenCalledWith('/(tabs)/token-analysis');
+  });
 });

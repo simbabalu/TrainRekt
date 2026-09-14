@@ -4,7 +4,7 @@ namespace TrainRekt.Api.Application.Research;
 
 public interface ITokenResearchProvider
 {
-    Task<CandidateResearchResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken);
+    Task<ResearchProviderResult> ResearchAsync(ResearchRequest request, CancellationToken cancellationToken);
 }
 
 public interface IResearchTrustAssessor

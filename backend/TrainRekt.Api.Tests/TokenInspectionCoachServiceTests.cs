@@ -146,6 +146,19 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
+    public async Task GenerateAsync_CallerCancellationToken_PropagatesAndIsNotConverted()
+    {
+        var inspection = ResearchTestData.CreateInspection();
+        var coach = new StubCoach { RespectCallerCancellation = true };
+        var service = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspection)), new StubProvenanceService(), coach, new StubCoachSnapshotRepository());
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.GenerateAsync(inspection.Identity.Mint, cts.Token));
+    }
+
+    [Fact]
     public async Task GenerateAsync_DoesNotMutateInspectionFactsOrProtocolContext()
     {
         var protocolContext = new Domain.Models.ProtocolResearchContext(
@@ -380,6 +393,8 @@ public sealed class TokenInspectionCoachServiceTests
 
         public bool ThrowCancellation { get; set; }
 
+        public bool RespectCallerCancellation { get; set; }
+
         public AiSafetyCoachModelResult NextResult { get; set; } = new(
             false,
             null,
@@ -388,6 +403,11 @@ public sealed class TokenInspectionCoachServiceTests
 
         public Task<AiSafetyCoachModelResult> GenerateAsync(AiSafetyCoachInput input, CancellationToken cancellationToken)
         {
+            if (RespectCallerCancellation)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             if (ThrowCancellation)
             {
                 throw new OperationCanceledException("cancelled");
