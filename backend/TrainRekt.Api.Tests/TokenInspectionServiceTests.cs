@@ -369,6 +369,41 @@ public sealed class TokenInspectionServiceTests
         Assert.Contains(result.Inspection.ReviewSignals, signal => signal.Id == "MINT_AUTHORITY_STATE_MISMATCH_WITH_DOCUMENTED_ISSUANCE");
     }
 
+    [Fact]
+    public async Task InspectAsync_ExecutesLargestAccountAndMetadataStagesConcurrently()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var mint = "So11111111111111111111111111111111111111112";
+
+        var mintData = BuildMintData(
+            supply: 1_000_000,
+            decimals: 6,
+            mintAuthorityOption: 0,
+            freezeAuthorityOption: 0);
+
+        fakeClient.Enqueue("getAccountInfo", $"{{\"jsonrpc\":\"2.0\",\"result\":{{\"value\":{{\"owner\":\"{SolanaTokenConstants.SplTokenProgramId}\",\"data\":[\"{Convert.ToBase64String(mintData)}\",\"base64\"]}}}}}}");
+
+        var largestStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var metadataStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var largest = new CoordinatedLargestTokenAccountAnalysisService(largestStarted, release);
+        var metadata = new CoordinatedTokenMetadataResolver(metadataStarted, release);
+
+        var service = new TokenInspectionService(fakeClient, metadata, largest);
+
+        var inspectTask = service.InspectAsync(mint, CancellationToken.None);
+
+        await Task.WhenAll(largestStarted.Task, metadataStarted.Task);
+        Assert.False(inspectTask.IsCompleted);
+
+        release.SetResult(true);
+
+        var result = await inspectTask;
+        Assert.Null(result.Error);
+        Assert.NotNull(result.Inspection);
+    }
+
     private static byte[] BuildMintData(ulong supply, byte decimals, uint mintAuthorityOption, uint freezeAuthorityOption)
     {
         var data = new byte[SolanaTokenConstants.MintAccountBaseLengthBytes];
@@ -504,5 +539,79 @@ public sealed class TokenInspectionServiceTests
         fullDiscriminator.AsSpan(0, 8).CopyTo(data.AsSpan(0, 8));
         data[48] = complete ? (byte)1 : (byte)0;
         return data;
+    }
+
+    private sealed class CoordinatedLargestTokenAccountAnalysisService : ILargestTokenAccountAnalysisService
+    {
+        private readonly TaskCompletionSource<bool> _started;
+        private readonly TaskCompletionSource<bool> _release;
+
+        public CoordinatedLargestTokenAccountAnalysisService(
+            TaskCompletionSource<bool> started,
+            TaskCompletionSource<bool> release)
+        {
+            _started = started;
+            _release = release;
+        }
+
+        public async Task<LargestTokenAccountsAnalysis?> AnalyzeAsync(
+            string mint,
+            string mintProgramId,
+            ulong mintSupply,
+            CancellationToken cancellationToken)
+        {
+            _started.TrySetResult(true);
+            await _release.Task.WaitAsync(cancellationToken);
+
+            return new LargestTokenAccountsAnalysis(
+                LargestAccountBalances: new[] { mintSupply },
+                LargestTokenAccounts: new[]
+                {
+                    new AnalyzedTokenAccount(
+                        Address: "Largest111",
+                        Authority: null,
+                        Mint: mint,
+                        TokenProgram: mintProgramId,
+                        RawAmount: mintSupply.ToString(),
+                        Percentage: 100m,
+                        Classification: new TokenAccountClassification(
+                            Classification: TokenAccountClassificationConstants.Unknown,
+                            Protocol: null,
+                            Confidence: TokenAccountClassificationConstants.UnknownConfidence,
+                            Evidence: Array.Empty<TokenAccountClassificationEvidence>()))
+                },
+                PumpFunContext: null,
+                UnclassifiedTokenAccountConcentration: new UnclassifiedTokenAccountConcentration(
+                    ClassifiedProtocolPercentage: 0m,
+                    UnknownPercentageWithinReportedLargestAccounts: 100m,
+                    LargestUnknownTokenAccountPercentage: 100m,
+                    Top5UnknownTokenAccountsPercentage: 100m,
+                    SemanticsNote: "test"));
+        }
+    }
+
+    private sealed class CoordinatedTokenMetadataResolver : ITokenMetadataResolver
+    {
+        private readonly TaskCompletionSource<bool> _started;
+        private readonly TaskCompletionSource<bool> _release;
+
+        public CoordinatedTokenMetadataResolver(
+            TaskCompletionSource<bool> started,
+            TaskCompletionSource<bool> release)
+        {
+            _started = started;
+            _release = release;
+        }
+
+        public async Task<TokenMetadataResolution> ResolveAsync(
+            string mint,
+            string programId,
+            byte[] mintAccountData,
+            CancellationToken cancellationToken)
+        {
+            _started.TrySetResult(true);
+            await _release.Task.WaitAsync(cancellationToken);
+            return new TokenMetadataResolution("Token", "TOK", null, true);
+        }
     }
 }

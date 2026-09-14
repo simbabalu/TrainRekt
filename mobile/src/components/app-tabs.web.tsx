@@ -3,7 +3,7 @@ import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { BottomTabInset, Colors, Spacing, Typography } from '@/constants/theme';
 import { AppIcon, type AppIconName } from '@/components/AppIcon';
 
 const tabIcons: Record<string, AppIconName> = {
@@ -17,4 +17,4 @@ export default function AppTabs() { return <Tabs><TabSlot style={styles.tabSlot}
 function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) { const label = String(children); return <Pressable {...props} accessibilityLabel={label} style={[styles.tab, isFocused && styles.focused]}><AppIcon accessibilityLabel={`${label} tab`} name={tabIcons[label]} size={20} tintColor={isFocused ? Colors.accent : Colors.mutedText} /><Text style={[styles.tabLabel, isFocused && styles.focusedLabel]}>{children}</Text></Pressable>; }
 function CustomTabList(props: TabListProps) { const insets = useSafeAreaInsets(); return <View {...props} style={[styles.tabList, { paddingBottom: Math.max(insets.bottom, Spacing.xl) }]}>{props.children}</View>; }
 
-const styles = StyleSheet.create({ tabSlot: { height: '100%', paddingBottom: 80 }, tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 80, paddingHorizontal: 0, paddingTop: 0, position: 'absolute', right: 0 }, tab: { alignItems: 'center', flex: 1, minHeight: 64, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.sm }, hiddenTab: { display: 'none' }, focused: { backgroundColor: Colors.secondaryCard }, tabLabel: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' }, focusedLabel: { color: Colors.text } });
+const styles = StyleSheet.create({ tabSlot: { height: '100%', paddingBottom: BottomTabInset }, tabList: { backgroundColor: Colors.card, borderColor: Colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 80, paddingHorizontal: 0, paddingTop: 0, position: 'absolute', right: 0 }, tab: { alignItems: 'center', flex: 1, minHeight: 64, justifyContent: 'center', paddingHorizontal: Spacing.xs, paddingVertical: Spacing.sm }, hiddenTab: { display: 'none' }, focused: { backgroundColor: Colors.secondaryCard }, tabLabel: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' }, focusedLabel: { color: Colors.text } });

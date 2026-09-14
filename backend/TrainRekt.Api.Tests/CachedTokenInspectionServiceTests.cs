@@ -110,6 +110,7 @@ public sealed class CachedTokenInspectionServiceTests
         Assert.Equal(1, deterministic.CallCount);
         Assert.Single(tokenRepository.Upserts);
         Assert.Single(snapshotRepository.InsertedSnapshots);
+        Assert.Equal(0, snapshotRepository.GetLatestByMintCallCount);
     }
 
     [Fact]
@@ -406,6 +407,8 @@ public sealed class CachedTokenInspectionServiceTests
 
         public bool ThrowOnWrite { get; set; }
 
+        public int GetLatestByMintCallCount { get; private set; }
+
         public List<CachedTokenInspectionSnapshot> Snapshots { get; } = new();
 
         public List<CachedTokenInspectionSnapshot> InsertedSnapshots { get; } = new();
@@ -433,6 +436,8 @@ public sealed class CachedTokenInspectionServiceTests
 
         public Task<CachedTokenInspectionSnapshot?> GetLatestByMintAsync(string mint, CancellationToken cancellationToken)
         {
+            GetLatestByMintCallCount += 1;
+
             if (ThrowOnRead)
             {
                 throw new InvalidOperationException("mongo unavailable");

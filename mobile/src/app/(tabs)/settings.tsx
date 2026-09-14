@@ -154,7 +154,7 @@ function SectionHeader({
 
 const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
-  sectionSubtitle: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.half },
+  sectionSubtitle: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', gap: Spacing.md },
   sectionHeaderCopy: { flex: 1 },
   segmented: { backgroundColor: Colors.secondaryCard, borderRadius: Radius.md, flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.lg, padding: Spacing.xs },
@@ -164,10 +164,10 @@ const styles = StyleSheet.create({
   selectedLabel: { color: Colors.text },
   walletIdentityCard: { backgroundColor: Colors.secondaryCard, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md },
   walletRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.md },
-  walletMainContent: { flex: 1, gap: Spacing.half },
+  walletMainContent: { flex: 1, gap: Spacing.xs },
   walletEyebrow: { color: Colors.secondaryText, fontSize: Typography.label, fontWeight: '900', letterSpacing: 1.1 },
   walletIdentityPrimary: { color: Colors.text, fontSize: Typography.body, fontWeight: '800' },
-  walletAddress: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: 1 },
+  walletAddress: { color: Colors.secondaryText, fontSize: Typography.small, marginTop: Spacing.xs },
   walletStatusRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
   walletStatusDot: { borderRadius: Radius.pill, height: 8, width: 8 },
   walletStatusDotConnected: { backgroundColor: Colors.positive },

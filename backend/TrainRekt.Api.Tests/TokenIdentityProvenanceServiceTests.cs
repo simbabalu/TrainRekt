@@ -514,6 +514,49 @@ public sealed class TokenIdentityProvenanceServiceTests
         Assert.NotNull(result.Provenance!.IdentityClassification);
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_ExecutesChronologyAndTrustedIdentityStagesConcurrently()
+    {
+        var inspection = CreateInspection("Mint111", "Research Token", "RCH");
+        var inspectionService = new StubDeterministicInspectionService(TokenInspectionResult.Success(inspection));
+        var repository = new StubObservationRepository
+        {
+            QueryResult = new TokenIdentityObservationQueryResult(0, Array.Empty<TokenIdentityObservation>())
+        };
+
+        var chronologyStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chronologyRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var trustedStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var trustedRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var chronology = new StubChronologyService
+        {
+            StartedSignal = chronologyStarted,
+            ReleaseSignal = chronologyRelease,
+        };
+
+        var trusted = new StubTrustedIdentityProvenanceService
+        {
+            StartedSignal = trustedStarted,
+            ReleaseSignal = trustedRelease,
+        };
+
+        var service = CreateService(inspectionService, repository, chronology, trustedService: trusted);
+
+        var analyzeTask = service.AnalyzeAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        await Task.WhenAll(chronologyStarted.Task, trustedStarted.Task);
+        Assert.False(analyzeTask.IsCompleted);
+
+        chronologyRelease.SetResult(true);
+        trustedRelease.SetResult(true);
+
+        var result = await analyzeTask;
+        Assert.NotNull(result.Provenance);
+        Assert.Equal(1, chronology.CallCount);
+        Assert.Equal(1, trusted.CallCount);
+    }
+
     private static TokenInspection CreateInspection(string mint, string? name, string? symbol, ProtocolResearchContext? protocolContext = null)
     {
         var baseInspection = ResearchTestData.CreateInspection(protocolContext: protocolContext);
@@ -529,7 +572,7 @@ public sealed class TokenIdentityProvenanceServiceTests
     }
 
     private static TokenIdentityProvenanceService CreateService(
-        ITokenInspectionDeterministicService inspectionService,
+        ITokenInspectionCoreService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
         IOnChainChronologyService chronologyService,
         ITrustedIdentityProvenanceService? trustedService = null,
@@ -553,7 +596,7 @@ public sealed class TokenIdentityProvenanceServiceTests
             NullLogger<TokenIdentityProvenanceService>.Instance);
     }
 
-    private sealed class StubDeterministicInspectionService : ITokenInspectionDeterministicService
+    private sealed class StubDeterministicInspectionService : ITokenInspectionDeterministicService, ITokenInspectionCoreService
     {
         private readonly TokenInspectionResult _result;
 
@@ -570,6 +613,10 @@ public sealed class TokenIdentityProvenanceServiceTests
 
     private sealed class StubChronologyService : IOnChainChronologyService
     {
+        public TaskCompletionSource<bool>? StartedSignal { get; set; }
+
+        public TaskCompletionSource<bool>? ReleaseSignal { get; set; }
+
         public OnChainChronologyEvidence NextEvidence { get; set; } = new(
             EarliestObservedSignature: null,
             EarliestObservedSlot: null,
@@ -597,12 +644,25 @@ public sealed class TokenIdentityProvenanceServiceTests
         {
             CallCount += 1;
 
+            StartedSignal?.TrySetResult(true);
+
             if (ThrowUnexpected)
             {
                 throw new InvalidOperationException("chronology failed");
             }
 
+            if (ReleaseSignal is not null)
+            {
+                return WaitForReleaseThenReturnEvidenceAsync(cancellationToken);
+            }
+
             return Task.FromResult(NextEvidence);
+        }
+
+        private async Task<OnChainChronologyEvidence> WaitForReleaseThenReturnEvidenceAsync(CancellationToken cancellationToken)
+        {
+            await ReleaseSignal!.Task.WaitAsync(cancellationToken);
+            return NextEvidence;
         }
     }
 
@@ -659,6 +719,12 @@ public sealed class TokenIdentityProvenanceServiceTests
 
     private sealed class StubTrustedIdentityProvenanceService : ITrustedIdentityProvenanceService
     {
+        public int CallCount { get; private set; }
+
+        public TaskCompletionSource<bool>? StartedSignal { get; set; }
+
+        public TaskCompletionSource<bool>? ReleaseSignal { get; set; }
+
         public TrustedIdentityProvenance NextResult { get; set; } = new(
             Sources: Array.Empty<IdentitySourceEvidence>(),
             Evidence: Array.Empty<TokenIdentityProvenanceEvidence>(),
@@ -674,7 +740,21 @@ public sealed class TokenIdentityProvenanceServiceTests
             TrustedIdentityProvenanceRequest request,
             CancellationToken cancellationToken)
         {
+            CallCount += 1;
+            StartedSignal?.TrySetResult(true);
+
+            if (ReleaseSignal is not null)
+            {
+                return WaitForReleaseThenReturnResultAsync(cancellationToken);
+            }
+
             return Task.FromResult(NextResult);
+        }
+
+        private async Task<TrustedIdentityProvenance> WaitForReleaseThenReturnResultAsync(CancellationToken cancellationToken)
+        {
+            await ReleaseSignal!.Task.WaitAsync(cancellationToken);
+            return NextResult;
         }
     }
 

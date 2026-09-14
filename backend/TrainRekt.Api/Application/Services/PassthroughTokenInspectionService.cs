@@ -2,7 +2,7 @@ using TrainRekt.Api.Application.Abstractions;
 
 namespace TrainRekt.Api.Application.Services;
 
-public sealed class PassthroughTokenInspectionService : ITokenInspectionService
+public sealed class PassthroughTokenInspectionService : ITokenInspectionService, ITokenInspectionCoreService
 {
     private readonly ITokenInspectionDeterministicService _deterministicService;
 

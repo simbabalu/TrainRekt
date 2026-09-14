@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Abstractions;
@@ -10,7 +11,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     private const int ObservationVersion = 1;
     private const string EarliestObservedSemantics = "Among identities observed by TrainRekt, this mint was observed first for the matching normalized identity.";
 
-    private readonly ITokenInspectionDeterministicService _inspectionService;
+    private readonly ITokenInspectionCoreService _inspectionService;
     private readonly ITokenIdentityObservationRepository _observationRepository;
     private readonly IOnChainChronologyService _chronologyService;
     private readonly ITrustedIdentityProvenanceService _trustedIdentityProvenanceService;
@@ -22,7 +23,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
     private readonly ILogger<TokenIdentityProvenanceService> _logger;
 
     public TokenIdentityProvenanceService(
-        ITokenInspectionDeterministicService inspectionService,
+        ITokenInspectionCoreService inspectionService,
         ITokenIdentityObservationRepository observationRepository,
         IOnChainChronologyService chronologyService,
         ITrustedIdentityProvenanceService trustedIdentityProvenanceService,
@@ -65,6 +66,12 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
 
     public async Task<TokenIdentityProvenanceResult> AnalyzeFromInspectionAsync(TokenInspection inspection, CancellationToken cancellationToken)
     {
+        var totalStopwatch = Stopwatch.StartNew();
+        long observationMs = 0;
+        long chronologyMs = 0;
+        long trustedIdentityMs = 0;
+        long competitorChronologyMs = 0;
+
         var nowUtc = _timeProvider.GetUtcNow();
         var normalizedName = _normalizer.NormalizeName(inspection.Identity.Name);
         var normalizedSymbol = _normalizer.NormalizeSymbol(inspection.Identity.Symbol);
@@ -81,6 +88,7 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             ObservationVersion: ObservationVersion);
 
         TokenIdentityObservationQueryResult queryResult;
+        var observationStopwatch = Stopwatch.StartNew();
         try
         {
             await _observationRepository.UpsertAsync(observation, cancellationToken);
@@ -101,6 +109,10 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             return new TokenIdentityProvenanceResult(
                 new TokenInspectionError(TokenInspectionErrorCode.PersistenceUnavailable, "Identity provenance data is temporarily unavailable."),
                 null);
+        }
+        finally
+        {
+            observationMs = ElapsedMilliseconds(observationStopwatch);
         }
 
         var collisions = new List<TokenIdentityCollision>(queryResult.Observations.Count);
@@ -145,47 +157,13 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
         var conflictingEvidence = BuildConflictingEvidence(collisions);
         var evidence = BuildEvidence(observation, collisions, earliest, isTruncated);
 
-        OnChainChronologyEvidence chronology;
-        try
-        {
-            chronology = await _chronologyService.AnalyzeAsync(inspection.Identity.Mint, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(
-                exception,
-                "On-chain chronology analysis failed for mint {Mint}. Returning local observed provenance evidence.",
-                inspection.Identity.Mint);
-            chronology = CreateUnavailableChronology(nowUtc);
-        }
+        var chronologyTask = LoadChronologyAsync();
+        var trustedIdentityTask = LoadTrustedIdentityProvenanceAsync();
 
-        TrustedIdentityProvenance trustedIdentityProvenance;
-        try
-        {
-            trustedIdentityProvenance = await _trustedIdentityProvenanceService.AnalyzeAsync(
-                new TrustedIdentityProvenanceRequest(
-                    ScannedMint: inspection.Identity.Mint,
-                    ScannedMetadataUri: inspection.Identity.MetadataUri,
-                    Collisions: collisions,
-                    AnalyzedAtUtc: nowUtc),
-                cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(
-                exception,
-                "Trusted identity provenance analysis failed for mint {Mint}. Returning observed and chronology evidence.",
-                inspection.Identity.Mint);
-            trustedIdentityProvenance = CreateUnavailableTrustedIdentityProvenance(nowUtc);
-        }
+        await Task.WhenAll(chronologyTask, trustedIdentityTask);
+
+        var chronology = await chronologyTask;
+        var trustedIdentityProvenance = await trustedIdentityTask;
 
         var unknowns = new List<TokenIdentityProvenanceUnknown>
         {
@@ -206,12 +184,14 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
 
         var (resultType, confidence) = DetermineResult(observation, collisions, isTruncated, trustedIdentityProvenance);
 
+        var competitorChronologyStopwatch = Stopwatch.StartNew();
         var competingChronologies = await AnalyzeCompetingChronologiesAsync(
             observation,
             collisions,
             trustedIdentityProvenance,
             nowUtc,
             cancellationToken);
+        competitorChronologyMs = ElapsedMilliseconds(competitorChronologyStopwatch);
 
         var baseProvenance = new TokenIdentityProvenance(
             Result: resultType,
@@ -247,7 +227,76 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             IdentityClassification = identityClassification
         };
 
+        var totalMs = ElapsedMilliseconds(totalStopwatch);
+        _logger.LogInformation(
+            "Token identity provenance timing for mint {Mint}: totalMs={TotalMs} provenanceMs={ProvenanceMs} observationMs={ObservationMs} chronologyMs={ChronologyMs} trustedIdentityMs={TrustedIdentityMs} competitorChronologyMs={CompetitorChronologyMs} collisionsReturned={ReturnedCollisionCount} collisionsTotal={TotalCollisionCount}.",
+            inspection.Identity.Mint,
+            totalMs,
+            totalMs,
+            observationMs,
+            chronologyMs,
+            trustedIdentityMs,
+            competitorChronologyMs,
+            returnedCount,
+            totalCount);
+
         return new TokenIdentityProvenanceResult(null, provenance);
+
+        async Task<OnChainChronologyEvidence> LoadChronologyAsync()
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                return await _chronologyService.AnalyzeAsync(inspection.Identity.Mint, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "On-chain chronology analysis failed for mint {Mint}. Returning local observed provenance evidence.",
+                    inspection.Identity.Mint);
+                return CreateUnavailableChronology(nowUtc);
+            }
+            finally
+            {
+                chronologyMs = ElapsedMilliseconds(stopwatch);
+            }
+        }
+
+        async Task<TrustedIdentityProvenance> LoadTrustedIdentityProvenanceAsync()
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                return await _trustedIdentityProvenanceService.AnalyzeAsync(
+                    new TrustedIdentityProvenanceRequest(
+                        ScannedMint: inspection.Identity.Mint,
+                        ScannedMetadataUri: inspection.Identity.MetadataUri,
+                        Collisions: collisions,
+                        AnalyzedAtUtc: nowUtc),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Trusted identity provenance analysis failed for mint {Mint}. Returning observed and chronology evidence.",
+                    inspection.Identity.Mint);
+                return CreateUnavailableTrustedIdentityProvenance(nowUtc);
+            }
+            finally
+            {
+                trustedIdentityMs = ElapsedMilliseconds(stopwatch);
+            }
+        }
     }
 
     private async Task<IReadOnlyList<CompetingMintChronologyEvidence>> AnalyzeCompetingChronologiesAsync(
@@ -288,33 +337,44 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
             .Take(_classificationOptions.MaxClassificationCompetitors)
             .ToArray();
 
-        var chronologyResults = new List<CompetingMintChronologyEvidence>(selectedCompetitors.Length);
-        foreach (var competitorMint in selectedCompetitors)
+        var chronologyTasks = selectedCompetitors
+            .Select((competitorMint, index) => AnalyzeCompetingChronologyAsync(competitorMint, index, analyzedAtUtc, cancellationToken))
+            .ToArray();
+
+        var chronologyResults = await Task.WhenAll(chronologyTasks);
+        return chronologyResults
+            .OrderBy(item => item.Index)
+            .Select(item => item.Evidence)
+            .ToArray();
+    }
+
+    private async Task<(int Index, CompetingMintChronologyEvidence Evidence)> AnalyzeCompetingChronologyAsync(
+        string competitorMint,
+        int index,
+        DateTimeOffset analyzedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        OnChainChronologyEvidence chronology;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            OnChainChronologyEvidence chronology;
-            try
-            {
-                chronology = await _chronologyService.AnalyzeAsync(competitorMint, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Competing mint chronology analysis failed for mint {Mint}. Classification will degrade conservatively.",
-                    competitorMint);
-                chronology = CreateUnavailableChronology(analyzedAtUtc);
-            }
-
-            chronologyResults.Add(new CompetingMintChronologyEvidence(competitorMint, chronology));
+            chronology = await _chronologyService.AnalyzeAsync(competitorMint, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Competing mint chronology analysis failed for mint {Mint}. Classification will degrade conservatively.",
+                competitorMint);
+            chronology = CreateUnavailableChronology(analyzedAtUtc);
         }
 
-        return chronologyResults;
+        return (index, new CompetingMintChronologyEvidence(competitorMint, chronology));
     }
 
     private static IReadOnlyList<string> SelectClassificationCompetitors(
@@ -448,6 +508,11 @@ public sealed class TokenIdentityProvenanceService : ITokenIdentityProvenanceSer
                 TrustedIdentityProvenanceUnknown.SourceFetchPartial
             },
             AnalyzedAtUtc: analyzedAtUtc);
+    }
+
+    private static long ElapsedMilliseconds(Stopwatch stopwatch)
+    {
+        return (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
     }
 
     private static (TokenIdentityProvenanceResultType Result, TokenIdentityProvenanceConfidence Confidence) DetermineResult(

@@ -115,6 +115,7 @@ public enum AiSafetyCoachFailureReason
     RateLimited,
     ProviderUnavailable,
     ProviderRejected,
+    OutputTruncated,
     MalformedResponse,
     SchemaViolation,
     ValidationFailed,

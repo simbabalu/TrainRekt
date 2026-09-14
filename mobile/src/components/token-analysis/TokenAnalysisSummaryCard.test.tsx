@@ -21,7 +21,7 @@ vi.mock('@/components/PrimaryButton', () => ({
 }));
 
 vi.mock('@/components/token-analysis/TokenAnalysisSignalRow', () => ({
-  TokenAnalysisSignalRow: ({ signal }: { signal: { label: string; value: string } }) => React.createElement('View', null, `${signal.label}:${signal.value}`),
+  TokenAnalysisSignalRow: ({ signal }: { signal: { label: string; value: string } }) => React.createElement('Text', null, `${signal.label}:${signal.value}`),
 }));
 
 function report(): TokenAnalysisReport {
@@ -83,6 +83,28 @@ function textContent(renderer: ReturnType<typeof create>): string {
 }
 
 describe('TokenAnalysisSummaryCard keys', () => {
+  it('does not render identity in key findings and keeps core technical findings', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(
+        <TokenAnalysisSummaryCard
+          report={report()}
+          onUnderstandSignals={vi.fn()}
+          onToggleFullAnalysis={vi.fn()}
+          isFullAnalysisVisible={false}
+        />,
+      );
+    });
+
+    const content = textContent(renderer);
+    expect(content).not.toContain('IDENTITY:');
+    expect(content).toContain('MINT AUTHORITY:Active');
+    expect(content).toContain('FREEZE AUTHORITY:Revoked');
+    expect(content).toContain('TOKEN PROGRAM:SPL Token');
+    expect(content).toContain('LARGEST TOKEN ACCOUNT:46.17%');
+  });
+
   it('renders repeated findings without duplicate React key warnings', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 

@@ -31,6 +31,18 @@ interface TokenAnalysisController {
 
 const BASE58_MINT_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
 
+function nowMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+
+  return Date.now();
+}
+
+function elapsedMs(startedAtMs: number): number {
+  return Math.max(0, Math.round(nowMs() - startedAtMs));
+}
+
 function normalizeMint(value: string): string {
   return value.trim();
 }
@@ -100,14 +112,22 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     setReport(null);
     setDeterministicStatus('validating');
 
+    const totalStartedAtMs = nowMs();
+    let inspectionMs = 0;
+    let provenanceMs = 0;
+
     try {
       setDeterministicStatus('loadingInspection');
+      const inspectionStartedAtMs = nowMs();
       const inspection = await service.inspectToken({ mint: normalizedMint });
+      inspectionMs = elapsedMs(inspectionStartedAtMs);
       if (requestId !== requestIdRef.current) return;
 
       setDeterministicStatus('loadingProvenance');
+      const provenanceStartedAtMs = nowMs();
       try {
         const provenance = await service.getProvenance(inspection.identity.mint);
+        provenanceMs = elapsedMs(provenanceStartedAtMs);
         if (requestId !== requestIdRef.current) return;
         setReport({
           mint: inspection.identity.mint,
@@ -116,6 +136,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
           provenanceWarning: null,
         });
       } catch (provenanceError) {
+        provenanceMs = elapsedMs(provenanceStartedAtMs);
         if (requestId !== requestIdRef.current) return;
         setReport({
           mint: inspection.identity.mint,
@@ -129,11 +150,23 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
       }
 
       setDeterministicStatus('ready');
+      console.info('[TrainRekt][TokenAnalysis][MobileFlowTiming] analyze-complete', {
+        mint: normalizedMint,
+        totalMs: elapsedMs(totalStartedAtMs),
+        deterministicInspectionMs: inspectionMs,
+        provenanceMs,
+      });
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
       setReport(null);
       setDeterministicError(getErrorMessage(error, 'Token analysis failed. Please try again.'));
       setDeterministicStatus('error');
+      console.info('[TrainRekt][TokenAnalysis][MobileFlowTiming] analyze-failed', {
+        mint: normalizedMint,
+        totalMs: elapsedMs(totalStartedAtMs),
+        deterministicInspectionMs: inspectionMs,
+        provenanceMs,
+      });
     }
   }, [mintInput, service]);
 

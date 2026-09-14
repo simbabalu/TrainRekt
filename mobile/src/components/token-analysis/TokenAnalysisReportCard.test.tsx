@@ -45,6 +45,17 @@ function textContent(renderer: ReturnType<typeof create>): string {
   return renderer.root.findAllByType(Text).map((node) => node.props.children).flat(Infinity).filter((value): value is string => typeof value === 'string').join(' ');
 }
 
+function pressFullAnalysisToggle(renderer: ReturnType<typeof create>) {
+  const fullAnalysisToggle = renderer.root
+    .findAllByType(PrimaryButton)
+    .find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+
+  expect(fullAnalysisToggle).toBeDefined();
+  act(() => {
+    fullAnalysisToggle!.props.onPress();
+  });
+}
+
 function renderReport(
   onExplainWithAi = vi.fn(),
 ): {
@@ -117,11 +128,14 @@ function renderExpandedReportForAiState(options: {
 }
 
 describe('TokenAnalysisReportCard', () => {
-  it('shows the summary first and keeps the full analysis collapsed by default', () => {
+  it('shows AI safety coach first and keeps the full analysis collapsed by default', () => {
     const { renderer } = renderReport();
     const content = textContent(renderer);
 
+    expect(content.indexOf('AI SAFETY COACH')).toBeGreaterThanOrEqual(0);
     expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeGreaterThanOrEqual(0);
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
     expect(content).toContain('VIEW FULL ANALYSIS');
     expect(content).not.toContain('TOKEN IDENTITY');
   });
@@ -130,9 +144,7 @@ describe('TokenAnalysisReportCard', () => {
     const onExplainWithAi = vi.fn();
     const { renderer, onStartTraining } = renderReport(onExplainWithAi);
 
-    act(() => {
-      renderer.root.findAllByType(PrimaryButton)[1].props.onPress();
-    });
+    pressFullAnalysisToggle(renderer);
 
     expect(onExplainWithAi).not.toHaveBeenCalled();
     expect(onStartTraining).not.toHaveBeenCalled();
@@ -147,7 +159,8 @@ describe('TokenAnalysisReportCard', () => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 130 } } });
     });
 
-    act(() => { buttons()[1].props.onPress(); });
+    act(() => { const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress(); });
     act(() => {
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 620 } } });
     });
@@ -159,7 +172,8 @@ describe('TokenAnalysisReportCard', () => {
     expect(textContent(renderer)).toContain('TRUSTED IDENTITY PROVENANCE');
     expect(textContent(renderer)).toContain('HIDE FULL ANALYSIS');
 
-    act(() => { buttons()[1].props.onPress(); });
+    act(() => { const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress(); });
     expect(onRequestScrollTo).toHaveBeenCalledWith(130);
     expect(textContent(renderer)).not.toContain('TOKEN IDENTITY');
     expect(textContent(renderer)).toContain('VIEW FULL ANALYSIS');
@@ -168,7 +182,14 @@ describe('TokenAnalysisReportCard', () => {
   it('routes understand-the-signals into token-analysis-derived training using existing train callback', () => {
     const { renderer, onExplainWithAi, onStartTraining } = renderReport();
 
-    act(() => { renderer.root.findAllByType(PrimaryButton)[0].props.onPress(); });
+    const understandSignalsButton = renderer.root
+      .findAllByType(PrimaryButton)
+      .find((button) => String(button.props.children).includes('UNDERSTAND THE SIGNALS'));
+
+    expect(understandSignalsButton).toBeDefined();
+    act(() => {
+      understandSignalsButton!.props.onPress();
+    });
 
     expect(onStartTraining).toHaveBeenCalledTimes(1);
     expect(onExplainWithAi).not.toHaveBeenCalled();
@@ -178,7 +199,8 @@ describe('TokenAnalysisReportCard', () => {
     const { renderer } = renderReport();
     const buttons = () => renderer.root.findAllByType(PrimaryButton);
 
-    act(() => { buttons()[1].props.onPress(); });
+    act(() => { const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress(); });
     expect(textContent(renderer)).toContain('HIDE FULL ANALYSIS');
 
     act(() => {
@@ -260,7 +282,8 @@ describe('TokenAnalysisReportCard', () => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 120 } } });
     });
     act(() => {
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
     });
     act(() => {
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 560 } } });
@@ -278,7 +301,8 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('Authority/control mechanism has not been independently verified.');
     expect(content).toContain('TOKEN ACCOUNT CONCENTRATION');
     expect(content).toContain('Token-account concentration.');
-    expect(content).toContain('OPTIONAL AI SAFETY COACH');
+    expect(content).toContain('AI SAFETY COACH');
+    expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
     expect(content).toContain('does not determine token safety');
     expect(content).not.toContain('safe to buy');
   });
@@ -326,7 +350,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 150 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 520 } } });
     });
 
@@ -384,7 +409,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 100 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 500 } } });
     });
 
@@ -448,7 +474,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 90 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 410 } } });
     });
 
@@ -531,7 +558,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 85 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 470 } } });
     });
 
@@ -549,7 +577,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('IDENTITY PARTIALLY SUPPORTED');
   });
 
-  it('shows confirmed aggregate conclusion for multiple exact trusted mint matches with no conflicts', () => {
+  it('shows confirmed aggregate conclusion in full analysis for multiple exact trusted mint matches with no conflicts', () => {
     const confirmedReport: TokenAnalysisReport = {
       ...report(),
       provenance: {
@@ -601,13 +629,13 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
     });
 
     const content = textContent(renderer);
-    expect(content).toContain('IDENTITY');
-    expect(content).toContain('Trusted identity confirmed');
+    expect(content).not.toContain('Identity unverified');
     expect(content).not.toContain('Insufficient evidence');
     expect(content).toContain('TRUSTED IDENTITY CONFIRMED');
     expect(content).toContain('Multiple trusted sources reference this exact mint.');
@@ -618,7 +646,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('0');
   });
 
-  it('keeps summary and full-analysis identity conclusions aligned for partially supported state', () => {
+  it('keeps identity details out of summary and shows partially supported state in full analysis', () => {
     const partialReport: TokenAnalysisReport = {
       ...report(),
       provenance: {
@@ -659,14 +687,15 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     let content = textContent(renderer);
-    expect(content).toContain('Identity partially supported');
-    expect(content).toContain('One trusted source references this exact mint.');
+    expect(content).not.toContain('Identity partially supported');
+    expect(content).not.toContain('One trusted source references this exact mint.');
 
     const buttons = () => renderer.root.findAllByType(PrimaryButton);
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
     });
 
@@ -674,7 +703,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('IDENTITY PARTIALLY SUPPORTED');
   });
 
-  it('keeps summary and full-analysis identity conclusions aligned for unverified state', () => {
+  it('keeps identity details out of summary and shows unverified state in full analysis', () => {
     const unverifiedReport: TokenAnalysisReport = {
       ...report(),
       provenance: {
@@ -715,14 +744,15 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     let content = textContent(renderer);
-    expect(content).toContain('Identity unverified');
-    expect(content).toContain('No trusted source currently confirms this exact mint.');
+    expect(content).not.toContain('Identity unverified');
+    expect(content).not.toContain('No trusted source currently confirms this exact mint.');
 
     const buttons = () => renderer.root.findAllByType(PrimaryButton);
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
     });
 
@@ -730,7 +760,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('IDENTITY UNVERIFIED');
   });
 
-  it('keeps summary and full-analysis identity conclusions aligned for conflicting state', () => {
+  it('keeps identity details out of summary and shows conflicting state in full analysis', () => {
     const conflictReport: TokenAnalysisReport = {
       ...report(),
       provenance: {
@@ -779,14 +809,15 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     let content = textContent(renderer);
-    expect(content).toContain('Identity conflict detected');
-    expect(content).toContain('Trusted evidence contains conflicting mint references.');
+    expect(content).not.toContain('Identity conflict detected');
+    expect(content).not.toContain('Trusted evidence contains conflicting mint references.');
 
     const buttons = () => renderer.root.findAllByType(PrimaryButton);
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
     });
 
@@ -794,7 +825,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('IDENTITY EVIDENCE CONFLICTING');
   });
 
-  it('uses conservative fallback when provenance data is missing and never shows confirmed in summary or full analysis', () => {
+  it('uses conservative fallback when provenance data is missing and keeps identity details in full analysis only', () => {
     const base = report();
     const noProvenanceReport: TokenAnalysisReport = {
       ...base,
@@ -818,14 +849,15 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     let content = textContent(renderer);
-    expect(content).toContain('Identity unverified');
+    expect(content).not.toContain('Identity unverified');
     expect(content).not.toContain('Trusted identity confirmed');
 
     const buttons = () => renderer.root.findAllByType(PrimaryButton);
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
     });
 
@@ -894,7 +926,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 90 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 470 } } });
     });
 
@@ -969,7 +1002,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 92 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 475 } } });
     });
 
@@ -1015,7 +1049,8 @@ describe('TokenAnalysisReportCard', () => {
     const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
     act(() => {
       layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 105 } } });
-      buttons()[1].props.onPress();
+      const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
+      fullAnalysisToggle?.props.onPress();
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 500 } } });
     });
 
@@ -1030,7 +1065,9 @@ describe('TokenAnalysisReportCard', () => {
     const { renderer } = renderExpandedReportForAiState({ aiStatus: 'idle', onExplainWithAi });
 
     const content = textContent(renderer);
-    expect(content).toContain('OPTIONAL AI SAFETY COACH');
+    expect(content).toContain('AI SAFETY COACH');
+    expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
     expect(content).toContain('EXPLAIN WITH AI');
     expect(content).not.toContain('TOKEN IDENTITY');
   });
@@ -1044,7 +1081,10 @@ describe('TokenAnalysisReportCard', () => {
 
     expect(loadingButton).toBeDefined();
     expect(loadingButton!.props.disabled).toBe(true);
-    expect(textContent(renderer)).not.toContain('TOKEN IDENTITY');
+
+    const content = textContent(renderer);
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content).not.toContain('TOKEN IDENTITY');
   });
 
   it('shows non-blocking unavailable AI state with try again and keeps deterministic facts visible', () => {
@@ -1058,6 +1098,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('AI explanation is currently unavailable.');
     expect(content).not.toContain('TOKEN IDENTITY');
     expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
     expect(content).toContain('Mint1111111111111111111111111111111111');
   });
 
@@ -1086,6 +1127,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).not.toContain('TOKEN IDENTITY');
     expect(content).toContain('VIEW FULL ANALYSIS');
     expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
     expect(content).not.toContain('Recommended training:');
 
     const practiceButton = renderer.root
@@ -1131,8 +1173,19 @@ describe('TokenAnalysisReportCard', () => {
         coach: entry.coach,
       });
       const content = textContent(renderer);
+      expect(content).toContain('AI SAFETY COACH');
+      expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
+      expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
       expect(content).toContain('TOKEN ANALYSIS SUMMARY');
       expect(content).toContain('Mint1111111111111111111111111111111111');
     });
+  });
+
+  it('renders only one AI SAFETY COACH header', () => {
+    const { renderer } = renderReport();
+    const content = textContent(renderer);
+    const matches = content.match(/AI SAFETY COACH/g) ?? [];
+
+    expect(matches).toHaveLength(1);
   });
 });

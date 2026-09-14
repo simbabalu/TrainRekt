@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: Spacing.half,
+    gap: Spacing.xs,
   },
   title: {
     color: Colors.text,

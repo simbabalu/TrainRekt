@@ -361,6 +361,13 @@ public sealed class ResearchingTokenInspectionServiceTests
             CallCount++;
             return _handler(inspection);
         }
+
+        public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CallCount++;
+            return _handler(inspection);
+        }
     }
 
     private sealed class CountingDeterministicInspector : ITokenInspectionDeterministicService

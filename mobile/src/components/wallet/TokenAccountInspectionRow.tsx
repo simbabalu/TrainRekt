@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: Spacing.half,
+    gap: Spacing.xs,
   },
   tokenTitle: {
     color: Colors.text,

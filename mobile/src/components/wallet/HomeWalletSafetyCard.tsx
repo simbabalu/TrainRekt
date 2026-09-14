@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   metricBlock: {
-    gap: Spacing.half,
+    gap: Spacing.xs,
   },
   reviewCount: {
     color: Colors.warning,

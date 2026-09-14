@@ -13,6 +13,37 @@ interface ProblemDetailsLike {
   status?: unknown;
 }
 
+function nowMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+
+  return Date.now();
+}
+
+function elapsedMs(startedAtMs: number): number {
+  return Math.max(0, Math.round(nowMs() - startedAtMs));
+}
+
+function tryExtractMintFromBody(body: unknown): string | null {
+  if (!isObjectRecord(body)) return null;
+  const mint = body.mint;
+  if (typeof mint !== 'string') return null;
+  const trimmed = mint.trim();
+  return trimmed || null;
+}
+
+function safeMintFromPath(path: string): string | null {
+  const match = /^\/api\/token-inspections\/([^/]+)\/(?:provenance|coach)$/u.exec(path);
+  if (!match) return null;
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    return decoded.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface TokenInspectionApiService {
   inspectToken: (request: TokenInspectionApiRequest, signal?: AbortSignal) => Promise<TokenInspectionResponse>;
   getProvenance: (mint: string, signal?: AbortSignal) => Promise<TokenIdentityProvenanceResponse>;
@@ -92,6 +123,14 @@ async function readResponseBody(response: Response): Promise<unknown> {
 }
 
 async function postJson<T>(baseUrl: string, path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const startedAtMs = nowMs();
+  const mint = tryExtractMintFromBody(body) ?? safeMintFromPath(path);
+
+  console.info('[TrainRekt][TokenAnalysis][MobileApiTiming] request-start', {
+    path,
+    mint,
+  });
+
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -103,6 +142,13 @@ async function postJson<T>(baseUrl: string, path: string, body: unknown, signal?
       signal,
     });
   } catch (error) {
+    console.info('[TrainRekt][TokenAnalysis][MobileApiTiming] request-failed', {
+      path,
+      mint,
+      elapsedMs: elapsedMs(startedAtMs),
+      cancelled: error instanceof Error && error.name === 'AbortError',
+    });
+
     if (error instanceof Error && error.name === 'AbortError') {
       throw new TokenInspectionApiError('request-cancelled', 'Analysis request was cancelled.');
     }
@@ -112,8 +158,21 @@ async function postJson<T>(baseUrl: string, path: string, body: unknown, signal?
 
   const parsedBody = await readResponseBody(response);
   if (!response.ok) {
+    console.info('[TrainRekt][TokenAnalysis][MobileApiTiming] request-error-response', {
+      path,
+      mint,
+      elapsedMs: elapsedMs(startedAtMs),
+      status: response.status,
+    });
     throw mapHttpError(response.status, parsedBody);
   }
+
+  console.info('[TrainRekt][TokenAnalysis][MobileApiTiming] request-success', {
+    path,
+    mint,
+    elapsedMs: elapsedMs(startedAtMs),
+    status: response.status,
+  });
 
   return parseJson<T>(parsedBody, path);
 }

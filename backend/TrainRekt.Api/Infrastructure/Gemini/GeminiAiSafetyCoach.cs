@@ -11,6 +11,36 @@ namespace TrainRekt.Api.Infrastructure.Gemini;
 
 public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
 {
+    private enum JsonObjectExtractionResult
+    {
+        Success,
+        Empty,
+        NoJsonObject,
+        AmbiguousMultipleObjects,
+        UnbalancedBraces,
+        InvalidJson,
+        RootNotObject
+    }
+
+    private sealed record StructuredOutputExtractionDiagnostics(
+        int TextBlockCount,
+        int TotalTextLength,
+        int CandidateObjectCount,
+        bool FencedBlockDetected,
+        JsonObjectExtractionResult ExtractionResult,
+        string? WrapperType,
+        int OriginalLength,
+        int JsonLength,
+        string? JsonExceptionCategory,
+        string? JsonExceptionMessage);
+
+    private sealed record CoachResponseTerminationMetadata(
+        string? FinishReason,
+        string? FinishMessage,
+        int? PromptTokenCount,
+        int? CandidateTokenCount,
+        int? TotalTokenCount);
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private static readonly HashSet<string> AllowedTopics =
     [
@@ -75,13 +105,20 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
         }
 
         using var responseDocument = response.Value;
+        var terminationMetadata = ExtractTerminationMetadata(responseDocument.RootElement);
 
         var textBlocks = new List<string>();
         if (!TryExtractModelOutputText(responseDocument.RootElement, textBlocks))
         {
             _logger.LogWarning(
-                "Gemini coach response parsing failed: missing model_output text blocks for model {Model}.",
-                _geminiOptions.Model);
+                "Gemini coach response parsing failed: missing model_output text blocks for model {Model}. finishReason={FinishReason} finishMessage={FinishMessage} maxOutputTokens={MaxOutputTokens} promptTokenCount={PromptTokenCount} candidateTokenCount={CandidateTokenCount} totalTokenCount={TotalTokenCount}.",
+                _geminiOptions.Model,
+                terminationMetadata.FinishReason,
+                terminationMetadata.FinishMessage,
+                _coachOptions.MaxOutputTokens,
+                terminationMetadata.PromptTokenCount,
+                terminationMetadata.CandidateTokenCount,
+                terminationMetadata.TotalTokenCount);
             return new AiSafetyCoachModelResult(
                 false,
                 null,
@@ -90,19 +127,61 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
                 response.HttpStatusCode);
         }
 
-        if (!TryNormalizeStructuredOutput(textBlocks, out var normalized))
+        if (!TryNormalizeStructuredOutput(textBlocks, out var normalized, out var extractionDiagnostics))
         {
+            var failureReason = IsTokenLimitTermination(terminationMetadata.FinishReason)
+                ? AiSafetyCoachFailureReason.OutputTruncated
+                : AiSafetyCoachFailureReason.MalformedResponse;
+            var detail = failureReason == AiSafetyCoachFailureReason.OutputTruncated
+                ? "Coach response was truncated before valid JSON object completion."
+                : "Coach response did not contain valid JSON object output.";
+
             _logger.LogWarning(
-                "Gemini coach response parsing failed: output was not a valid JSON object for model {Model}. textBlockCount={TextBlockCount}.",
+                "Gemini coach response parsing failed: output was not a valid JSON object for model {Model}. finishReason={FinishReason} finishMessage={FinishMessage} textBlockCount={TextBlockCount} totalTextLength={TotalTextLength} candidateObjectCount={CandidateObjectCount} fencedBlockDetected={FencedBlockDetected} extractionResult={ExtractionResult} maxOutputTokens={MaxOutputTokens} promptTokenCount={PromptTokenCount} candidateTokenCount={CandidateTokenCount} totalTokenCount={TotalTokenCount} jsonExceptionCategory={JsonExceptionCategory} jsonExceptionMessage={JsonExceptionMessage} mappedFailureReason={MappedFailureReason}.",
                 _geminiOptions.Model,
-                textBlocks.Count);
+                terminationMetadata.FinishReason,
+                terminationMetadata.FinishMessage,
+                extractionDiagnostics.TextBlockCount,
+                extractionDiagnostics.TotalTextLength,
+                extractionDiagnostics.CandidateObjectCount,
+                extractionDiagnostics.FencedBlockDetected,
+                extractionDiagnostics.ExtractionResult,
+                _coachOptions.MaxOutputTokens,
+                terminationMetadata.PromptTokenCount,
+                terminationMetadata.CandidateTokenCount,
+                terminationMetadata.TotalTokenCount,
+                extractionDiagnostics.JsonExceptionCategory,
+                extractionDiagnostics.JsonExceptionMessage,
+                failureReason);
             return new AiSafetyCoachModelResult(
                 false,
                 null,
-                AiSafetyCoachFailureReason.MalformedResponse,
-                "Coach response did not contain valid JSON object output.",
+                failureReason,
+                detail,
                 response.HttpStatusCode);
         }
+
+        if (extractionDiagnostics.WrapperType is not null)
+        {
+            _logger.LogDebug(
+                "AI coach JSON wrapper normalized. wrapperType={WrapperType} originalLength={OriginalLength} jsonLength={JsonLength}.",
+                extractionDiagnostics.WrapperType,
+                extractionDiagnostics.OriginalLength,
+                extractionDiagnostics.JsonLength);
+        }
+
+        _logger.LogInformation(
+            "Gemini coach response metadata: finishReason={FinishReason} finishMessage={FinishMessage} textBlockCount={TextBlockCount} totalTextLength={TotalTextLength} candidateObjectCount={CandidateObjectCount} extractionResult={ExtractionResult} maxOutputTokens={MaxOutputTokens} promptTokenCount={PromptTokenCount} candidateTokenCount={CandidateTokenCount} totalTokenCount={TotalTokenCount}.",
+            terminationMetadata.FinishReason,
+            terminationMetadata.FinishMessage,
+            extractionDiagnostics.TextBlockCount,
+            extractionDiagnostics.TotalTextLength,
+            extractionDiagnostics.CandidateObjectCount,
+            extractionDiagnostics.ExtractionResult,
+            _coachOptions.MaxOutputTokens,
+            terminationMetadata.PromptTokenCount,
+            terminationMetadata.CandidateTokenCount,
+            terminationMetadata.TotalTokenCount);
 
         if (!TryParseContent(normalized, out var content))
         {
@@ -266,70 +345,342 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
         return textBlocks.Count > 0;
     }
 
-    private static bool TryNormalizeStructuredOutput(IReadOnlyList<string> textBlocks, out string normalized)
+    private static CoachResponseTerminationMetadata ExtractTerminationMetadata(JsonElement root)
+    {
+        var finishReason = FindFirstString(root, new[] { "finishReason", "finish_reason" });
+        var finishMessage = FindFirstString(root, new[] { "finishMessage", "finish_message" });
+
+        if (root.TryGetProperty("steps", out var stepsElement) && stepsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var step in stepsElement.EnumerateArray())
+            {
+                if (finishReason is null)
+                {
+                    finishReason = FindFirstString(step, new[] { "finishReason", "finish_reason" });
+                }
+
+                if (finishMessage is null)
+                {
+                    finishMessage = FindFirstString(step, new[] { "finishMessage", "finish_message" });
+                }
+
+                if (finishReason is not null && finishMessage is not null)
+                {
+                    break;
+                }
+            }
+        }
+
+        int? promptTokenCount = null;
+        int? candidateTokenCount = null;
+        int? totalTokenCount = null;
+
+        if (TryGetUsageMetadata(root, out var usageElement))
+        {
+            promptTokenCount = FindFirstInt(usageElement, new[] { "promptTokenCount", "prompt_token_count", "inputTokenCount", "input_token_count" });
+            candidateTokenCount = FindFirstInt(usageElement, new[] { "candidatesTokenCount", "candidateTokenCount", "candidates_token_count", "candidate_token_count", "outputTokenCount", "output_token_count" });
+            totalTokenCount = FindFirstInt(usageElement, new[] { "totalTokenCount", "total_token_count" });
+        }
+
+        return new CoachResponseTerminationMetadata(
+            finishReason,
+            finishMessage,
+            promptTokenCount,
+            candidateTokenCount,
+            totalTokenCount);
+    }
+
+    private static bool TryGetUsageMetadata(JsonElement root, out JsonElement usage)
+    {
+        usage = default;
+
+        if (root.TryGetProperty("usageMetadata", out usage) && usage.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        if (root.TryGetProperty("usage_metadata", out usage) && usage.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? FindFirstString(JsonElement element, IReadOnlyList<string> propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (element.TryGetProperty(propertyName, out var property)
+                && property.ValueKind == JsonValueKind.String)
+            {
+                var value = property.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    var nested = FindFirstString(property.Value, propertyNames);
+                    if (nested is not null)
+                    {
+                        return nested;
+                    }
+                }
+
+                if (property.Value.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var arrayItem in property.Value.EnumerateArray())
+                    {
+                        if (arrayItem.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        var nested = FindFirstString(arrayItem, propertyNames);
+                        if (nested is not null)
+                        {
+                            return nested;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static int? FindFirstInt(JsonElement element, IReadOnlyList<string> propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var property))
+            {
+                continue;
+            }
+
+            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var intValue))
+            {
+                return intValue;
+            }
+
+            if (property.ValueKind == JsonValueKind.String
+                && int.TryParse(property.GetString(), out var parsedString))
+            {
+                return parsedString;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsTokenLimitTermination(string? finishReason)
+    {
+        if (string.IsNullOrWhiteSpace(finishReason))
+        {
+            return false;
+        }
+
+        var normalized = finishReason.Trim().Replace("-", string.Empty, StringComparison.Ordinal).Replace("_", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        return normalized.Contains("MAXTOKEN", StringComparison.Ordinal)
+            || normalized.Contains("TOKENLIMIT", StringComparison.Ordinal)
+            || normalized.Contains("LENGTH", StringComparison.Ordinal);
+    }
+
+    private static bool TryNormalizeStructuredOutput(
+        IReadOnlyList<string> textBlocks,
+        out string normalized,
+        out StructuredOutputExtractionDiagnostics diagnostics)
     {
         normalized = string.Empty;
-        var combined = string.Join("\n", textBlocks.Where(block => !string.IsNullOrWhiteSpace(block))).Trim();
-        if (combined.Length == 0)
+
+        var nonEmptyBlocks = textBlocks
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .Select(block => block.Trim())
+            .ToArray();
+
+        var textBlockCount = nonEmptyBlocks.Length;
+        var totalTextLength = nonEmptyBlocks.Sum(block => block.Length);
+        var fencedBlockDetected = nonEmptyBlocks.Any(block => block.Contains("```", StringComparison.Ordinal));
+
+        if (textBlockCount == 0)
         {
+            diagnostics = new StructuredOutputExtractionDiagnostics(
+                0,
+                0,
+                0,
+                false,
+                JsonObjectExtractionResult.Empty,
+                null,
+                0,
+                0,
+                null,
+                null);
             return false;
         }
 
-        var candidate = combined;
-        if (TryUnwrapSingleJsonFence(candidate, out var unfenced))
-        {
-            candidate = unfenced;
-        }
+        string? selectedCandidate = null;
+        string? selectedWrapperType = null;
+        var selectedOriginalLength = 0;
+        var candidateCount = 0;
 
-        if (!TryParseJsonObject(candidate, out var parsed))
+        foreach (var block in nonEmptyBlocks)
         {
-            return false;
-        }
+            var originalLength = block.Length;
+            var extractionInput = block;
+            var wrapperType = (string?)null;
 
-        if (parsed.RootElement.ValueKind == JsonValueKind.String)
-        {
-            var stringValue = parsed.RootElement.GetString()?.Trim();
-            parsed.Dispose();
-            JsonDocument? unwrapped = null;
-            if (string.IsNullOrWhiteSpace(stringValue)
-                || !TryParseJsonObject(stringValue, out unwrapped)
-                || unwrapped.RootElement.ValueKind != JsonValueKind.Object)
+            if (TryUnwrapSingleCodeFence(block, out var unfenced, out var fenceKind))
             {
-                unwrapped?.Dispose();
+                extractionInput = unfenced;
+                wrapperType = fenceKind;
+            }
+
+            if (!TryExtractJsonObjectCandidates(extractionInput, out var candidates, out var extractionResult))
+            {
+                diagnostics = new StructuredOutputExtractionDiagnostics(
+                    textBlockCount,
+                    totalTextLength,
+                    candidateCount,
+                    fencedBlockDetected,
+                    extractionResult,
+                    null,
+                    0,
+                    0,
+                    null,
+                    null);
                 return false;
             }
 
-            parsed = unwrapped;
+            if (candidates.Count == 0)
+            {
+                continue;
+            }
+
+            candidateCount += candidates.Count;
+            if (candidateCount > 1)
+            {
+                diagnostics = new StructuredOutputExtractionDiagnostics(
+                    textBlockCount,
+                    totalTextLength,
+                    candidateCount,
+                    fencedBlockDetected,
+                    JsonObjectExtractionResult.AmbiguousMultipleObjects,
+                    null,
+                    0,
+                    0,
+                    null,
+                    null);
+                return false;
+            }
+
+            selectedCandidate = candidates[0];
+            selectedOriginalLength = originalLength;
+
+            if (wrapperType is null && !string.Equals(extractionInput, selectedCandidate, StringComparison.Ordinal))
+            {
+                wrapperType = "prose";
+            }
+
+            selectedWrapperType = wrapperType;
+        }
+
+        if (selectedCandidate is null)
+        {
+            diagnostics = new StructuredOutputExtractionDiagnostics(
+                textBlockCount,
+                totalTextLength,
+                0,
+                fencedBlockDetected,
+                JsonObjectExtractionResult.NoJsonObject,
+                null,
+                0,
+                0,
+                null,
+                null);
+            return false;
+        }
+
+        if (!TryParseJsonObject(selectedCandidate, out var parsed, out var parseExceptionCategory, out var parseExceptionMessage))
+        {
+            diagnostics = new StructuredOutputExtractionDiagnostics(
+                textBlockCount,
+                totalTextLength,
+                candidateCount,
+                fencedBlockDetected,
+                JsonObjectExtractionResult.InvalidJson,
+                null,
+                0,
+                0,
+                parseExceptionCategory,
+                parseExceptionMessage);
+            return false;
         }
 
         if (parsed.RootElement.ValueKind != JsonValueKind.Object)
         {
             parsed.Dispose();
+            diagnostics = new StructuredOutputExtractionDiagnostics(
+                textBlockCount,
+                totalTextLength,
+                candidateCount,
+                fencedBlockDetected,
+                JsonObjectExtractionResult.RootNotObject,
+                null,
+                0,
+                0,
+                null,
+                null);
             return false;
         }
 
         normalized = parsed.RootElement.GetRawText();
         parsed.Dispose();
+
+        diagnostics = new StructuredOutputExtractionDiagnostics(
+            textBlockCount,
+            totalTextLength,
+            candidateCount,
+            fencedBlockDetected,
+            JsonObjectExtractionResult.Success,
+            selectedWrapperType,
+            selectedOriginalLength,
+            normalized.Length,
+            null,
+            null);
+
         return true;
     }
 
-    private static bool TryParseJsonObject(string candidate, out JsonDocument parsed)
+    private static bool TryParseJsonObject(string candidate, out JsonDocument parsed, out string? category, out string? message)
     {
         parsed = null!;
+        category = null;
+        message = null;
         try
         {
             parsed = JsonDocument.Parse(candidate);
             return true;
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            category = exception.Path is null ? "json_parse" : "json_parse_path";
+            message = TruncateAndNormalize(exception.Message, 180);
             return false;
         }
     }
 
-    private static bool TryUnwrapSingleJsonFence(string candidate, out string unfenced)
+    private static bool TryUnwrapSingleCodeFence(string candidate, out string unfenced, out string? fenceKind)
     {
         unfenced = string.Empty;
+        fenceKind = null;
         if (!candidate.StartsWith("```", StringComparison.Ordinal)
             || !candidate.EndsWith("```", StringComparison.Ordinal)
             || candidate.Length <= 6)
@@ -344,14 +695,126 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
         }
 
         var language = candidate[3..firstLineEnd].Trim();
-        if (!string.Equals(language, "json", StringComparison.OrdinalIgnoreCase)
-            && language.Length != 0)
+        if (language.Length != 0 && language.Contains(' '))
         {
             return false;
         }
 
         unfenced = candidate[(firstLineEnd + 1)..^3].Trim();
-        return unfenced.Length > 0;
+        if (unfenced.Length == 0)
+        {
+            return false;
+        }
+
+        fenceKind = string.Equals(language, "json", StringComparison.OrdinalIgnoreCase)
+            ? "markdown-fence-json"
+            : "markdown-fence-generic";
+        return true;
+    }
+
+    private static bool TryExtractJsonObjectCandidates(
+        string text,
+        out List<string> candidates,
+        out JsonObjectExtractionResult extractionResult)
+    {
+        candidates = new List<string>();
+        extractionResult = JsonObjectExtractionResult.Success;
+
+        try
+        {
+            using var parsed = JsonDocument.Parse(text);
+            if (parsed.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                candidates.Add(parsed.RootElement.GetRawText());
+                return true;
+            }
+
+            extractionResult = JsonObjectExtractionResult.RootNotObject;
+            return false;
+        }
+        catch (JsonException)
+        {
+            // Not standalone JSON; continue with wrapper/object candidate scanning.
+        }
+
+        var inString = false;
+        var escaping = false;
+        var depth = 0;
+        var startIndex = -1;
+
+        for (var index = 0; index < text.Length; index++)
+        {
+            var ch = text[index];
+
+            if (inString)
+            {
+                if (escaping)
+                {
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                if (depth == 0)
+                {
+                    startIndex = index;
+                }
+
+                depth++;
+                continue;
+            }
+
+            if (ch == '}')
+            {
+                if (depth == 0)
+                {
+                    extractionResult = JsonObjectExtractionResult.UnbalancedBraces;
+                    return false;
+                }
+
+                depth--;
+                if (depth == 0 && startIndex >= 0)
+                {
+                    var length = index - startIndex + 1;
+                    candidates.Add(text.Substring(startIndex, length));
+                    startIndex = -1;
+                }
+            }
+        }
+
+        if (depth != 0)
+        {
+            extractionResult = JsonObjectExtractionResult.UnbalancedBraces;
+            return false;
+        }
+
+        if (candidates.Count == 0)
+        {
+            extractionResult = JsonObjectExtractionResult.NoJsonObject;
+        }
+
+        return true;
     }
 
     private static bool TryParseContent(string rawJson, out AiSafetyCoachContent content)

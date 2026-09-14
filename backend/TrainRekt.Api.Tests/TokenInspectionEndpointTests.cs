@@ -450,17 +450,19 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
             {
                 services.RemoveAll<ITokenIdentityProvenanceService>();
                 services.RemoveAll<ITokenInspectionDeterministicService>();
+                services.RemoveAll<ITokenInspectionCoreService>();
                 services.RemoveAll<ITokenInspectionService>();
                 services.RemoveAll<ITokenIdentityObservationRepository>();
                 services.RemoveAll<IOnChainChronologyService>();
 
                 services.AddSingleton<ITokenInspectionDeterministicService>(deterministic);
+                services.AddSingleton<ITokenInspectionCoreService>(deterministic);
                 services.AddSingleton<ITokenInspectionService>(finalInspection);
                 services.AddSingleton<ITokenIdentityObservationRepository>(new NoOpTokenIdentityObservationRepository());
                 services.AddSingleton<IOnChainChronologyService>(new StubChronologyService());
                 services.AddSingleton<ITokenIdentityProvenanceService>(serviceProvider =>
                     new TokenIdentityProvenanceService(
-                        serviceProvider.GetRequiredService<ITokenInspectionDeterministicService>(),
+                        serviceProvider.GetRequiredService<ITokenInspectionCoreService>(),
                         serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
                         serviceProvider.GetRequiredService<IOnChainChronologyService>(),
                         new StubTrustedIdentityProvenanceService(),
@@ -543,19 +545,21 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
             {
                 services.RemoveAll<ITokenIdentityProvenanceService>();
                 services.RemoveAll<ITokenInspectionDeterministicService>();
+                services.RemoveAll<ITokenInspectionCoreService>();
                 services.RemoveAll<ITokenIdentityObservationRepository>();
                 services.RemoveAll<IOnChainChronologyService>();
                 services.RemoveAll<ITrustedIdentityProvenanceService>();
                 services.RemoveAll<ITokenResearchOrchestrator>();
 
                 services.AddSingleton<ITokenInspectionDeterministicService>(deterministic);
+                services.AddSingleton<ITokenInspectionCoreService>(deterministic);
                 services.AddSingleton<ITokenIdentityObservationRepository>(new NoOpTokenIdentityObservationRepository());
                 services.AddSingleton<IOnChainChronologyService>(new StubChronologyService());
                 services.AddSingleton<ITrustedIdentityProvenanceService>(new StubTrustedIdentityProvenanceService());
                 services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
                 services.AddSingleton<ITokenIdentityProvenanceService>(serviceProvider =>
                     new TokenIdentityProvenanceService(
-                        serviceProvider.GetRequiredService<ITokenInspectionDeterministicService>(),
+                        serviceProvider.GetRequiredService<ITokenInspectionCoreService>(),
                         serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
                         serviceProvider.GetRequiredService<IOnChainChronologyService>(),
                         serviceProvider.GetRequiredService<ITrustedIdentityProvenanceService>(),
@@ -772,7 +776,7 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         }
     }
 
-    private sealed class CountingDeterministicInspectionService : ITokenInspectionDeterministicService
+    private sealed class CountingDeterministicInspectionService : ITokenInspectionDeterministicService, ITokenInspectionCoreService
     {
         private readonly TokenInspectionResult _result;
 
@@ -843,11 +847,23 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
             CallCount += 1;
             throw new InvalidOperationException("research orchestrator should not be used by provenance");
         }
+
+        public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            CallCount += 1;
+            throw new InvalidOperationException("research orchestrator should not be used by provenance");
+        }
     }
 
     private sealed class TimeoutResearchOrchestrator : ITokenResearchOrchestrator
     {
         public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new OperationCanceledException("optional provider timeout simulated");
+        }
+
+        public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             throw new OperationCanceledException("optional provider timeout simulated");
@@ -876,6 +892,20 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
                 UsedCache: false,
                 Availability: ResearchAvailability.Complete));
         }
+
+            public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(new ResearchOutcome(
+                ResearchOutcomeStatus.Completed,
+                Array.Empty<ResearchNeed>(),
+                SourcesAccepted: 1,
+                ClaimsAccepted: 1,
+                ClaimsRejected: 0,
+                Context: _context,
+                UsedCache: true,
+                Availability: ResearchAvailability.Complete));
+            }
     }
 
     private sealed class BlockingResearchOrchestrator : ITokenResearchOrchestrator
@@ -883,6 +913,25 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(true);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                Array.Empty<ResearchNeed>(),
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.Cancelled,
+                "provider",
+                "cancelled");
+        }
+
+        public async Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
         {
             Started.TrySetResult(true);
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);

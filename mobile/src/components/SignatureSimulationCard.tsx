@@ -65,5 +65,5 @@ const styles = StyleSheet.create({
   action: { color: Colors.text, flex: 1, fontSize: Typography.body, lineHeight: TypographyLineHeight.body },
   instructionRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
   instructionCopy: { flex: 1 },
-  actionDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.one },
+  actionDetail: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.xs },
 });

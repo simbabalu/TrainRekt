@@ -18,4 +18,6 @@ public interface IResearchTrustAssessor
 public interface ITokenResearchOrchestrator
 {
     Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken);
+
+    Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken);
 }

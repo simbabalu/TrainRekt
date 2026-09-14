@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   row: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.xs },
   rowLabel: { color: Colors.secondaryText, fontSize: Typography.small, fontWeight: '700' },
   rowValue: { color: Colors.text, flexShrink: 1, fontFamily: 'monospace', fontSize: Typography.small, fontWeight: '700', marginLeft: Spacing.sm, textAlign: 'right' },
-  bodyText: { color: Colors.text, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: 2 },
+  bodyText: { color: Colors.text, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.xs },
   itemList: { gap: Spacing.sm, marginTop: Spacing.sm },
   itemCard: {
     backgroundColor: Colors.secondaryCard,

@@ -280,6 +280,85 @@ public sealed class TokenResearchOrchestrator : ITokenResearchOrchestrator
             ResearchAvailability.Complete);
     }
 
+    public async Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
+    {
+        var needs = _needDetector.Detect(inspection);
+        if (needs.Count == 0)
+        {
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.NotRequired,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.NotAttempted);
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow();
+        CachedTokenResearchSnapshot? freshSnapshot;
+        try
+        {
+            freshSnapshot = await _repository.GetLatestFreshAsync(
+                inspection.Identity.Mint,
+                TokenResearchVersion.Current,
+                nowUtc,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Token research cache lookup failed for mint {Mint}. Optional research status set unavailable.",
+                inspection.Identity.Mint);
+
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Failed,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.Unavailable,
+                ResearchFailureCategory.Unknown,
+                "cache_lookup",
+                "Optional research cache lookup failed.");
+        }
+
+        if (freshSnapshot is not null)
+        {
+            var cacheMerge = _merger.Merge(inspection.ProtocolContext, freshSnapshot.Context);
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.Completed,
+                needs,
+                0,
+                0,
+                cacheMerge.ClaimsRejected,
+                cacheMerge.Context,
+                true,
+                ResearchAvailability.Complete);
+        }
+
+        return new ResearchOutcome(
+            ResearchOutcomeStatus.ResearchRequired,
+            needs,
+            0,
+            0,
+            0,
+            inspection.ProtocolContext,
+            false,
+            ResearchAvailability.NotAttempted,
+            null,
+            "deferred",
+            "Optional research deferred outside the deterministic inspect response path.");
+    }
+
     private CancellationTokenSource CreateTimeoutCancellation(CancellationToken cancellationToken)
     {
         if (_options.ProviderTimeoutSeconds <= 0)

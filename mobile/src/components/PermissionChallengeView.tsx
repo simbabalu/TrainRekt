@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   primaryValue: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', lineHeight: TypographyLineHeight.small },
   monoValue: { color: Colors.secondaryText, fontFamily: 'monospace', fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   detailValue: { color: Colors.secondaryText, flex: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
-  scopeValue: { color: Colors.mutedText, fontSize: Typography.small, marginTop: 1 },
+  scopeValue: { color: Colors.mutedText, fontSize: Typography.small, marginTop: Spacing.xs },
   listBlock: { gap: Spacing.sm },
   listRow: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.sm },
   listCopy: { flex: 1 },

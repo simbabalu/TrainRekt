@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     borderWidth: 1,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.half,
+    paddingVertical: Spacing.xs,
   },
   badgeReview: {
     borderColor: Colors.warning,

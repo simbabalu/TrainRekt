@@ -37,6 +37,17 @@ export const Spacing = {
   six: 64,
 } as const;
 
+export const LayoutSpacing = {
+  pageHorizontal: Spacing.lg,
+  pageTop: Spacing.lg,
+  pageSectionGap: Spacing.lg,
+  pageBottomInset: Spacing.xl,
+  cardPadding: Spacing.lg,
+  cardSectionGap: Spacing.md,
+  buttonGroupGap: Spacing.sm,
+  fieldGap: Spacing.sm,
+} as const;
+
 export const Radius = { sm: 8, md: 12, lg: 16, pill: 999 } as const;
 
 export const Typography = {

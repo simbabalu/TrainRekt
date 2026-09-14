@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Domain.Analysis;
 using TrainRekt.Api.Domain.Constants;
@@ -15,6 +17,7 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
     private readonly IHeliusClient _heliusClient;
     private readonly ITokenMetadataResolver _tokenMetadataResolver;
     private readonly ILargestTokenAccountAnalysisService _largestTokenAccountAnalysisService;
+    private readonly ILogger<TokenInspectionService> _logger;
 
     public TokenInspectionService(IHeliusClient heliusClient)
         : this(
@@ -30,15 +33,22 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
     public TokenInspectionService(
         IHeliusClient heliusClient,
         ITokenMetadataResolver tokenMetadataResolver,
-        ILargestTokenAccountAnalysisService largestTokenAccountAnalysisService)
+        ILargestTokenAccountAnalysisService largestTokenAccountAnalysisService,
+        ILogger<TokenInspectionService>? logger = null)
     {
         _heliusClient = heliusClient;
         _tokenMetadataResolver = tokenMetadataResolver;
         _largestTokenAccountAnalysisService = largestTokenAccountAnalysisService;
+        _logger = logger ?? NullLogger<TokenInspectionService>.Instance;
     }
 
     public async Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
     {
+        var totalStopwatch = Stopwatch.StartNew();
+        long rpcMs = 0;
+        long holderAnalysisMs = 0;
+        long metadataMs = 0;
+
         if (!SolanaPublicKeyValidator.TryNormalize(mint, out var normalizedMint))
         {
             return TokenInspectionResult.Failure(
@@ -48,6 +58,7 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
 
         try
         {
+            var rpcStopwatch = Stopwatch.StartNew();
             using var accountInfoResult = await _heliusClient.SendRpcRequestAsync(
                 method: "getAccountInfo",
                 parameters:
@@ -56,6 +67,7 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
                     new { encoding = "base64", commitment = "confirmed" }
                 ],
                 cancellationToken);
+            rpcMs = ElapsedMilliseconds(rpcStopwatch);
 
             if (!HeliusRpcResponseReader.TryGetMintAccountInfo(
                     accountInfoResult.RootElement,
@@ -82,22 +94,34 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
                 return TokenInspectionResult.Failure(TokenInspectionErrorCode.NotFungibleTokenMint, "The account does not decode as a fungible token mint.");
             }
 
-            var largestAccountAnalysis = await _largestTokenAccountAnalysisService.AnalyzeAsync(
+            var holderAnalysisStopwatch = Stopwatch.StartNew();
+            var metadataStopwatch = Stopwatch.StartNew();
+
+            var largestAccountAnalysisTask = _largestTokenAccountAnalysisService.AnalyzeAsync(
                 normalizedMint,
                 ownerProgramId,
                 parsedMint.Supply,
                 cancellationToken);
+
+            var metadataTask = _tokenMetadataResolver.ResolveAsync(
+                normalizedMint,
+                ownerProgramId,
+                accountDataBytes,
+                cancellationToken);
+
+            await Task.WhenAll(largestAccountAnalysisTask, metadataTask);
+
+            holderAnalysisMs = ElapsedMilliseconds(holderAnalysisStopwatch);
+            metadataMs = ElapsedMilliseconds(metadataStopwatch);
+
+            var largestAccountAnalysis = await largestAccountAnalysisTask;
 
             if (largestAccountAnalysis is null)
             {
                 return TokenInspectionResult.Failure(TokenInspectionErrorCode.ProviderMalformedResponse, "RPC response did not include valid largest-token-account balances.");
             }
 
-            var metadata = await _tokenMetadataResolver.ResolveAsync(
-                normalizedMint,
-                ownerProgramId,
-                accountDataBytes,
-                cancellationToken);
+            var metadata = await metadataTask;
 
             if (!IsFungibleMint(parsedMint, metadata.IsFungibleByAsset))
             {
@@ -159,6 +183,16 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
             var reviewSignals = TokenReviewSignalFactory.Create(withProtocolContext);
             var inspection = withProtocolContext with { ReviewSignals = reviewSignals };
 
+            var deterministicInspectionMs = ElapsedMilliseconds(totalStopwatch);
+            _logger.LogInformation(
+                "Token inspection timing for mint {Mint}: totalMs={TotalMs} deterministicInspectionMs={DeterministicInspectionMs} rpcMs={RpcMs} holderAnalysisMs={HolderAnalysisMs} metadataMs={MetadataMs}.",
+                normalizedMint,
+                deterministicInspectionMs,
+                deterministicInspectionMs,
+                rpcMs,
+                holderAnalysisMs,
+                metadataMs);
+
             return TokenInspectionResult.Success(inspection);
         }
         catch (OperationCanceledException)
@@ -195,5 +229,10 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
         }
 
         return !(parsedMint.Decimals == 0 && parsedMint.Supply <= 1UL);
+    }
+
+    private static long ElapsedMilliseconds(Stopwatch stopwatch)
+    {
+        return (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
     }
 }

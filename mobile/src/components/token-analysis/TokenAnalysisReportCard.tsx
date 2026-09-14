@@ -137,16 +137,8 @@ export function TokenAnalysisReportCard({
 
   return (
     <View style={styles.container}>
-      <View onLayout={handleSummaryLayout}>
-        <TokenAnalysisSummaryCard
-          report={report}
-          isFullAnalysisVisible={showFullAnalysis}
-          onToggleFullAnalysis={handleToggleFullAnalysis}
-          onUnderstandSignals={handleUnderstandSignals}
-        />
-      </View>
       <SectionCard>
-        <AnalysisSectionHeader icon="coach" title="OPTIONAL AI SAFETY COACH" />
+        <AnalysisSectionHeader icon="coach" title="AI SAFETY COACH" />
         <Text style={styles.muted}>AI explains verified TrainRekt findings. It does not determine token safety.</Text>
         {aiStatus === 'idle' && (
           <PrimaryButton onPress={onExplainWithAi} variant="secondary">EXPLAIN WITH AI</PrimaryButton>
@@ -179,6 +171,14 @@ export function TokenAnalysisReportCard({
           </View>
         )}
       </SectionCard>
+      <View onLayout={handleSummaryLayout}>
+        <TokenAnalysisSummaryCard
+          report={report}
+          isFullAnalysisVisible={showFullAnalysis}
+          onToggleFullAnalysis={handleToggleFullAnalysis}
+          onUnderstandSignals={handleUnderstandSignals}
+        />
+      </View>
       {showFullAnalysis ? <View onLayout={handleFullAnalysisLayout}>
         {deterministicError ? (
           <SectionCard>

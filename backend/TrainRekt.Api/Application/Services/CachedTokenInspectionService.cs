@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
 using TrainRekt.Api.Application.Abstractions;
@@ -6,7 +7,7 @@ using TrainRekt.Api.Domain.Utils;
 
 namespace TrainRekt.Api.Application.Services;
 
-public sealed class CachedTokenInspectionService : ITokenInspectionService
+public sealed class CachedTokenInspectionService : ITokenInspectionService, ITokenInspectionCoreService
 {
     private readonly ITokenInspectionDeterministicService _deterministicService;
     private readonly ITokenRepository _tokenRepository;
@@ -33,6 +34,9 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
 
     public async Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
     {
+        var totalStopwatch = Stopwatch.StartNew();
+        var cacheStopwatch = Stopwatch.StartNew();
+
         if (!SolanaPublicKeyValidator.TryNormalize(mint, out var normalizedMint))
         {
             return TokenInspectionResult.Failure(
@@ -52,31 +56,19 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
 
             if (cachedSnapshot is not null)
             {
+                var cacheMs = ElapsedMilliseconds(cacheStopwatch);
+                var totalMs = ElapsedMilliseconds(totalStopwatch);
                 _logger.LogInformation(
-                    "Token inspection cache hit for mint {Mint} at analysisVersion {AnalysisVersion}.",
+                    "Token inspection cache hit for mint {Mint} at analysisVersion {AnalysisVersion}. cacheMs={CacheMs} totalMs={TotalMs}.",
                     normalizedMint,
-                    TokenInspectionAnalysisVersion.Current);
+                    TokenInspectionAnalysisVersion.Current,
+                    cacheMs,
+                    totalMs);
 
                 return TokenInspectionResult.Success(cachedSnapshot.Result);
             }
 
-            var latestSnapshot = await _snapshotRepository.GetLatestByMintAsync(normalizedMint, cancellationToken);
-            if (latestSnapshot is null)
-            {
-                _logger.LogInformation("Token inspection cache miss for mint {Mint}.", normalizedMint);
-            }
-            else if (latestSnapshot.AnalysisVersion != TokenInspectionAnalysisVersion.Current)
-            {
-                _logger.LogInformation(
-                    "Token inspection cache version mismatch for mint {Mint}. Cached version {CachedVersion}, current version {CurrentVersion}.",
-                    normalizedMint,
-                    latestSnapshot.AnalysisVersion,
-                    TokenInspectionAnalysisVersion.Current);
-            }
-            else
-            {
-                _logger.LogInformation("Token inspection cache stale for mint {Mint}.", normalizedMint);
-            }
+            _logger.LogInformation("Token inspection cache miss for mint {Mint}.", normalizedMint);
         }
         catch (OperationCanceledException)
         {
@@ -91,7 +83,10 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
                 "Token inspection persistence is temporarily unavailable. Please try again.");
         }
 
+        var cacheLookupMs = ElapsedMilliseconds(cacheStopwatch);
+        var deterministicStopwatch = Stopwatch.StartNew();
         var freshInspectionResult = await _deterministicService.InspectAsync(normalizedMint, cancellationToken);
+        var deterministicInspectionMs = ElapsedMilliseconds(deterministicStopwatch);
         if (freshInspectionResult.Error is not null || freshInspectionResult.Inspection is null)
         {
             return freshInspectionResult;
@@ -100,6 +95,7 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
         var inspection = freshInspectionResult.Inspection;
         var expiresAtUtc = nowUtc.AddMinutes(_freshnessMinutes);
 
+        var persistStopwatch = Stopwatch.StartNew();
         try
         {
             var existingToken = await _tokenRepository.GetByMintAsync(normalizedMint, cancellationToken);
@@ -127,9 +123,13 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
             await _snapshotRepository.InsertAsync(snapshot, cancellationToken);
 
             _logger.LogInformation(
-                "Token inspection snapshot persisted for mint {Mint} at analysisVersion {AnalysisVersion}.",
+                "Token inspection snapshot persisted for mint {Mint} at analysisVersion {AnalysisVersion}. cacheMs={CacheMs} deterministicInspectionMs={DeterministicInspectionMs} persistenceMs={PersistenceMs} totalMs={TotalMs}.",
                 normalizedMint,
-                TokenInspectionAnalysisVersion.Current);
+                TokenInspectionAnalysisVersion.Current,
+                cacheLookupMs,
+                deterministicInspectionMs,
+                ElapsedMilliseconds(persistStopwatch),
+                ElapsedMilliseconds(totalStopwatch));
 
             return TokenInspectionResult.Success(inspection);
         }
@@ -145,5 +145,10 @@ public sealed class CachedTokenInspectionService : ITokenInspectionService
                 TokenInspectionErrorCode.PersistenceUnavailable,
                 "Token inspection persistence is temporarily unavailable. Please try again.");
         }
+    }
+
+    private static long ElapsedMilliseconds(Stopwatch stopwatch)
+    {
+        return (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
     }
 }

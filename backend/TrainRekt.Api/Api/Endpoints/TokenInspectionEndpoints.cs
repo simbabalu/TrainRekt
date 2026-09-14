@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using TrainRekt.Api.Api.Contracts;
 using TrainRekt.Api.Application.Abstractions;
@@ -20,22 +21,40 @@ public static class TokenInspectionEndpoints
     private static async Task<IResult> HandleInspectionRequestAsync(
         TokenInspectionRequest request,
         ITokenInspectionService tokenInspectionService,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("TokenInspectionEndpoint");
+        var stopwatch = Stopwatch.StartNew();
+
         var result = await tokenInspectionService.InspectAsync(request.Mint, cancellationToken);
 
         if (result.Error is null && result.Inspection is not null)
         {
+            logger.LogInformation(
+                "Token analysis endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections outcome=ok.",
+                request.Mint,
+                ElapsedMilliseconds(stopwatch));
             return Results.Ok(TokenInspectionResponse.FromDomain(result.Inspection, result.ResearchStatus));
         }
 
         if (result.Error is null)
         {
+            logger.LogInformation(
+                "Token analysis endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections outcome=empty-result.",
+                request.Mint,
+                ElapsedMilliseconds(stopwatch));
             return Results.Problem(
                 title: "Inspection failed",
                 detail: "Token inspection produced no result.",
                 statusCode: StatusCodes.Status502BadGateway);
         }
+
+        logger.LogInformation(
+            "Token analysis endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections outcome=error errorCode={ErrorCode}.",
+            request.Mint,
+            ElapsedMilliseconds(stopwatch),
+            result.Error.Code);
 
         return MapInspectionError(result.Error);
     }
@@ -43,14 +62,29 @@ public static class TokenInspectionEndpoints
     private static async Task<IResult> HandleInspectionCoachRequestAsync(
         string mint,
         ITokenInspectionCoachService coachService,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("TokenInspectionCoachEndpoint");
+        var stopwatch = Stopwatch.StartNew();
+
         var result = await coachService.GenerateAsync(mint, cancellationToken);
 
         if (result.InspectionError is not null)
         {
+            logger.LogInformation(
+                "Token coach endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections/<mint>/coach outcome=inspection-error errorCode={ErrorCode}.",
+                mint,
+                ElapsedMilliseconds(stopwatch),
+                result.InspectionError.Code);
             return MapInspectionError(result.InspectionError);
         }
+
+        logger.LogInformation(
+            "Token coach endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections/<mint>/coach outcome=ok coachStatus={CoachStatus}.",
+            mint,
+            ElapsedMilliseconds(stopwatch),
+            result.Status);
 
         return Results.Ok(TokenInspectionCoachResponse.FromDomain(result));
     }
@@ -58,22 +92,40 @@ public static class TokenInspectionEndpoints
     private static async Task<IResult> HandleInspectionProvenanceRequestAsync(
         string mint,
         ITokenIdentityProvenanceService provenanceService,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("TokenInspectionProvenanceEndpoint");
+        var stopwatch = Stopwatch.StartNew();
+
         var result = await provenanceService.AnalyzeAsync(mint, cancellationToken);
 
         if (result.InspectionError is not null)
         {
+            logger.LogInformation(
+                "Token provenance endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections/<mint>/provenance outcome=inspection-error errorCode={ErrorCode}.",
+                mint,
+                ElapsedMilliseconds(stopwatch),
+                result.InspectionError.Code);
             return MapInspectionError(result.InspectionError);
         }
 
         if (result.Provenance is null)
         {
+            logger.LogInformation(
+                "Token provenance endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections/<mint>/provenance outcome=empty-result.",
+                mint,
+                ElapsedMilliseconds(stopwatch));
             return Results.Problem(
                 title: "Provenance analysis failed",
                 detail: "Token identity provenance produced no result.",
                 statusCode: StatusCodes.Status502BadGateway);
         }
+
+        logger.LogInformation(
+            "Token provenance endpoint timing for mint {Mint}: totalMs={TotalMs} endpoint=/api/token-inspections/<mint>/provenance outcome=ok.",
+            mint,
+            ElapsedMilliseconds(stopwatch));
 
         return Results.Ok(TokenIdentityProvenanceResponse.FromDomain(result.Provenance));
     }
@@ -129,5 +181,10 @@ public static class TokenInspectionEndpoints
             Detail = detail,
             Status = statusCode
         };
+    }
+
+    private static long ElapsedMilliseconds(Stopwatch stopwatch)
+    {
+        return (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
     }
 }

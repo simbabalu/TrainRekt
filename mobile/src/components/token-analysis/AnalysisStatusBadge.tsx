@@ -25,6 +25,6 @@ export function AnalysisStatusBadge({ label, tone }: AnalysisStatusBadgeProps) {
 }
 
 const styles = StyleSheet.create({
-  badge: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.half },
+  badge: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
   text: { fontSize: Typography.small, fontWeight: '800', letterSpacing: 0.4 },
 });

@@ -1,4 +1,3 @@
-import { buildTrustedIdentityConclusion } from '@/domain/token-analysis/tokenAnalysisFullAnalysisPresentation';
 import {
   presentMintAuthorityContextLine,
   presentTokenomicsContextDescription,
@@ -71,50 +70,6 @@ function tokenomicsSignal(report: TokenAnalysisReport): TokenAnalysisSignal | nu
   };
 }
 
-function identitySignal(report: TokenAnalysisReport): TokenAnalysisSignal | null {
-  const conclusion = buildTrustedIdentityConclusion(report);
-
-  switch (conclusion.state) {
-    case 'confirmed':
-      return {
-        id: 'identity',
-        icon: 'identity',
-        label: 'IDENTITY',
-        value: 'Trusted identity confirmed',
-        description: 'Multiple trusted sources reference this exact mint.',
-        tone: 'positive',
-      };
-    case 'partially-supported':
-      return {
-        id: 'identity',
-        icon: 'identity',
-        label: 'IDENTITY',
-        value: 'Identity partially supported',
-        description: 'One trusted source references this exact mint.',
-        tone: 'informational',
-      };
-    case 'conflicting':
-      return {
-        id: 'identity',
-        icon: 'identity',
-        label: 'IDENTITY',
-        value: 'Identity conflict detected',
-        description: 'Trusted evidence contains conflicting mint references.',
-        tone: 'review',
-      };
-    case 'unverified':
-    default:
-      return {
-        id: 'identity',
-        icon: 'identity',
-        label: 'IDENTITY',
-        value: 'Identity unverified',
-        description: 'No trusted source currently confirms this exact mint.',
-        tone: 'neutral',
-      };
-  }
-}
-
 function authoritySignal(id: string, label: string, revoked: boolean, description?: string): TokenAnalysisSignal {
   return {
     id,
@@ -143,9 +98,6 @@ function concentrationSignal(report: TokenAnalysisReport): TokenAnalysisSignal |
 
 export function buildTokenAnalysisSummary(report: TokenAnalysisReport): TokenAnalysisSummary {
   const findings: TokenAnalysisSignal[] = [];
-  const identity = identitySignal(report);
-  if (identity) findings.push(identity);
-
   findings.push(authoritySignal('authority:mint', 'MINT AUTHORITY', report.inspection.authorities.mintAuthorityRevoked, mintAuthorityDescription(report)));
   findings.push(authoritySignal('authority:freeze', 'FREEZE AUTHORITY', report.inspection.authorities.freezeAuthorityRevoked));
 

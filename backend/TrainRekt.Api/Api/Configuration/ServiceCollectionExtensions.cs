@@ -231,6 +231,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenIdentityClassifier, TokenIdentityClassifier>();
         services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
+        services.AddScoped<AiSafetyCoachContentNormalizer>();
         services.AddScoped<AiSafetyCoachResponseValidator>();
         services.AddSingleton<ITokenExternalContextResearchService, TokenExternalContextResearchService>();
         services.AddScoped<ITokenInspectionCoachService, TokenInspectionCoachService>();
@@ -343,6 +344,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, MongoTokenIdentityChronologySnapshotRepository>();
             services.AddScoped<ITokenIdentitySourceVerificationSnapshotRepository, MongoTokenIdentitySourceVerificationSnapshotRepository>();
             services.AddScoped<CachedTokenInspectionService>();
+            services.AddScoped<ITokenInspectionCoreService>(serviceProvider =>
+                serviceProvider.GetRequiredService<CachedTokenInspectionService>());
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
                     serviceProvider,
@@ -357,6 +360,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, NoOpTokenIdentityChronologySnapshotRepository>();
             services.AddScoped<ITokenIdentitySourceVerificationSnapshotRepository, NoOpTokenIdentitySourceVerificationSnapshotRepository>();
             services.AddScoped<PassthroughTokenInspectionService>();
+            services.AddScoped<ITokenInspectionCoreService>(serviceProvider =>
+                serviceProvider.GetRequiredService<PassthroughTokenInspectionService>());
             services.AddScoped<ITokenInspectionService>(serviceProvider =>
                 ActivatorUtilities.CreateInstance<ResearchingTokenInspectionService>(
                     serviceProvider,

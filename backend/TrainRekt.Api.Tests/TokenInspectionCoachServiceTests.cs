@@ -46,13 +46,19 @@ public sealed class TokenInspectionCoachServiceTests
                 Coach: cachedPayload)
         };
 
-        var service = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspection)), new StubProvenanceService(), new StubCoach(), snapshotRepository);
+        var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
+        var provenance = new StubProvenanceService();
+        var coach = new StubCoach();
+        var service = CreateService(inspectionService, provenance, coach, snapshotRepository);
 
         var result = await service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.True(result.Available);
         Assert.Equal(AiSafetyCoachStatus.Available, result.Status);
         Assert.Equal("sum", result.Coach!.Content.Summary);
+        Assert.Equal(0, inspectionService.CallCount);
+        Assert.Equal(0, provenance.AnalyzeFromInspectionCallCount);
+        Assert.Equal(0, coach.CallCount);
     }
 
     [Fact]
@@ -332,6 +338,54 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
+    public async Task GenerateAsync_Http200CoachWithSlightlyOverlongRiskExplanation_NormalizesAndSucceeds()
+    {
+        var inspection = ResearchTestData.CreateInspection();
+        var overLimitRisk = "Active mint authority allows additional issuance if controls are misused, so supply and holder-risk assumptions may change quickly under the same ticker.";
+        Assert.True(overLimitRisk.Length > 90);
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(
+                true,
+                new AiSafetyCoachContent(
+                    "Authorities remain active, so token controls still require careful review.",
+                    new[] { overLimitRisk },
+                    new[] { "Confirm official documentation still references this exact mint." },
+                    new[] { "Context can explain controls but does not prove low-risk operation." },
+                    null),
+                null,
+                null)
+        };
+
+        var service = CreateService(
+            new StubInspectionService(TokenInspectionResult.Success(inspection)),
+            new StubProvenanceService(),
+            coach,
+            new StubCoachSnapshotRepository(),
+            options: new AiSafetyCoachOptions
+            {
+                Enabled = true,
+                Language = "en",
+                MaxSummaryLength = 320,
+                MaxSummarySentences = 2,
+                MaxRiskExplanations = 3,
+                MaxWhatToCheckNext = 2,
+                MaxUncertaintyItems = 2,
+                MaxListItemLength = 90
+            });
+
+        var result = await service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.True(result.Available);
+        Assert.Equal(AiSafetyCoachStatus.Available, result.Status);
+        var normalizedRisk = Assert.Single(result.Coach!.Content.RiskExplanations);
+        Assert.True(normalizedRisk.Length <= 90);
+        Assert.False(normalizedRisk.EndsWith(" ", StringComparison.Ordinal));
+        Assert.EndsWith("...", normalizedRisk, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateAsync_CancellationFromCoach_Propagates()
     {
         var inspection = ResearchTestData.CreateInspection();
@@ -340,6 +394,32 @@ public sealed class TokenInspectionCoachServiceTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CoachOutputTruncated_MapsToInvalidResponse()
+    {
+        var inspection = ResearchTestData.CreateInspection();
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(
+                false,
+                null,
+                AiSafetyCoachFailureReason.OutputTruncated,
+                "Coach response was truncated before valid JSON object completion.",
+                200)
+        };
+
+        var service = CreateService(
+            new StubInspectionService(TokenInspectionResult.Success(inspection)),
+            new StubProvenanceService(),
+            coach,
+            new StubCoachSnapshotRepository());
+
+        var result = await service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
+
+        Assert.False(result.Available);
+        Assert.Equal(AiSafetyCoachStatus.InvalidResponse, result.Status);
     }
 
     [Fact]
@@ -546,7 +626,7 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_IdentityClassificationChanges_FingerprintChanges()
+    public async Task GenerateAsync_IdentityClassificationChanges_UsesSameMintScopedCacheKey()
     {
         var inspection = ResearchTestData.CreateInspection();
         var coach = new StubCoach
@@ -582,11 +662,11 @@ public sealed class TokenInspectionCoachServiceTests
         _ = await serviceA.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
         _ = await serviceB.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
 
-        Assert.NotEqual(repoA.LastReadFingerprint, repoB.LastReadFingerprint);
+        Assert.Equal(repoA.LastReadFingerprint, repoB.LastReadFingerprint);
     }
 
     private static TokenInspectionCoachService CreateService(
-        ITokenInspectionService inspection,
+        ITokenInspectionCoreService inspection,
         ITokenIdentityProvenanceService provenance,
         IAiSafetyCoach coach,
         IAiSafetyCoachSnapshotRepository snapshots,
@@ -601,6 +681,7 @@ public sealed class TokenInspectionCoachServiceTests
         };
 
         var factory = new AiSafetyCoachInputFactory(Options.Create(options));
+        var normalizer = new AiSafetyCoachContentNormalizer(Options.Create(options));
         var validator = new AiSafetyCoachResponseValidator(Options.Create(options));
 
         return new TokenInspectionCoachService(
@@ -610,6 +691,7 @@ public sealed class TokenInspectionCoachServiceTests
             externalContextService ?? new StubExternalContextResearchService(),
             snapshots,
             factory,
+            normalizer,
             validator,
             Options.Create(options),
             timeProvider ?? new FixedTimeProvider(DateTimeOffset.UtcNow),
@@ -717,7 +799,7 @@ public sealed class TokenInspectionCoachServiceTests
         }
     }
 
-    private sealed class StubInspectionService : ITokenInspectionService
+    private sealed class StubInspectionService : ITokenInspectionCoreService
     {
         private readonly TokenInspectionResult _result;
 
@@ -726,8 +808,11 @@ public sealed class TokenInspectionCoachServiceTests
             _result = result;
         }
 
+        public int CallCount { get; private set; }
+
         public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
         {
+            CallCount += 1;
             return Task.FromResult(_result);
         }
     }
