@@ -7,6 +7,10 @@ namespace TrainRekt.Api.Application.Services;
 
 public sealed class AiSafetyCoachResponseValidator
 {
+    private static readonly Regex SentenceTerminator = new(
+        "[.!?]+(?=\\s|$)",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly HashSet<string> AllowedTrainingTopics =
     [
         "token-account-state",
@@ -33,24 +37,37 @@ public sealed class AiSafetyCoachResponseValidator
     public bool TryValidate(AiSafetyCoachContent content, out string reason)
     {
         reason = string.Empty;
+        var summaryDiagnostics = DescribeSummary(content);
 
-        if (string.IsNullOrWhiteSpace(content.Summary) || content.Summary.Length > _options.MaxSummaryLength)
+        if (summaryDiagnostics.IsEmpty)
         {
-            reason = "Summary is missing or exceeds max length.";
+            reason = "Summary is missing.";
             return false;
         }
 
-        if (!ValidateList(content.RiskExplanations, _options.MaxRiskExplanations, out reason))
+        if (summaryDiagnostics.Length > summaryDiagnostics.MaxLength)
+        {
+            reason = "Summary exceeds max length.";
+            return false;
+        }
+
+        if (summaryDiagnostics.Sentences > _options.MaxSummarySentences)
+        {
+            reason = "Summary exceeds max sentence count.";
+            return false;
+        }
+
+        if (!ValidateList(content.RiskExplanations, _options.MaxRiskExplanations, "riskExplanations", out reason))
         {
             return false;
         }
 
-        if (!ValidateList(content.WhatToCheckNext, _options.MaxWhatToCheckNext, out reason))
+        if (!ValidateList(content.WhatToCheckNext, _options.MaxWhatToCheckNext, "whatToCheckNext", out reason))
         {
             return false;
         }
 
-        if (!ValidateList(content.Uncertainty, _options.MaxUncertaintyItems, out reason))
+        if (!ValidateList(content.Uncertainty, _options.MaxUncertaintyItems, "uncertainty", out reason))
         {
             return false;
         }
@@ -84,12 +101,27 @@ public sealed class AiSafetyCoachResponseValidator
         return true;
     }
 
-    private bool ValidateList(IReadOnlyList<string> values, int maxItems, out string reason)
+    public AiSafetyCoachSummaryValidationDiagnostics DescribeSummary(AiSafetyCoachContent content)
+    {
+        var summary = content.Summary;
+        var isEmpty = string.IsNullOrWhiteSpace(summary);
+        var normalized = summary ?? string.Empty;
+        var length = normalized.Length;
+        var sentenceCount = CountSentences(normalized);
+
+        return new AiSafetyCoachSummaryValidationDiagnostics(
+            length,
+            _options.MaxSummaryLength,
+            sentenceCount,
+            isEmpty);
+    }
+
+    private bool ValidateList(IReadOnlyList<string> values, int maxItems, string fieldName, out string reason)
     {
         reason = string.Empty;
         if (values.Count > maxItems)
         {
-            reason = "List exceeds max item count.";
+            reason = $"List exceeds max item count for {fieldName}.";
             return false;
         }
 
@@ -97,11 +129,28 @@ public sealed class AiSafetyCoachResponseValidator
         {
             if (string.IsNullOrWhiteSpace(value) || value.Length > _options.MaxListItemLength)
             {
-                reason = "List contains invalid or oversized item.";
+                reason = $"List contains invalid or oversized item for {fieldName}.";
                 return false;
             }
         }
 
         return true;
     }
+
+    private static int CountSentences(string text)
+    {
+        var count = SentenceTerminator.Matches(text).Count;
+        if (count > 0)
+        {
+            return count;
+        }
+
+        return string.IsNullOrWhiteSpace(text) ? 0 : 1;
+    }
 }
+
+public readonly record struct AiSafetyCoachSummaryValidationDiagnostics(
+    int Length,
+    int MaxLength,
+    int Sentences,
+    bool IsEmpty);

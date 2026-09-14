@@ -6,6 +6,7 @@ import { Text } from 'react-native';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TokenAnalysisReportCard } from './TokenAnalysisReportCard';
 import type { TokenAnalysisReport, TokenInspectionCoachResponse } from '@/types/tokenAnalysis';
+import type { WalletTrainingTopic } from '@/types/walletTraining';
 
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
@@ -77,8 +78,11 @@ function renderExpandedReportForAiState(options: {
   aiError?: string | null;
   coach?: TokenInspectionCoachResponse['coach'];
   onExplainWithAi?: () => void;
+  onStartTraining?: (topic: WalletTrainingTopic, exerciseId: string) => void;
+  expandFullAnalysis?: boolean;
 }) {
   const onExplainWithAi = options.onExplainWithAi ?? (() => undefined);
+  const onStartTraining = options.onStartTraining ?? (() => undefined);
   let renderer!: ReturnType<typeof create>;
 
   act(() => {
@@ -90,7 +94,7 @@ function renderExpandedReportForAiState(options: {
         aiError={options.aiError ?? null}
         coach={options.coach ?? null}
         onExplainWithAi={onExplainWithAi}
-        onStartTraining={vi.fn()}
+        onStartTraining={onStartTraining}
         onRequestScrollTo={vi.fn()}
       />, 
     );
@@ -99,13 +103,17 @@ function renderExpandedReportForAiState(options: {
   const buttons = () => renderer.root.findAllByType(PrimaryButton);
   const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
 
-  act(() => {
-    layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 100 } } });
-    buttons()[1].props.onPress();
-    layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 500 } } });
-  });
+  if (options.expandFullAnalysis) {
+    const fullAnalysisToggle = buttons().find((button) => String(button.props.children).includes('VIEW FULL ANALYSIS') || String(button.props.children).includes('HIDE FULL ANALYSIS'));
 
-  return { renderer, onExplainWithAi };
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 100 } } });
+      fullAnalysisToggle?.props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 500 } } });
+    });
+  }
+
+  return { renderer, onExplainWithAi, onStartTraining };
 }
 
 describe('TokenAnalysisReportCard', () => {
@@ -275,7 +283,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).not.toContain('safe to buy');
   });
 
-  it('chronology wording stays earliest-observed and does not claim token creation date', () => {
+  it('does not render chronology or limitations sections in normal full analysis', () => {
     const chronologyReport: TokenAnalysisReport = {
       ...report(),
       provenance: {
@@ -323,9 +331,9 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     const content = textContent(renderer);
-    expect(content).toContain('CHRONOLOGY');
-    expect(content).toContain('EARLIEST OBSERVED ON-CHAIN ACTIVITY');
-    expect(content).not.toContain('token creation date');
+    expect(content).not.toContain('CHRONOLOGY');
+    expect(content).not.toContain('LIMITATIONS');
+    expect(content).toContain('TRUSTED IDENTITY PROVENANCE');
   });
 
   it('reduces overlapping mint-supply review rows to one presentation block', () => {
@@ -448,7 +456,15 @@ describe('TokenAnalysisReportCard', () => {
       .map((call) => call.join(' '))
       .find((message) => message.includes('Encountered two children with the same key'));
 
+    act(() => {
+      const sourceEvidenceButton = renderer.root
+        .findAllByType(PrimaryButton)
+        .find((button) => String(button.props.children).includes('VIEW SOURCE EVIDENCE'));
+      sourceEvidenceButton?.props.onPress();
+    });
+
     const content = textContent(renderer);
+    expect(content).toContain('IDENTITY UNVERIFIED');
     expect(content).toContain('NO MINT REFERENCE');
 
     expect(duplicateKeyWarning).toBeUndefined();
@@ -519,10 +535,451 @@ describe('TokenAnalysisReportCard', () => {
       layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 470 } } });
     });
 
+    act(() => {
+      const sourceEvidenceButton = renderer.root
+        .findAllByType(PrimaryButton)
+        .find((button) => String(button.props.children).includes('VIEW SOURCE EVIDENCE'));
+      sourceEvidenceButton?.props.onPress();
+    });
+
     const content = textContent(renderer);
     expect(content).toContain('EXACT MINT MATCH');
     expect(content).toContain('NO MINT REFERENCE');
     expect(content).toContain('FETCH UNAVAILABLE');
+    expect(content).toContain('IDENTITY PARTIALLY SUPPORTED');
+  });
+
+  it('shows confirmed aggregate conclusion for multiple exact trusted mint matches with no conflicts', () => {
+    const confirmedReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/one',
+              publisher: 'Official One',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint match one',
+            },
+            {
+              url: 'https://docs.example/two',
+              publisher: 'Official Two',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint match two',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={confirmedReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('IDENTITY');
+    expect(content).toContain('Trusted identity confirmed');
+    expect(content).not.toContain('Insufficient evidence');
+    expect(content).toContain('TRUSTED IDENTITY CONFIRMED');
+    expect(content).toContain('Multiple trusted sources reference this exact mint.');
+    expect(content).toContain('TRUSTED SOURCES CHECKED');
+    expect(content).toContain('2');
+    expect(content).toContain('EXACT MINT CONFIRMATIONS');
+    expect(content).toContain('CONFLICTING MINT REFERENCES');
+    expect(content).toContain('0');
+  });
+
+  it('keeps summary and full-analysis identity conclusions aligned for partially supported state', () => {
+    const partialReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/exact',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={partialReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    let content = textContent(renderer);
+    expect(content).toContain('Identity partially supported');
+    expect(content).toContain('One trusted source references this exact mint.');
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
+    });
+
+    content = textContent(renderer);
+    expect(content).toContain('IDENTITY PARTIALLY SUPPORTED');
+  });
+
+  it('keeps summary and full-analysis identity conclusions aligned for unverified state', () => {
+    const unverifiedReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/no-mint',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'NO_RELEVANT_MINT_REFERENCE',
+              referencedRelevantMints: [],
+              evidenceSummary: 'No relevant mint',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={unverifiedReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    let content = textContent(renderer);
+    expect(content).toContain('Identity unverified');
+    expect(content).toContain('No trusted source currently confirms this exact mint.');
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
+    });
+
+    content = textContent(renderer);
+    expect(content).toContain('IDENTITY UNVERIFIED');
+  });
+
+  it('keeps summary and full-analysis identity conclusions aligned for conflicting state', () => {
+    const conflictReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/exact',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint',
+            },
+            {
+              url: 'https://docs.example/conflict',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_MULTIPLE_RELEVANT_MINTS',
+              referencedRelevantMints: ['mint', 'other-mint'],
+              evidenceSummary: 'Multiple relevant mints',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={conflictReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    let content = textContent(renderer);
+    expect(content).toContain('Identity conflict detected');
+    expect(content).toContain('Trusted evidence contains conflicting mint references.');
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
+    });
+
+    content = textContent(renderer);
+    expect(content).toContain('IDENTITY EVIDENCE CONFLICTING');
+  });
+
+  it('uses conservative fallback when provenance data is missing and never shows confirmed in summary or full analysis', () => {
+    const base = report();
+    const noProvenanceReport: TokenAnalysisReport = {
+      ...base,
+      provenance: null,
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={noProvenanceReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    let content = textContent(renderer);
+    expect(content).toContain('Identity unverified');
+    expect(content).not.toContain('Trusted identity confirmed');
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 95 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 480 } } });
+    });
+
+    content = textContent(renderer);
+    expect(content).toContain('IDENTITY UNVERIFIED');
+    expect(content).not.toContain('TRUSTED IDENTITY CONFIRMED');
+  });
+
+  it('treats neutral and unavailable provenance rows as non-conflicting support around exact match', () => {
+    const neutralReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/exact',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint',
+            },
+            {
+              url: 'https://docs.example/neutral',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'NO_RELEVANT_MINT_REFERENCE',
+              referencedRelevantMints: [],
+              evidenceSummary: 'No relevant mint',
+            },
+            {
+              url: 'https://docs.example/unavailable',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'FETCH_UNAVAILABLE',
+              referencedRelevantMints: [],
+              evidenceSummary: 'Fetch unavailable',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={neutralReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 90 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 470 } } });
+    });
+
+    let content = textContent(renderer);
+    expect(content).toContain('IDENTITY PARTIALLY SUPPORTED');
+    expect(content).not.toContain('TRUSTED IDENTITY CONFIRMED');
+    expect(content).toContain('CONFLICTING MINT REFERENCES');
+    expect(content).toContain('0');
+
+    act(() => {
+      const sourceEvidenceButton = renderer.root
+        .findAllByType(PrimaryButton)
+        .find((button) => String(button.props.children).includes('VIEW SOURCE EVIDENCE'));
+      sourceEvidenceButton?.props.onPress();
+    });
+
+    content = textContent(renderer);
+    expect(content).toContain('EXACT MINT MATCH');
+    expect(content).toContain('NO MINT REFERENCE');
+    expect(content).toContain('FETCH UNAVAILABLE');
+  });
+
+  it('never shows confirmed when trusted provenance includes conflicting mint references and keeps source evidence visible', () => {
+    const conflictingReport: TokenAnalysisReport = {
+      ...report(),
+      provenance: {
+        ...report().provenance!,
+        trustedIdentityProvenance: {
+          sources: [
+            {
+              url: 'https://docs.example/exact',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_SCANNED_MINT',
+              referencedRelevantMints: ['mint'],
+              evidenceSummary: 'Exact mint',
+            },
+            {
+              url: 'https://docs.example/conflict',
+              publisher: 'Official',
+              sourceTrust: 'TRUSTED',
+              mintLinkStatus: 'REFERENCES_COMPETING_MINT',
+              referencedRelevantMints: ['other-mint'],
+              evidenceSummary: 'Competing mint',
+            },
+          ],
+          evidence: [],
+          conflicts: [],
+          unknowns: [],
+          analyzedAtUtc: new Date().toISOString(),
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <TokenAnalysisReportCard
+          report={conflictingReport}
+          deterministicError={null}
+          aiStatus="idle"
+          aiError={null}
+          coach={null}
+          onExplainWithAi={vi.fn()}
+          onStartTraining={vi.fn()}
+          onRequestScrollTo={vi.fn()}
+        />,
+      );
+    });
+
+    const buttons = () => renderer.root.findAllByType(PrimaryButton);
+    const layoutWrappers = () => renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutWrappers()[0]?.props.onLayout({ nativeEvent: { layout: { y: 92 } } });
+      buttons()[1].props.onPress();
+      layoutWrappers()[1]?.props.onLayout({ nativeEvent: { layout: { y: 475 } } });
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('IDENTITY EVIDENCE CONFLICTING');
+    expect(content).not.toContain('TRUSTED IDENTITY CONFIRMED');
+    expect(content).toContain('COMPETING MINT REFERENCE');
+    expect(content).toContain('CONFLICTING MINT REFERENCES');
+    expect(content).toContain('1');
+    expect(content).toContain('EXACT MINT MATCH');
   });
 
   it('keeps authority facts aligned between summary and full analysis', () => {
@@ -575,7 +1032,7 @@ describe('TokenAnalysisReportCard', () => {
     const content = textContent(renderer);
     expect(content).toContain('OPTIONAL AI SAFETY COACH');
     expect(content).toContain('EXPLAIN WITH AI');
-    expect(content).toContain('TOKEN IDENTITY');
+    expect(content).not.toContain('TOKEN IDENTITY');
   });
 
   it('shows disabled loading AI button in loading state', () => {
@@ -587,7 +1044,7 @@ describe('TokenAnalysisReportCard', () => {
 
     expect(loadingButton).toBeDefined();
     expect(loadingButton!.props.disabled).toBe(true);
-    expect(textContent(renderer)).toContain('TOKEN IDENTITY');
+    expect(textContent(renderer)).not.toContain('TOKEN IDENTITY');
   });
 
   it('shows non-blocking unavailable AI state with try again and keeps deterministic facts visible', () => {
@@ -599,13 +1056,16 @@ describe('TokenAnalysisReportCard', () => {
     const content = textContent(renderer);
     expect(content).toContain('TRY AGAIN');
     expect(content).toContain('AI explanation is currently unavailable.');
-    expect(content).toContain('TOKEN IDENTITY');
-    expect(content).toContain('MINT AUTHORITY');
+    expect(content).not.toContain('TOKEN IDENTITY');
+    expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+    expect(content).toContain('Mint1111111111111111111111111111111111');
   });
 
-  it('renders AI educational content in ready state while preserving deterministic facts', () => {
+  it('renders AI educational content in ready state while full analysis remains collapsed', () => {
+    const onStartTraining = vi.fn();
     const { renderer } = renderExpandedReportForAiState({
       aiStatus: 'ready',
+      onStartTraining,
       coach: {
         summary: 'Summary for education.',
         riskExplanations: ['Why this matters item'],
@@ -623,6 +1083,56 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('WHY THIS MATTERS');
     expect(content).toContain('WHAT TO CHECK NEXT');
     expect(content).toContain('UNCERTAINTY');
-    expect(content).toContain('TOKEN IDENTITY');
+    expect(content).not.toContain('TOKEN IDENTITY');
+    expect(content).toContain('VIEW FULL ANALYSIS');
+    expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+    expect(content).not.toContain('Recommended training:');
+
+    const practiceButton = renderer.root
+      .findAllByType(PrimaryButton)
+      .find((button) => String(button.props.children).includes('PRACTICE THIS SKILL'));
+
+    expect(practiceButton).toBeDefined();
+
+    act(() => {
+      practiceButton!.props.onPress();
+    });
+
+    expect(onStartTraining).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps deterministic summary visible across AI idle/loading/unavailable/ready states', () => {
+    const states: {
+      status: 'idle' | 'loading' | 'unavailable' | 'ready';
+      aiError?: string | null;
+      coach?: TokenInspectionCoachResponse['coach'];
+    }[] = [
+      { status: 'idle' },
+      { status: 'loading' },
+      { status: 'unavailable', aiError: 'AI explanation is currently unavailable.' },
+      {
+        status: 'ready',
+        coach: {
+          summary: 'Summary for education.',
+          riskExplanations: ['Why this matters item'],
+          whatToCheckNext: ['Check this next'],
+          uncertainty: ['Still uncertain'],
+          recommendedTrainingTopicId: 'token-2022',
+          coachVersion: 2,
+          generatedAtUtc: new Date().toISOString(),
+        },
+      },
+    ];
+
+    states.forEach((entry) => {
+      const { renderer } = renderExpandedReportForAiState({
+        aiStatus: entry.status,
+        aiError: entry.aiError,
+        coach: entry.coach,
+      });
+      const content = textContent(renderer);
+      expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+      expect(content).toContain('Mint1111111111111111111111111111111111');
+    });
   });
 });

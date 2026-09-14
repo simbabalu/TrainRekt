@@ -12,15 +12,17 @@ public sealed class AiSafetyCoachOptions
 
     public int MaxOutputTokens { get; set; } = 700;
 
-    public int MaxSummaryLength { get; set; } = 360;
+    public int MaxSummaryLength { get; set; } = 320;
 
-    public int MaxListItemLength { get; set; } = 220;
+    public int MaxSummarySentences { get; set; } = 2;
 
-    public int MaxRiskExplanations { get; set; } = 4;
+    public int MaxListItemLength { get; set; } = 150;
 
-    public int MaxWhatToCheckNext { get; set; } = 4;
+    public int MaxRiskExplanations { get; set; } = 3;
 
-    public int MaxUncertaintyItems { get; set; } = 4;
+    public int MaxWhatToCheckNext { get; set; } = 2;
+
+    public int MaxUncertaintyItems { get; set; } = 2;
 
     public int MaxReviewSignals { get; set; } = 12;
 

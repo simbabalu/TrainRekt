@@ -29,6 +29,52 @@ public sealed class AiSafetyCoachResponseValidatorTests
         Assert.False(result);
     }
 
+    [Fact]
+    public void TryValidate_MissingSummary_FailsWithSpecificReason()
+    {
+        var validator = CreateValidator();
+        var content = CreateContent() with { Summary = "   " };
+
+        var result = validator.TryValidate(content, out var reason);
+
+        Assert.False(result);
+        Assert.Equal("Summary is missing.", reason);
+    }
+
+    [Fact]
+    public void TryValidate_OverSummaryLength_FailsWithSpecificReason()
+    {
+        var validator = CreateValidator(new AiSafetyCoachOptions
+        {
+            MaxSummaryLength = 240,
+            MaxSummarySentences = 2
+        });
+        var summary = $"{new string('a', 121)}. {new string('b', 121)}.";
+        var content = CreateContent() with { Summary = summary };
+
+        var result = validator.TryValidate(content, out var reason);
+
+        Assert.False(result);
+        Assert.Equal("Summary exceeds max length.", reason);
+    }
+
+    [Fact]
+    public void TryValidate_TwoSentenceSummaryNearPracticalUpperBound_Passes()
+    {
+        var validator = CreateValidator(new AiSafetyCoachOptions
+        {
+            MaxSummaryLength = 320,
+            MaxSummarySentences = 2
+        });
+        var summary = $"{new string('a', 150)}. {new string('b', 149)}.";
+        Assert.True(summary.Length <= 320);
+        var content = CreateContent() with { Summary = summary };
+
+        var result = validator.TryValidate(content, out _);
+
+        Assert.True(result);
+    }
+
     [Theory]
     [InlineData("This token is safe.")]
     [InlineData("This is a scam.")]
@@ -89,6 +135,20 @@ public sealed class AiSafetyCoachResponseValidatorTests
     }
 
     [Fact]
+    public void TryValidate_SummaryWithTooManySentences_Fails()
+    {
+        var validator = CreateValidator();
+        var content = CreateContent() with
+        {
+            Summary = "Authorities are active. Concentration is high. Identity evidence is incomplete."
+        };
+
+        var result = validator.TryValidate(content, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
     public void TryValidate_TooManyItems_Fails()
     {
         var validator = CreateValidator();
@@ -102,9 +162,54 @@ public sealed class AiSafetyCoachResponseValidatorTests
         Assert.False(result);
     }
 
-    private static AiSafetyCoachResponseValidator CreateValidator()
+    [Fact]
+    public void TryValidate_ContextualizedRiskItem_AboveOldLimitWithinNewLimit_Passes()
     {
-        return new AiSafetyCoachResponseValidator(Options.Create(new AiSafetyCoachOptions()));
+        var validator = CreateValidator(new AiSafetyCoachOptions
+        {
+            MaxSummaryLength = 320,
+            MaxSummarySentences = 2,
+            MaxListItemLength = 150,
+            MaxRiskExplanations = 3,
+            MaxWhatToCheckNext = 2,
+            MaxUncertaintyItems = 2
+        });
+
+        var contextualizedRisk = new string('r', 130);
+        Assert.True(contextualizedRisk.Length > 90);
+        Assert.True(contextualizedRisk.Length <= 150);
+        var content = CreateContent() with { RiskExplanations = new[] { contextualizedRisk } };
+
+        var result = validator.TryValidate(content, out _);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void TryValidate_ListItemBeyondNewLimit_Fails()
+    {
+        var validator = CreateValidator(new AiSafetyCoachOptions
+        {
+            MaxSummaryLength = 320,
+            MaxSummarySentences = 2,
+            MaxListItemLength = 150,
+            MaxRiskExplanations = 3,
+            MaxWhatToCheckNext = 2,
+            MaxUncertaintyItems = 2
+        });
+
+        var oversized = new string('x', 151);
+        var content = CreateContent() with { RiskExplanations = new[] { oversized } };
+
+        var result = validator.TryValidate(content, out var reason);
+
+        Assert.False(result);
+        Assert.Equal("List contains invalid or oversized item for riskExplanations.", reason);
+    }
+
+    private static AiSafetyCoachResponseValidator CreateValidator(AiSafetyCoachOptions? options = null)
+    {
+        return new AiSafetyCoachResponseValidator(Options.Create(options ?? new AiSafetyCoachOptions()));
     }
 
     private static AiSafetyCoachContent CreateContent()

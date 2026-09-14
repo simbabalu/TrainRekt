@@ -330,4 +330,95 @@ describe('useTokenAnalysis', () => {
     expect(getController().aiStatus).toBe('unavailable');
     expect(getController().report).not.toBeNull();
   });
+
+  it('clears previous report immediately when a second analysis starts, then shows the new result', async () => {
+    let resolveSecondInspect!: (value: TokenInspectionResponse) => void;
+    const secondInspect = new Promise<TokenInspectionResponse>((resolve) => {
+      resolveSecondInspect = resolve;
+    });
+
+    let inspectCallCount = 0;
+    const service: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockImplementation(async () => {
+        inspectCallCount += 1;
+        if (inspectCallCount === 1) return createInspection();
+        return secondInspect;
+      }),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockResolvedValue(createCoach()),
+    };
+
+    const { getController } = renderHook(service);
+
+    await act(async () => {
+      getController().setMintInput('Mint1111111111111111111111111111111111');
+    });
+
+    await act(async () => {
+      await getController().analyzeToken();
+    });
+
+    expect(getController().deterministicStatus).toBe('ready');
+    expect(getController().report?.mint).toBe('Mint1111111111111111111111111111111111');
+
+    await act(async () => {
+      getController().setMintInput('So11111111111111111111111111111111111111112');
+    });
+
+    let pendingCall!: Promise<void>;
+    act(() => {
+      pendingCall = getController().analyzeToken();
+    });
+
+    expect(getController().deterministicStatus).toBe('loadingInspection');
+    expect(getController().report).toBeNull();
+
+    await act(async () => {
+      resolveSecondInspect({
+        ...createInspection(),
+        identity: {
+          ...createInspection().identity,
+          mint: 'So11111111111111111111111111111111111111112',
+        },
+      });
+      await pendingCall;
+    });
+
+    expect(getController().deterministicStatus).toBe('ready');
+    expect(getController().report?.mint).toBe('So11111111111111111111111111111111111111112');
+  });
+
+  it('keeps previous report cleared when a second analysis fails', async () => {
+    let inspectCallCount = 0;
+    const service: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockImplementation(async () => {
+        inspectCallCount += 1;
+        if (inspectCallCount === 1) return createInspection();
+        throw new Error('second request failed');
+      }),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockResolvedValue(createCoach()),
+    };
+
+    const { getController } = renderHook(service);
+
+    await act(async () => {
+      getController().setMintInput('Mint1111111111111111111111111111111111');
+    });
+    await act(async () => {
+      await getController().analyzeToken();
+    });
+    expect(getController().report).not.toBeNull();
+
+    await act(async () => {
+      getController().setMintInput('So11111111111111111111111111111111111111112');
+    });
+    await act(async () => {
+      await getController().analyzeToken();
+    });
+
+    expect(getController().deterministicStatus).toBe('error');
+    expect(getController().report).toBeNull();
+    expect(getController().deterministicError).toContain('second request failed');
+  });
 });

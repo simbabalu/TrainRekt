@@ -12,10 +12,17 @@ const capturedReportCardProps = vi.hoisted(() => ({
     onRequestScrollTo: (y: number) => void;
   },
 }));
+const capturedInputCardProps = vi.hoisted(() => ({
+  current: null as null | {
+    onAnalyze: () => void;
+    onClear: () => void;
+  },
+}));
 const scrollToMock = vi.hoisted(() => vi.fn());
 
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: pushMock }),
+  useLocalSearchParams: () => ({}),
 }));
 
 vi.mock('@/hooks/useTokenAnalysis', () => ({
@@ -38,7 +45,21 @@ vi.mock('@/components/PageHeading', () => ({
 }));
 
 vi.mock('@/components/token-analysis/TokenAnalysisInputCard', () => ({
-  TokenAnalysisInputCard: () => React.createElement('View', null),
+  TokenAnalysisInputCard: (props: {
+    deterministicStatus: 'idle' | 'validating' | 'loadingInspection' | 'loadingProvenance' | 'ready' | 'error';
+    onAnalyze: () => void;
+    onClear: () => void;
+  }) => {
+    capturedInputCardProps.current = props;
+    const label = props.deterministicStatus === 'loadingInspection'
+      ? 'ANALYZING TOKEN...'
+      : props.deterministicStatus === 'loadingProvenance'
+        ? 'LOADING PROVENANCE...'
+        : props.deterministicStatus === 'validating'
+          ? 'VALIDATING...'
+          : 'ANALYZE TOKEN';
+    return React.createElement('View', null, React.createElement('Text', null, 'INPUT_CARD'), React.createElement('Text', null, label));
+  },
 }));
 
 vi.mock('@/components/token-analysis/TokenAnalysisReportCard', () => ({
@@ -47,8 +68,12 @@ vi.mock('@/components/token-analysis/TokenAnalysisReportCard', () => ({
     onRequestScrollTo: (y: number) => void;
   }) => {
     capturedReportCardProps.current = props;
-    return React.createElement('View', null);
+    return React.createElement('Text', null, 'REPORT_CARD');
   },
+}));
+
+vi.mock('@/components/PrimaryButton', () => ({
+  PrimaryButton: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) => React.createElement('Pressable', { onPress }, React.createElement('Text', null, children)),
 }));
 
 vi.mock('react-native', () => ({
@@ -59,14 +84,74 @@ vi.mock('react-native', () => ({
 }));
 
 describe('Token analysis screen routing', () => {
-  it('routes token-analysis-derived training with explicit source semantics and forwards scroll callback', () => {
-    pushMock.mockReset();
-    scrollToMock.mockReset();
-    useTokenAnalysisMock.mockReturnValue({
+  function createController(overrides: Partial<ReturnType<typeof useTokenAnalysisMock>> = {}) {
+    return {
       mintInput: 'Mint1111111111111111111111111111111111',
       setMintInput: vi.fn(),
-      deterministicStatus: 'ready',
+      deterministicStatus: 'idle',
       aiStatus: 'idle',
+      report: null,
+      coach: null,
+      validationError: null,
+      deterministicError: null,
+      aiError: null,
+      analyzeToken: vi.fn(),
+      explainWithAi: vi.fn(),
+      clearInput: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('initial state shows input and analyze button, without report', () => {
+    const controller = createController({ mintInput: '', deterministicStatus: 'idle', report: null });
+    useTokenAnalysisMock.mockReturnValue(controller);
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TokenAnalysisScreen />);
+    });
+
+    const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
+    expect(text).toContain('INPUT_CARD');
+    expect(text).toContain('ANALYZE TOKEN');
+    expect(text).not.toContain('REPORT_CARD');
+  });
+
+  it('loading state keeps input/loading visible and hides stale report', () => {
+    const controller = createController({
+      deterministicStatus: 'loadingInspection',
+      report: {
+        mint: 'OldMint1111111111111111111111111111111111',
+        inspection: {
+          identity: { mint: 'OldMint1111111111111111111111111111111111', name: 'Old Token', symbol: 'OLD' },
+          authorities: { mintAuthorityRevoked: true, freezeAuthorityRevoked: true, mintAuthority: null, freezeAuthority: null },
+          program: { programId: 'Tokenkeg', programType: 'spl-token' },
+          age: { ageSeconds: 1, isReliable: true, unavailableReason: null },
+          holderConcentration: { topHolderPercentage: 10, top5HoldersPercentage: 20, top10HoldersPercentage: 30, semanticsNote: 'note', unclassifiedTokenAccountConcentration: null },
+          largestTokenAccounts: [],
+          reviewSignals: [],
+          inspectedAtUtc: new Date().toISOString(),
+        },
+        provenance: null,
+        provenanceWarning: null,
+      },
+    });
+    useTokenAnalysisMock.mockReturnValue(controller);
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TokenAnalysisScreen />);
+    });
+
+    const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
+    expect(text).toContain('INPUT_CARD');
+    expect(text).toContain('ANALYZING TOKEN...');
+    expect(text).not.toContain('REPORT_CARD');
+  });
+
+  it('successful analysis shows report-only state with Analyze another token action', () => {
+    const controller = createController({
+      deterministicStatus: 'ready',
       report: {
         mint: 'Mint1111111111111111111111111111111111',
         inspection: {
@@ -82,14 +167,92 @@ describe('Token analysis screen routing', () => {
         provenance: null,
         provenanceWarning: null,
       },
-      coach: null,
-      validationError: null,
-      deterministicError: null,
-      aiError: null,
-      analyzeToken: vi.fn(),
-      explainWithAi: vi.fn(),
-      clearInput: vi.fn(),
     });
+    useTokenAnalysisMock.mockReturnValue(controller);
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TokenAnalysisScreen />);
+    });
+
+    const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
+    expect(text).toContain('REPORT_CARD');
+    expect(text).toContain('ANALYZE ANOTHER TOKEN');
+    expect(text).not.toContain('INPUT_CARD');
+    expect(text).not.toContain('ANALYZE TOKEN');
+  });
+
+  it('Analyze another token clears state and returns to input state on next render', () => {
+    let showResult = true;
+    const clearInput = vi.fn(() => {
+      showResult = false;
+    });
+
+    useTokenAnalysisMock.mockImplementation(() => createController({
+      deterministicStatus: showResult ? 'ready' : 'idle',
+      report: showResult ? {
+        mint: 'Mint1111111111111111111111111111111111',
+        inspection: {
+          identity: { mint: 'Mint1111111111111111111111111111111111', name: 'Token', symbol: 'TOK' },
+          authorities: { mintAuthorityRevoked: true, freezeAuthorityRevoked: true, mintAuthority: null, freezeAuthority: null },
+          program: { programId: 'Tokenkeg', programType: 'spl-token' },
+          age: { ageSeconds: 1, isReliable: true, unavailableReason: null },
+          holderConcentration: { topHolderPercentage: 10, top5HoldersPercentage: 20, top10HoldersPercentage: 30, semanticsNote: 'note', unclassifiedTokenAccountConcentration: null },
+          largestTokenAccounts: [],
+          reviewSignals: [],
+          inspectedAtUtc: new Date().toISOString(),
+        },
+        provenance: null,
+        provenanceWarning: null,
+      } : null,
+      clearInput,
+    }));
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TokenAnalysisScreen />);
+    });
+
+    const actionButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')
+      .find((node) => String(node.props.children?.props?.children ?? '').includes('ANALYZE ANOTHER TOKEN'));
+    expect(actionButton).toBeDefined();
+
+    act(() => {
+      actionButton?.props.onPress();
+    });
+    expect(clearInput).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      renderer.update(<TokenAnalysisScreen />);
+    });
+
+    const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
+    expect(text).toContain('INPUT_CARD');
+    expect(text).toContain('ANALYZE TOKEN');
+    expect(text).not.toContain('REPORT_CARD');
+  });
+
+  it('routes token-analysis-derived training with explicit source semantics and forwards scroll callback', () => {
+    pushMock.mockReset();
+    scrollToMock.mockReset();
+    useTokenAnalysisMock.mockReturnValue(createController({
+      deterministicStatus: 'ready',
+      report: {
+        mint: 'Mint1111111111111111111111111111111111',
+        inspection: {
+          identity: { mint: 'Mint1111111111111111111111111111111111', name: 'Token', symbol: 'TOK' },
+          authorities: { mintAuthorityRevoked: true, freezeAuthorityRevoked: true, mintAuthority: null, freezeAuthority: null },
+          program: { programId: 'Tokenkeg', programType: 'spl-token' },
+          age: { ageSeconds: 1, isReliable: true, unavailableReason: null },
+          holderConcentration: { topHolderPercentage: 10, top5HoldersPercentage: 20, top10HoldersPercentage: 30, semanticsNote: 'note', unclassifiedTokenAccountConcentration: null },
+          largestTokenAccounts: [],
+          reviewSignals: [],
+          inspectedAtUtc: new Date().toISOString(),
+        },
+        provenance: null,
+        provenanceWarning: null,
+      },
+    }));
 
     act(() => {
       create(<TokenAnalysisScreen />);

@@ -79,6 +79,9 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
         var textBlocks = new List<string>();
         if (!TryExtractModelOutputText(responseDocument.RootElement, textBlocks))
         {
+            _logger.LogWarning(
+                "Gemini coach response parsing failed: missing model_output text blocks for model {Model}.",
+                _geminiOptions.Model);
             return new AiSafetyCoachModelResult(
                 false,
                 null,
@@ -89,6 +92,10 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
 
         if (!TryNormalizeStructuredOutput(textBlocks, out var normalized))
         {
+            _logger.LogWarning(
+                "Gemini coach response parsing failed: output was not a valid JSON object for model {Model}. textBlockCount={TextBlockCount}.",
+                _geminiOptions.Model,
+                textBlocks.Count);
             return new AiSafetyCoachModelResult(
                 false,
                 null,
@@ -99,6 +106,9 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
 
         if (!TryParseContent(normalized, out var content))
         {
+            _logger.LogWarning(
+                "Gemini coach response parsing failed: schema violation while extracting coach content for model {Model}.",
+                _geminiOptions.Model);
             return new AiSafetyCoachModelResult(
                 false,
                 null,
@@ -456,6 +466,20 @@ public sealed class GeminiAiSafetyCoach : IAiSafetyCoach
             + "Never state that copying intent, fraud, scam status, originality, or authenticity has been proven. "
             + "Do not classify the token as safe or scam. Do not recommend buy, sell, entry, or exit. Do not predict prices or returns. "
             + "Do not provide transaction, signature, or wallet approval instructions. Explain uncertainty explicitly. "
+            + "Deterministic fields are authoritative facts from TrainRekt inspection. ExternalContext fields are optional lower-trust enrichment and may be incomplete. "
+            + "External context may explain why a deterministic control exists but can never override, neutralize, or negate deterministic findings. "
+            + "Never convert deterministic control findings into safety verdicts, and never treat missing negative information as evidence of safety. "
+            + "If external context is ambiguous, conflicting, or mint-level identity is unconfirmed, disclose that explicitly in uncertainty. "
+            + "When ExternalContext is relevant and high-confidence with mintConfirmed=true, actively synthesize it with deterministic findings instead of listing it separately. "
+            + "Ask: does this context explain why an observed deterministic control or token property might exist. "
+            + "If yes, explicitly connect them using this pattern: external context indicates [asset or issuer context], this may explain [deterministic finding], but [the control and risk still remain]. "
+            + "Do not turn contextual explanation into reassurance; controls such as active mint authority, freeze authority, transfer restrictions, Token-2022 controls, or concentration remain controls even when context suggests operational or compliance rationale. "
+            + "For whatToCheckNext, avoid redundant generic checks. If official issuer or project documentation already exists in ExternalContext evidence, suggest higher-value checks such as confirming the exact analyzed mint in that documentation and reviewing documented authority or compliance control mechanics. "
+            + "For uncertainty, prioritize material uncertainty tied to context interpretation and control operation (for example context does not prove safety, legitimacy, or appropriate control use). De-prioritize generic caveats unless they materially affect the conclusion. "
+            + "Respond concisely for mobile: summary must be at most " + _coachOptions.MaxSummarySentences + " short sentences; riskExplanations must include at most " + _coachOptions.MaxRiskExplanations + " bullets; whatToCheckNext must include at most " + _coachOptions.MaxWhatToCheckNext + " bullets; uncertainty must include at most " + _coachOptions.MaxUncertaintyItems + " bullets. "
+            + "Target 100 to 150 words total across all fields. Avoid filler, repetition, and repeating the same fact across sections. "
+            + "Prioritize facts in this order when relevant: authorities and signer control; concentration and known protocol-account context; token-2022 restrictions and delegates; identity and provenance classification evidence; then remaining deterministic signals. "
+            + "Ground every statement in provided fields only; if evidence is missing, state uncertainty rather than inferring. "
             + "Output only JSON matching the required schema.";
     }
 

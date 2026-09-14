@@ -6,6 +6,8 @@ namespace TrainRekt.Api.Tests;
 
 public sealed class TrustedSourceClassifierTests
 {
+    private const string JupiterMint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+
     [Fact]
     public void Classify_ExactSkrWebsitePath_IsTrustedProjectWebsite()
     {
@@ -161,6 +163,48 @@ public sealed class TrustedSourceClassifierTests
 
         var uri = new Uri("https://raw.githubusercontent.com/solana-mobile/react-native-samples%2Fmalicious/main/skr-staking/program/idl.json");
         var decision = classifier.Classify(entry, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_JupiterLookalikeDomain_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var policies = new TrustedProjectSourcePolicyRegistry();
+        var policy = policies.List().Single(entry => entry.ProjectKey == "jupiter");
+
+        var uri = new Uri("https://jup.ag.evil.example/token");
+        var decision = classifier.Classify(null, policy, uri, uri.Host);
+
+        Assert.False(decision.IsTrusted);
+        Assert.Null(decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_OfficialJupiterDomain_IsTrusted()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var policies = new TrustedProjectSourcePolicyRegistry();
+        var policy = policies.List().Single(entry => entry.ProjectKey == "jupiter");
+
+        var uri = new Uri("https://station.jup.ag/guides/token-list");
+        var decision = classifier.Classify(null, policy, uri, uri.Host);
+
+        Assert.True(decision.IsTrusted);
+        Assert.Equal(ResearchSourceType.OfficialDocumentation, decision.EffectiveType);
+    }
+
+    [Fact]
+    public void Classify_ArbitraryGithubRepositoryContainingJupMint_IsRejected()
+    {
+        var classifier = new TrustedSourceClassifier();
+        var policies = new TrustedProjectSourcePolicyRegistry();
+        var policy = policies.List().Single(entry => entry.ProjectKey == "jupiter");
+
+        var uri = new Uri($"https://github.com/not-jup-org/fake-repo/blob/main/README.md#{JupiterMint}");
+        var decision = classifier.Classify(null, policy, uri, uri.Host);
 
         Assert.False(decision.IsTrusted);
         Assert.Null(decision.EffectiveType);

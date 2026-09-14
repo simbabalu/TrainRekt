@@ -64,6 +64,25 @@ function createReport(overrides: Partial<TokenAnalysisReport['inspection']> = {}
   };
 }
 
+function createReportWithProvenanceSources(
+  sources: NonNullable<NonNullable<TokenAnalysisReport['provenance']>['trustedIdentityProvenance']>['sources'],
+): TokenAnalysisReport {
+  const base = createReport();
+  return {
+    ...base,
+    provenance: {
+      ...base.provenance!,
+      trustedIdentityProvenance: {
+        sources,
+        evidence: [],
+        conflicts: [],
+        unknowns: [],
+        analyzedAtUtc: new Date().toISOString(),
+      },
+    },
+  };
+}
+
 describe('buildTokenAnalysisSummary', () => {
   it('keeps deterministic mint authority state as Active without context inference', () => {
     const summary = buildTokenAnalysisSummary(createReport());
@@ -180,5 +199,89 @@ describe('buildTokenAnalysisSummary', () => {
 
     const ids = summary.findings.map((finding) => finding.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('maps 2+ trusted exact mint matches to confirmed identity in key findings', () => {
+    const summary = buildTokenAnalysisSummary(createReportWithProvenanceSources([
+      { url: 'https://docs.example/one', publisher: 'Official One', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_SCANNED_MINT', referencedRelevantMints: ['mint'], evidenceSummary: 'Exact mint one' },
+      { url: 'https://docs.example/two', publisher: 'Official Two', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_SCANNED_MINT', referencedRelevantMints: ['mint'], evidenceSummary: 'Exact mint two' },
+    ]));
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Trusted identity confirmed',
+      description: 'Multiple trusted sources reference this exact mint.',
+      tone: 'positive',
+    });
+  });
+
+  it('maps one trusted exact match to partially supported identity in key findings', () => {
+    const summary = buildTokenAnalysisSummary(createReportWithProvenanceSources([
+      { url: 'https://docs.example/one', publisher: 'Official One', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_SCANNED_MINT', referencedRelevantMints: ['mint'], evidenceSummary: 'Exact mint one' },
+    ]));
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Identity partially supported',
+      description: 'One trusted source references this exact mint.',
+      tone: 'informational',
+    });
+  });
+
+  it('maps no exact trusted mint evidence to unverified identity in key findings', () => {
+    const summary = buildTokenAnalysisSummary(createReportWithProvenanceSources([
+      { url: 'https://docs.example/no-mint', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'NO_RELEVANT_MINT_REFERENCE', referencedRelevantMints: [], evidenceSummary: 'No relevant mint' },
+      { url: 'https://docs.example/fetch', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'FETCH_UNAVAILABLE', referencedRelevantMints: [], evidenceSummary: 'Fetch unavailable' },
+    ]));
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Identity unverified',
+      description: 'No trusted source currently confirms this exact mint.',
+      tone: 'neutral',
+    });
+  });
+
+  it('maps conflicting trusted mint evidence to conflict state in key findings', () => {
+    const summary = buildTokenAnalysisSummary(createReportWithProvenanceSources([
+      { url: 'https://docs.example/exact', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_SCANNED_MINT', referencedRelevantMints: ['mint'], evidenceSummary: 'Exact mint' },
+      { url: 'https://docs.example/conflict', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_COMPETING_MINT', referencedRelevantMints: ['other'], evidenceSummary: 'Competing mint' },
+    ]));
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Identity conflict detected',
+      description: 'Trusted evidence contains conflicting mint references.',
+      tone: 'review',
+    });
+  });
+
+  it('treats NO_MINT_REFERENCE and FETCH_UNAVAILABLE as neutral in summary identity state', () => {
+    const summary = buildTokenAnalysisSummary(createReportWithProvenanceSources([
+      { url: 'https://docs.example/exact', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'REFERENCES_SCANNED_MINT', referencedRelevantMints: ['mint'], evidenceSummary: 'Exact mint' },
+      { url: 'https://docs.example/no-mint', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'NO_RELEVANT_MINT_REFERENCE', referencedRelevantMints: [], evidenceSummary: 'No relevant mint' },
+      { url: 'https://docs.example/fetch', publisher: 'Official', sourceTrust: 'TRUSTED', mintLinkStatus: 'FETCH_UNAVAILABLE', referencedRelevantMints: [], evidenceSummary: 'Fetch unavailable' },
+    ]));
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Identity partially supported',
+      description: 'One trusted source references this exact mint.',
+    });
+  });
+
+  it('uses conservative fallback when provenance evidence is missing and never shows confirmed', () => {
+    const base = createReport();
+    const summary = buildTokenAnalysisSummary({
+      ...base,
+      provenance: null,
+    });
+
+    const identity = summary.findings.find((finding) => finding.label === 'IDENTITY');
+    expect(identity).toMatchObject({
+      value: 'Identity unverified',
+      description: 'No trusted source currently confirms this exact mint.',
+      tone: 'neutral',
+    });
   });
 });

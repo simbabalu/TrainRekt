@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
             .Validate(options => options.FreshnessHours > 0, "AiSafetyCoach:FreshnessHours must be greater than zero.")
             .Validate(options => options.MaxOutputTokens > 0, "AiSafetyCoach:MaxOutputTokens must be greater than zero.")
             .Validate(options => options.MaxSummaryLength > 0, "AiSafetyCoach:MaxSummaryLength must be greater than zero.")
+            .Validate(options => options.MaxSummarySentences > 0, "AiSafetyCoach:MaxSummarySentences must be greater than zero.")
             .Validate(options => options.MaxListItemLength > 0, "AiSafetyCoach:MaxListItemLength must be greater than zero.")
             .Validate(options => options.MaxRiskExplanations > 0, "AiSafetyCoach:MaxRiskExplanations must be greater than zero.")
             .Validate(options => options.MaxWhatToCheckNext > 0, "AiSafetyCoach:MaxWhatToCheckNext must be greater than zero.")
@@ -70,6 +71,21 @@ public static class ServiceCollectionExtensions
             .Validate(options => options.MaxClaimSummaries > 0, "AiSafetyCoach:MaxClaimSummaries must be greater than zero.")
             .Validate(options => options.MaxProtocolBreakdownItems > 0, "AiSafetyCoach:MaxProtocolBreakdownItems must be greater than zero.")
             .Validate(options => options.MaxSourcesPerClaim > 0, "AiSafetyCoach:MaxSourcesPerClaim must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<TokenExternalContextOptions>()
+            .Bind(configuration.GetSection(TokenExternalContextOptions.SectionName))
+            .Validate(options => options.FreshnessHours > 0, "TokenExternalContext:FreshnessHours must be greater than zero.")
+            .Validate(options => options.TimeoutSeconds > 0, "TokenExternalContext:TimeoutSeconds must be greater than zero.")
+            .Validate(options => options.MaxOutputTokens > 0, "TokenExternalContext:MaxOutputTokens must be greater than zero.")
+            .Validate(options => options.MaxSummaryLength > 0, "TokenExternalContext:MaxSummaryLength must be greater than zero.")
+            .Validate(options => options.MaxProjectNameLength > 0, "TokenExternalContext:MaxProjectNameLength must be greater than zero.")
+            .Validate(options => options.MaxEvidenceItems > 0, "TokenExternalContext:MaxEvidenceItems must be greater than zero.")
+            .Validate(options => options.MaxEvidenceClaimLength > 0, "TokenExternalContext:MaxEvidenceClaimLength must be greater than zero.")
+            .Validate(options => options.MaxEvidenceTitleLength > 0, "TokenExternalContext:MaxEvidenceTitleLength must be greater than zero.")
+            .Validate(options => options.MaxKnownOfficialUrls > 0, "TokenExternalContext:MaxKnownOfficialUrls must be greater than zero.")
+            .Validate(options => options.MaxCacheEntries > 0, "TokenExternalContext:MaxCacheEntries must be greater than zero.")
             .ValidateOnStart();
 
         services
@@ -207,6 +223,8 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ITokenInspectionDeterministicService, TokenInspectionService>();
         services.AddSingleton<TokenIdentityNormalizer>();
+        services.AddSingleton<ITrustedProjectSourcePolicyRegistry, TrustedProjectSourcePolicyRegistry>();
+        services.AddScoped<ITrustedProjectPolicyResolver, DeterministicTrustedProjectPolicyResolver>();
         services.AddScoped<IdentitySourceCandidateExtractor>();
         services.AddScoped<IOnChainChronologyService, OnChainChronologyService>();
         services.AddScoped<ITrustedIdentityProvenanceService, TrustedIdentityProvenanceService>();
@@ -214,6 +232,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenIdentityProvenanceService, TokenIdentityProvenanceService>();
         services.AddScoped<AiSafetyCoachInputFactory>();
         services.AddScoped<AiSafetyCoachResponseValidator>();
+        services.AddSingleton<ITokenExternalContextResearchService, TokenExternalContextResearchService>();
         services.AddScoped<ITokenInspectionCoachService, TokenInspectionCoachService>();
         services.AddScoped<ITokenResearchOrchestrator, TokenResearchOrchestrator>();
         services.AddScoped<IResearchTrustAssessor, ProductionResearchTrustAssessor>();
@@ -247,6 +266,19 @@ public static class ServiceCollectionExtensions
             // Request payloads and headers may contain sensitive metadata; suppress automatic logging.
             .RemoveAllLoggers();
         services.AddHttpClient<IAiSafetyCoach, GeminiAiSafetyCoach>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
+                client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.None
+            })
+            // Request payloads and headers may contain sensitive metadata; suppress automatic logging.
+            .RemoveAllLoggers();
+        services.AddHttpClient<ITokenExternalContextProvider, GeminiTokenExternalContextProvider>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
                 client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);

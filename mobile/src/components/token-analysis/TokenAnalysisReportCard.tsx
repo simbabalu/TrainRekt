@@ -16,21 +16,18 @@ import {
 } from '@/domain/token-analysis/tokenAnalysisAuthorityContext';
 import { recommendTokenAnalysisTraining } from '@/domain/token-analysis/recommendTokenAnalysisTraining';
 import {
+  buildTrustedIdentityConclusion,
   buildProvenanceSourcePresentation,
   buildReviewSignalPresentation,
 } from '@/domain/token-analysis/tokenAnalysisFullAnalysisPresentation';
 import {
   mapCoachTopicToTrainingCta,
-  presentChronologyCoverage,
-  presentChronologyLabel,
   presentClassificationConfidence,
   presentIdentityClassification,
   presentIdentityEvidence,
-  presentIdentityLimitation,
 } from '@/domain/token-analysis/tokenAnalysisPresentation';
 import type { TokenAnalysisAiStatus, TokenAnalysisReport, TokenInspectionCoachResponse } from '@/types/tokenAnalysis';
 import type { WalletTrainingTopic } from '@/types/walletTraining';
-import { getWalletTrainingTopicLabel } from '@/domain/wallet/recommendWalletTraining';
 
 interface TokenAnalysisReportCardProps {
   report: TokenAnalysisReport;
@@ -74,7 +71,9 @@ export function TokenAnalysisReportCard({
 }: TokenAnalysisReportCardProps) {
   const reportKey = `${report.mint}:${report.inspection.inspectedAtUtc}`;
   const [expandedReportKey, setExpandedReportKey] = useState<string | null>(null);
+  const [expandedSourceEvidenceKey, setExpandedSourceEvidenceKey] = useState<string | null>(null);
   const showFullAnalysis = expandedReportKey === reportKey;
+  const showSourceEvidence = expandedSourceEvidenceKey === reportKey;
   const summaryTopYRef = useRef(0);
   const pendingOpenScrollRef = useRef(false);
   const classification = report.provenance?.identityClassification;
@@ -85,6 +84,8 @@ export function TokenAnalysisReportCard({
   const tokenomicsDescription = presentTokenomicsContextDescription(report);
   const reviewItems = buildReviewSignalPresentation(report);
   const provenanceItems = buildProvenanceSourcePresentation(report);
+  const trustedIdentityConclusion = buildTrustedIdentityConclusion(report);
+  const hasConflictingMintEvidence = trustedIdentityConclusion.conflictingMintReferences > 0;
   const protocolAccounts = report.inspection.largestTokenAccounts.slice(0, 5).filter((account) => account.classification.protocol);
   const unclassifiedAccounts = report.inspection.largestTokenAccounts.slice(0, 5).filter((account) => !account.classification.protocol);
 
@@ -114,6 +115,17 @@ export function TokenAnalysisReportCard({
     setExpandedReportKey(reportKey);
   }
 
+  function handleToggleSourceEvidence() {
+    setExpandedSourceEvidenceKey((current) => (current === reportKey ? null : reportKey));
+  }
+
+  function conclusionTone(): 'positive' | 'review' | 'informational' | 'neutral' {
+    if (trustedIdentityConclusion.state === 'confirmed') return 'positive';
+    if (trustedIdentityConclusion.state === 'conflicting') return 'review';
+    if (trustedIdentityConclusion.state === 'partially-supported') return 'informational';
+    return 'neutral';
+  }
+
   function handleUnderstandSignals() {
     if (summaryTraining) {
       onStartTraining(summaryTraining.topic, summaryTraining.exerciseId);
@@ -133,6 +145,40 @@ export function TokenAnalysisReportCard({
           onUnderstandSignals={handleUnderstandSignals}
         />
       </View>
+      <SectionCard>
+        <AnalysisSectionHeader icon="coach" title="OPTIONAL AI SAFETY COACH" />
+        <Text style={styles.muted}>AI explains verified TrainRekt findings. It does not determine token safety.</Text>
+        {aiStatus === 'idle' && (
+          <PrimaryButton onPress={onExplainWithAi} variant="secondary">EXPLAIN WITH AI</PrimaryButton>
+        )}
+        {aiStatus === 'loading' && (
+          <PrimaryButton onPress={() => undefined} disabled variant="secondary">LOADING AI EXPLANATION...</PrimaryButton>
+        )}
+        {aiStatus === 'unavailable' && (
+          <>
+            <Text style={styles.error}>{aiError ?? 'AI explanation is currently unavailable.'}</Text>
+            <PrimaryButton onPress={onExplainWithAi} variant="secondary">TRY AGAIN</PrimaryButton>
+          </>
+        )}
+        {aiStatus === 'ready' && coach && (
+          <View style={styles.rowBlock}>
+            <AnalysisFactRow label="SUMMARY" value={coach.summary} />
+            <Text style={styles.sectionCaption}>WHY THIS MATTERS</Text>
+            {coach.riskExplanations.map((item, index) => <Text key={`coach-risk:${item}:${index}`} style={styles.body}>- {item}</Text>)}
+            <Text style={styles.sectionCaption}>WHAT TO CHECK NEXT</Text>
+            {coach.whatToCheckNext.map((item, index) => <Text key={`coach-next:${item}:${index}`} style={styles.body}>- {item}</Text>)}
+            <Text style={styles.sectionCaption}>UNCERTAINTY</Text>
+            {coach.uncertainty.map((item, index) => <Text key={`coach-uncertainty:${item}:${index}`} style={styles.body}>- {item}</Text>)}
+            {coachTraining ? (
+              <>
+                <PrimaryButton onPress={() => onStartTraining(coachTraining.topic, coachTraining.exerciseId)}>
+                  PRACTICE THIS SKILL
+                </PrimaryButton>
+              </>
+            ) : null}
+          </View>
+        )}
+      </SectionCard>
       {showFullAnalysis ? <View onLayout={handleFullAnalysisLayout}>
         {deterministicError ? (
           <SectionCard>
@@ -260,72 +306,31 @@ export function TokenAnalysisReportCard({
         </SectionCard>
 
         <SectionCard>
-          <AnalysisSectionHeader icon="chronology" title="CHRONOLOGY" />
-          {report.provenance?.onChainChronology ? (
-            <>
-              <AnalysisFactRow label={presentChronologyLabel(report.provenance.onChainChronology.accountCreationProven).toUpperCase()} value={formatDate(report.provenance.onChainChronology.earliestObservedBlockTimeUtc)} />
-              <AnalysisFactRow label="SLOT" value={String(report.provenance.onChainChronology.earliestObservedSlot ?? 'Unavailable')} />
-              <AnalysisFactRow label="COVERAGE" value={report.provenance.onChainChronology.historyCoverage} description={presentChronologyCoverage(report.provenance.onChainChronology.historyCoverage)} />
-              <AnalysisFactRow label="CONFIDENCE" value={report.provenance.onChainChronology.confidence} />
-            </>
-          ) : (
-            <Text style={styles.muted}>Chronology data is unavailable.</Text>
-          )}
-        </SectionCard>
-
-        <SectionCard>
-          <AnalysisSectionHeader icon="limitations" title="LIMITATIONS" />
-          {report.provenanceWarning ? <Text style={styles.warning}>{report.provenanceWarning}</Text> : null}
-          {classification?.limitations?.length ? classification.limitations.map((item, index) => (
-            <AnalysisFactRow key={`limitation:${item}:${index}`} label="LIMITATION" value={presentIdentityLimitation(item)} />
-          )) : <Text style={styles.muted}>No explicit limitations reported.</Text>}
-        </SectionCard>
-
-        <SectionCard>
           <AnalysisSectionHeader icon="provenance" title="TRUSTED IDENTITY PROVENANCE" />
-          <Text style={styles.muted}>Source rows show mint-reference outcomes. Trust-policy category is shown separately and does not imply token legitimacy.</Text>
+          <Text style={styles.muted}>Identity confirmation means trusted sources associate this mint with the claimed token. It is not a safety or profitability verdict.</Text>
           <View style={styles.rowBlock}>
-            {provenanceItems.length ? provenanceItems.map((source) => (
+            <View style={styles.badgeRow}>
+              <AnalysisStatusBadge label={trustedIdentityConclusion.title} tone={conclusionTone()} />
+            </View>
+            <Text style={styles.body}>{trustedIdentityConclusion.summary}</Text>
+            <AnalysisFactRow label="TRUSTED SOURCES CHECKED" value={String(trustedIdentityConclusion.trustedSourcesChecked)} />
+            <AnalysisFactRow label="EXACT MINT CONFIRMATIONS" value={String(trustedIdentityConclusion.exactMintConfirmations)} />
+            <AnalysisFactRow label="CONFLICTING MINT REFERENCES" value={String(trustedIdentityConclusion.conflictingMintReferences)} valueTone={hasConflictingMintEvidence ? 'warning' : undefined} />
+            {report.provenanceWarning ? <Text style={styles.warning}>{report.provenanceWarning}</Text> : null}
+          </View>
+          {provenanceItems.length === 0 ? <Text style={styles.muted}>No trusted identity sources were returned.</Text> : null}
+          {provenanceItems.length > 0 && !hasConflictingMintEvidence ? (
+            <PrimaryButton onPress={handleToggleSourceEvidence} variant="secondary">
+              {showSourceEvidence ? 'HIDE SOURCE EVIDENCE' : 'VIEW SOURCE EVIDENCE'}
+            </PrimaryButton>
+          ) : null}
+          <View style={styles.rowBlock}>
+            {(hasConflictingMintEvidence || showSourceEvidence) ? provenanceItems.map((source) => (
               <ProvenanceSourceRow key={source.id} source={source} />
-            )) : <Text style={styles.muted}>No trusted identity sources were returned.</Text>}
+            )) : null}
           </View>
         </SectionCard>
 
-        <SectionCard>
-          <AnalysisSectionHeader icon="coach" title="OPTIONAL AI SAFETY COACH" />
-          <Text style={styles.muted}>AI explains verified TrainRekt findings. It does not determine token safety.</Text>
-          {aiStatus === 'idle' && (
-            <PrimaryButton onPress={onExplainWithAi} variant="secondary">EXPLAIN WITH AI</PrimaryButton>
-          )}
-          {aiStatus === 'loading' && (
-            <PrimaryButton onPress={() => undefined} disabled variant="secondary">LOADING AI EXPLANATION...</PrimaryButton>
-          )}
-          {aiStatus === 'unavailable' && (
-            <>
-              <Text style={styles.error}>{aiError ?? 'AI explanation is currently unavailable.'}</Text>
-              <PrimaryButton onPress={onExplainWithAi} variant="secondary">TRY AGAIN</PrimaryButton>
-            </>
-          )}
-          {aiStatus === 'ready' && coach && (
-            <View style={styles.rowBlock}>
-              <AnalysisFactRow label="SUMMARY" value={coach.summary} />
-              <Text style={styles.sectionCaption}>WHY THIS MATTERS</Text>
-              {coach.riskExplanations.map((item, index) => <Text key={`coach-risk:${item}:${index}`} style={styles.body}>- {item}</Text>)}
-              <Text style={styles.sectionCaption}>WHAT TO CHECK NEXT</Text>
-              {coach.whatToCheckNext.map((item, index) => <Text key={`coach-next:${item}:${index}`} style={styles.body}>- {item}</Text>)}
-              <Text style={styles.sectionCaption}>UNCERTAINTY</Text>
-              {coach.uncertainty.map((item, index) => <Text key={`coach-uncertainty:${item}:${index}`} style={styles.body}>- {item}</Text>)}
-              {coachTraining ? (
-                <>
-                  <Text style={styles.muted}>Recommended training: {getWalletTrainingTopicLabel(coachTraining.topic)}</Text>
-                  <PrimaryButton onPress={() => onStartTraining(coachTraining.topic, coachTraining.exerciseId)}>
-                    PRACTICE THIS SKILL
-                  </PrimaryButton>
-                </>
-              ) : null}
-            </View>
-          )}
-        </SectionCard>
       </View> : null}
     </View>
   );

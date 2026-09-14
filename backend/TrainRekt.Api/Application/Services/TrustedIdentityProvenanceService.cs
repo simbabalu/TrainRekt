@@ -14,6 +14,7 @@ namespace TrainRekt.Api.Application.Services;
 public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanceService
 {
     private readonly IdentitySourceCandidateExtractor _candidateExtractor;
+    private readonly ITrustedProjectPolicyResolver _projectPolicyResolver;
     private readonly ISafeResearchSourceClient _safeSourceClient;
     private readonly ITokenIdentitySourceVerificationSnapshotRepository _snapshotRepository;
     private readonly ITrustedMintSourceRegistry _trustedRegistry;
@@ -26,6 +27,7 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
 
     public TrustedIdentityProvenanceService(
         IdentitySourceCandidateExtractor candidateExtractor,
+        ITrustedProjectPolicyResolver projectPolicyResolver,
         ISafeResearchSourceClient safeSourceClient,
         ITokenIdentitySourceVerificationSnapshotRepository snapshotRepository,
         ITrustedMintSourceRegistry trustedRegistry,
@@ -37,6 +39,7 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
         ILogger<TrustedIdentityProvenanceService> logger)
     {
         _candidateExtractor = candidateExtractor;
+        _projectPolicyResolver = projectPolicyResolver;
         _safeSourceClient = safeSourceClient;
         _snapshotRepository = snapshotRepository;
         _trustedRegistry = trustedRegistry;
@@ -63,11 +66,13 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
 
         var relevantMints = BuildRelevantMints(normalizedScannedMint, request.Collisions, _options.MaxCompetingMints);
         var relevantMintSetFingerprint = CreateRelevantMintSetFingerprint(relevantMints);
+        var resolvedProjectPolicy = _projectPolicyResolver.Resolve(request.ScannedMint, request.ScannedMetadataUri);
 
         var candidates = _candidateExtractor.Extract(
             normalizedScannedMint,
             request.ScannedMetadataUri,
-            _options.MaxSources);
+            _options.MaxSources,
+            resolvedProjectPolicy);
 
         if (candidates.Count == 0)
         {
@@ -131,6 +136,7 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
                     normalizedScannedMint,
                     relevantMints,
                     registryEntry,
+                    resolvedProjectPolicy,
                     cancellationToken);
 
             sources.Add(evaluated.Source);
@@ -215,6 +221,7 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
         string normalizedScannedMint,
         IReadOnlyList<string> relevantMints,
         TrustedMintSourceRegistryEntry? registryEntry,
+        TrustedProjectSourcePolicy? projectPolicy,
         CancellationToken cancellationToken)
     {
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -297,7 +304,7 @@ public sealed class TrustedIdentityProvenanceService : ITrustedIdentityProvenanc
                 new[] { TrustedIdentityProvenanceUnknown.SourceFetchPartial });
         }
 
-        var trustDecision = _trustedSourceClassifier.Classify(registryEntry, fetchResult.FinalUri, fetchResult.NormalizedHost);
+        var trustDecision = _trustedSourceClassifier.Classify(registryEntry, projectPolicy, fetchResult.FinalUri, fetchResult.NormalizedHost);
         var sourceTrust = trustDecision.IsTrusted ? IdentitySourceTrust.Trusted : candidate.InitialTrust;
 
         var referencedRelevantMints = _mintMatcher.FindRelevantMintReferences(

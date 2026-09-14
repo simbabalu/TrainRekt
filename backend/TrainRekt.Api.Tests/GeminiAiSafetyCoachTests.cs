@@ -53,6 +53,111 @@ public sealed class GeminiAiSafetyCoachTests
     }
 
     [Fact]
+    public async Task GenerateAsync_RequestIncludesCompactnessAndPrioritizationInstructions()
+    {
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+
+            var instruction = root.GetProperty("system_instruction").GetString() ?? string.Empty;
+            Assert.Contains("Respond concisely for mobile", instruction, StringComparison.Ordinal);
+            Assert.Contains("summary must be at most 2 short sentences", instruction, StringComparison.Ordinal);
+            Assert.Contains("riskExplanations must include at most 3 bullets", instruction, StringComparison.Ordinal);
+            Assert.Contains("whatToCheckNext must include at most 2 bullets", instruction, StringComparison.Ordinal);
+            Assert.Contains("uncertainty must include at most 2 bullets", instruction, StringComparison.Ordinal);
+            Assert.Contains("Target 100 to 150 words total", instruction, StringComparison.Ordinal);
+            Assert.Contains("authorities and signer control", instruction, StringComparison.Ordinal);
+            Assert.Contains("token-2022 restrictions and delegates", instruction, StringComparison.Ordinal);
+            Assert.Contains("Ground every statement in provided fields only", instruction, StringComparison.Ordinal);
+            Assert.Contains("ExternalContext fields are optional lower-trust enrichment", instruction, StringComparison.Ordinal);
+            Assert.Contains("can never override, neutralize, or negate deterministic findings", instruction, StringComparison.Ordinal);
+            Assert.Contains("never treat missing negative information as evidence of safety", instruction, StringComparison.Ordinal);
+
+            var schema = root
+                .GetProperty("response_format")
+                .GetProperty("schema")
+                .GetProperty("properties");
+
+            Assert.Equal(320, schema.GetProperty("summary").GetProperty("maxLength").GetInt32());
+            Assert.Equal(3, schema.GetProperty("riskExplanations").GetProperty("maxItems").GetInt32());
+            Assert.Equal(2, schema.GetProperty("whatToCheckNext").GetProperty("maxItems").GetInt32());
+            Assert.Equal(2, schema.GetProperty("uncertainty").GetProperty("maxItems").GetInt32());
+
+            const string payload = "{" +
+                "\"steps\":[{" +
+                "\"type\":\"model_output\"," +
+                "\"content\":[{" +
+                "\"type\":\"text\"," +
+                "\"text\":\"{\\\"summary\\\":\\\"summary\\\",\\\"riskExplanations\\\":[\\\"risk\\\"],\\\"whatToCheckNext\\\":[\\\"check\\\"],\\\"uncertainty\\\":[\\\"unknown\\\"],\\\"recommendedTrainingTopicId\\\":null}\"" +
+                "}]" +
+                "}]}";
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var coach = CreateCoach(handler);
+        var result = await coach.GenerateAsync(CreateInput(), CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithHighConfidenceTokenizedStockContext_InstructionsRequireContextualizedControlRiskSynthesis()
+    {
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+
+            var instruction = root.GetProperty("system_instruction").GetString() ?? string.Empty;
+            Assert.Contains("actively synthesize it with deterministic findings", instruction, StringComparison.Ordinal);
+            Assert.Contains("does this context explain why an observed deterministic control", instruction, StringComparison.Ordinal);
+            Assert.Contains("this may explain [deterministic finding], but [the control and risk still remain]", instruction, StringComparison.Ordinal);
+            Assert.Contains("Do not turn contextual explanation into reassurance", instruction, StringComparison.Ordinal);
+            Assert.Contains("remain controls even when context suggests operational or compliance rationale", instruction, StringComparison.Ordinal);
+            Assert.Contains("avoid redundant generic checks", instruction, StringComparison.Ordinal);
+            Assert.Contains("confirming the exact analyzed mint", instruction, StringComparison.Ordinal);
+            Assert.Contains("prioritize material uncertainty tied to context interpretation", instruction, StringComparison.Ordinal);
+
+            var input = root.GetProperty("input").GetString() ?? string.Empty;
+            Assert.Contains("\"externalContext\"", input, StringComparison.Ordinal);
+            Assert.Contains("\"assetType\":\"TOKENIZED_STOCK\"", input, StringComparison.Ordinal);
+            Assert.Contains("\"projectName\":\"Backed Assets\"", input, StringComparison.Ordinal);
+            Assert.Contains("\"mintConfirmed\":true", input, StringComparison.Ordinal);
+            Assert.Contains("\"confidence\":\"HIGH\"", input, StringComparison.Ordinal);
+
+            const string payload = "{" +
+                "\"steps\":[{" +
+                "\"type\":\"model_output\"," +
+                "\"content\":[{" +
+                "\"type\":\"text\"," +
+                "\"text\":\"{\\\"summary\\\":\\\"summary\\\",\\\"riskExplanations\\\":[\\\"risk\\\"],\\\"whatToCheckNext\\\":[\\\"check\\\"],\\\"uncertainty\\\":[\\\"unknown\\\"],\\\"recommendedTrainingTopicId\\\":null}\"" +
+                "}]" +
+                "}]}";
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var coach = CreateCoach(handler);
+        var result = await coach.GenerateAsync(CreateInputWithTokenizedStockExternalContext(), CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
     public async Task GenerateAsync_ExtraFieldInOutput_FailsClosed()
     {
         var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -240,6 +345,40 @@ public sealed class GeminiAiSafetyCoachTests
             ReviewSignals: Array.Empty<AiSafetyCoachReviewSignalInput>(),
             TrustedClaimSummaries: Array.Empty<AiSafetyCoachClaimSummaryInput>(),
             UncertaintyMarkers: Array.Empty<string>());
+    }
+
+    private static AiSafetyCoachInput CreateInputWithTokenizedStockExternalContext()
+    {
+        return new AiSafetyCoachInput(
+            TokenName: "STRCx",
+            TokenSymbol: "STRCX",
+            TokenProgram: "token-2022",
+            Age: new AiSafetyCoachAgeInput(null, false, "unknown"),
+            Authorities: new AiSafetyCoachAuthorityInput(false, false),
+            Concentration: new AiSafetyCoachConcentrationInput(75.44m, 88.0m, 92.0m, "Top holder concentration is high.", null, 80m, 75.44m, 88.0m, "Unknown concentration remains material."),
+            ProtocolBreakdown: Array.Empty<AiSafetyCoachProtocolBreakdownItem>(),
+            DeterministicStatus: "deterministic-only",
+            ReviewSignals: Array.Empty<AiSafetyCoachReviewSignalInput>(),
+            TrustedClaimSummaries: Array.Empty<AiSafetyCoachClaimSummaryInput>(),
+            UncertaintyMarkers: Array.Empty<string>(),
+            Identity: null,
+            ExternalContext: new AiSafetyCoachExternalContextInput(
+                Availability: "AVAILABLE",
+                AssetType: "TOKENIZED_STOCK",
+                ProjectName: "Backed Assets",
+                Summary: "Issuer documentation identifies this mint as a tokenized equity product.",
+                Confidence: "HIGH",
+                MintConfirmed: true,
+                AmbiguousIdentity: false,
+                Evidence: new[]
+                {
+                    new AiSafetyCoachExternalContextEvidenceInput(
+                        SourceType: "OFFICIALISSUERDOCUMENTATION",
+                        Title: "Backed issuer documentation",
+                        Domain: "backed.fi",
+                        Claim: "The exact analyzed mint is listed in issuer documentation.",
+                        Url: "https://backed.fi")
+                }));
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

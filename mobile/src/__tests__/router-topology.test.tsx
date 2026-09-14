@@ -41,6 +41,10 @@ vi.mock('@/components/app-tabs', () => ({
   },
 }));
 
+vi.mock('@/components/share/ShareIntentCoordinator', () => ({
+  ShareIntentCoordinator: () => null,
+}));
+
 vi.mock('@/context/WalletContext', () => ({
   WalletProvider: walletProviderMock,
 }));

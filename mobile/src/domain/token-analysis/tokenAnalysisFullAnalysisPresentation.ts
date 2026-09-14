@@ -23,6 +23,17 @@ export interface FullAnalysisProvenanceSourceItem {
   tone: FullAnalysisTone;
 }
 
+export type TrustedIdentityConclusionState = 'confirmed' | 'partially-supported' | 'unverified' | 'conflicting';
+
+export interface TrustedIdentityConclusionPresentation {
+  state: TrustedIdentityConclusionState;
+  title: string;
+  summary: string;
+  trustedSourcesChecked: number;
+  exactMintConfirmations: number;
+  conflictingMintReferences: number;
+}
+
 function signalTone(signal: TokenInspectionReviewSignal): FullAnalysisTone {
   const severity = signal.severity.toUpperCase();
   if (severity === 'HIGH' || severity === 'MEDIUM') return 'review';
@@ -44,15 +55,76 @@ function mintReferenceTone(status: string): FullAnalysisTone {
   switch (status) {
     case 'REFERENCES_SCANNED_MINT':
       return 'positive';
-    case 'FETCH_UNAVAILABLE':
     case 'REFERENCES_COMPETING_MINT':
     case 'REFERENCES_MULTIPLE_RELEVANT_MINTS':
       return 'review';
+    case 'FETCH_UNAVAILABLE':
     case 'NO_RELEVANT_MINT_REFERENCE':
       return 'neutral';
     default:
       return 'informational';
   }
+}
+
+function isTrustedSource(sourceTrust: string): boolean {
+  return sourceTrust === 'TRUSTED';
+}
+
+function isExactMintReference(status: string): boolean {
+  return status === 'REFERENCES_SCANNED_MINT';
+}
+
+function isConflictingMintReference(status: string): boolean {
+  return status === 'REFERENCES_COMPETING_MINT' || status === 'REFERENCES_MULTIPLE_RELEVANT_MINTS';
+}
+
+export function buildTrustedIdentityConclusion(report: TokenAnalysisReport): TrustedIdentityConclusionPresentation {
+  const sources = report.provenance?.trustedIdentityProvenance?.sources ?? [];
+  const trustedSources = sources.filter((source) => isTrustedSource(source.sourceTrust));
+  const exactMintConfirmations = trustedSources.filter((source) => isExactMintReference(source.mintLinkStatus)).length;
+  const conflictingMintReferences = trustedSources.filter((source) => isConflictingMintReference(source.mintLinkStatus)).length;
+
+  if (conflictingMintReferences > 0) {
+    return {
+      state: 'conflicting',
+      title: 'IDENTITY EVIDENCE CONFLICTING',
+      summary: 'Trusted sources include conflicting mint references for this identity.',
+      trustedSourcesChecked: trustedSources.length,
+      exactMintConfirmations,
+      conflictingMintReferences,
+    };
+  }
+
+  if (exactMintConfirmations >= 2) {
+    return {
+      state: 'confirmed',
+      title: 'TRUSTED IDENTITY CONFIRMED',
+      summary: 'Multiple trusted sources reference this exact mint.',
+      trustedSourcesChecked: trustedSources.length,
+      exactMintConfirmations,
+      conflictingMintReferences,
+    };
+  }
+
+  if (exactMintConfirmations === 1) {
+    return {
+      state: 'partially-supported',
+      title: 'IDENTITY PARTIALLY SUPPORTED',
+      summary: 'One trusted source references this exact mint, but confirmation remains limited.',
+      trustedSourcesChecked: trustedSources.length,
+      exactMintConfirmations,
+      conflictingMintReferences,
+    };
+  }
+
+  return {
+    state: 'unverified',
+    title: 'IDENTITY UNVERIFIED',
+    summary: 'Trusted sources did not provide exact mint confirmation for this token identity.',
+    trustedSourcesChecked: trustedSources.length,
+    exactMintConfirmations,
+    conflictingMintReferences,
+  };
 }
 
 function mintReferenceResult(status: string): string {

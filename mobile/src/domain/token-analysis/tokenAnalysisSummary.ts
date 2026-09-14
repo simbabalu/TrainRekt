@@ -1,4 +1,4 @@
-import { presentIdentityClassification } from '@/domain/token-analysis/tokenAnalysisPresentation';
+import { buildTrustedIdentityConclusion } from '@/domain/token-analysis/tokenAnalysisFullAnalysisPresentation';
 import {
   presentMintAuthorityContextLine,
   presentTokenomicsContextDescription,
@@ -72,18 +72,46 @@ function tokenomicsSignal(report: TokenAnalysisReport): TokenAnalysisSignal | nu
 }
 
 function identitySignal(report: TokenAnalysisReport): TokenAnalysisSignal | null {
-  const classification = report.provenance?.identityClassification;
-  if (!classification) return null;
+  const conclusion = buildTrustedIdentityConclusion(report);
 
-  switch (classification.classification) {
-    case 'NO_COLLISION_EVIDENCE':
-      return { id: 'identity', icon: 'identity', label: 'IDENTITY', value: 'Not verified', description: 'No comparison identity found', tone: 'review' };
-    case 'COLLISION_DETECTED':
-    case 'POSSIBLE_COPYCAT':
-    case 'IDENTITY_CONFLICT':
-      return { id: 'identity', icon: 'identity', label: 'IDENTITY', value: 'Needs review', description: presentIdentityClassification(classification.classification).title, tone: 'review' };
+  switch (conclusion.state) {
+    case 'confirmed':
+      return {
+        id: 'identity',
+        icon: 'identity',
+        label: 'IDENTITY',
+        value: 'Trusted identity confirmed',
+        description: 'Multiple trusted sources reference this exact mint.',
+        tone: 'positive',
+      };
+    case 'partially-supported':
+      return {
+        id: 'identity',
+        icon: 'identity',
+        label: 'IDENTITY',
+        value: 'Identity partially supported',
+        description: 'One trusted source references this exact mint.',
+        tone: 'informational',
+      };
+    case 'conflicting':
+      return {
+        id: 'identity',
+        icon: 'identity',
+        label: 'IDENTITY',
+        value: 'Identity conflict detected',
+        description: 'Trusted evidence contains conflicting mint references.',
+        tone: 'review',
+      };
+    case 'unverified':
     default:
-      return { id: 'identity', icon: 'identity', label: 'IDENTITY', value: 'Insufficient evidence', description: 'Identity comparison is limited', tone: 'neutral' };
+      return {
+        id: 'identity',
+        icon: 'identity',
+        label: 'IDENTITY',
+        value: 'Identity unverified',
+        description: 'No trusted source currently confirms this exact mint.',
+        tone: 'neutral',
+      };
   }
 }
 

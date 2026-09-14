@@ -11,17 +11,18 @@ public sealed record IdentitySourceCandidate(
 
 public sealed class IdentitySourceCandidateExtractor
 {
-    private readonly ITrustedMintSourceRegistry _registry;
+    private readonly ITrustedMintSourceRegistry _mintRegistry;
 
     public IdentitySourceCandidateExtractor(ITrustedMintSourceRegistry registry)
     {
-        _registry = registry;
+        _mintRegistry = registry;
     }
 
     public IReadOnlyList<IdentitySourceCandidate> Extract(
         string scannedMint,
         string? metadataUri,
-        int maxSources)
+        int maxSources,
+        TrustedProjectSourcePolicy? resolvedProjectPolicy = null)
     {
         var candidates = new List<IdentitySourceCandidate>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -36,7 +37,29 @@ public sealed class IdentitySourceCandidateExtractor
                 DiscoveredFromTokenMetadata: true));
         }
 
-        if (_registry.TryGetByMint(scannedMint, out var registryEntry))
+        if (resolvedProjectPolicy is not null)
+        {
+            foreach (var trustedPrefix in resolvedProjectPolicy.TrustedUrlPrefixes.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                if (!seenUrls.Add(trustedPrefix.Key))
+                {
+                    continue;
+                }
+
+                candidates.Add(new IdentitySourceCandidate(
+                    Url: trustedPrefix.Key,
+                    Publisher: resolvedProjectPolicy.ProjectKey,
+                    InitialTrust: IdentitySourceTrust.Trusted,
+                    DiscoveredFromTokenMetadata: false));
+
+                if (candidates.Count >= maxSources)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (_mintRegistry.TryGetByMint(scannedMint, out var registryEntry))
         {
             foreach (var trustedPrefix in registryEntry.TrustedUrlPrefixes.OrderBy(entry => entry.Key, StringComparer.Ordinal))
             {

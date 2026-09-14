@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using TrainRekt.Api.Api.Configuration;
+using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Application.Services;
 using TrainRekt.Api.Domain.Models;
 
@@ -96,6 +97,74 @@ public sealed class AiSafetyCoachInputFactoryTests
 
         Assert.DoesNotContain("ScannedMint11111111111111111111111111111111", json, StringComparison.Ordinal);
         Assert.DoesNotContain("CompetingMint2222222222222222222222222222", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_WithExternalContext_MapsBoundedSafeFieldsOnly()
+    {
+        var factory = CreateFactory(new AiSafetyCoachOptions
+        {
+            MaxListItemLength = 24,
+            MaxEvidencePerSignal = 2
+        });
+
+        var inspection = ResearchTestData.CreateInspection(protocolContext: CreateProtocolContext());
+        var externalContext = new TokenExternalContext(
+            TokenExternalContextAvailability.Available,
+            TokenExternalAssetType.TokenizedStock,
+            "Project With Very Long Name That Should Be Truncated",
+            "This summary is intentionally long so we can verify that no arbitrary long source body is passed through unchanged.",
+            "MEDIUM",
+            true,
+            false,
+            new[]
+            {
+                new TokenExternalContextEvidence(
+                    TokenExternalContextSourceType.OfficialIssuerDocumentation,
+                    "Issuer Document Very Long Title",
+                    "issuer.example.com",
+                    "Mint appears in issuer docs with administrative transfer controls for compliance operations.",
+                    "https://issuer.example.com/docs/very/long/path"),
+                new TokenExternalContextEvidence(
+                    TokenExternalContextSourceType.StructuredTokenDirectory,
+                    "Directory",
+                    "directory.example.com",
+                    "Directory labels this as tokenized equity.",
+                    "https://directory.example.com/token")
+            });
+
+        var input = factory.Create(inspection, provenance: null, externalContext);
+        var json = JsonSerializer.Serialize(input);
+
+        Assert.NotNull(input.ExternalContext);
+        Assert.Equal("AVAILABLE", input.ExternalContext!.Availability);
+        Assert.Equal("TOKENIZED_STOCK", input.ExternalContext.AssetType);
+        Assert.True(input.ExternalContext.Evidence.Count <= 2);
+        Assert.DoesNotContain("very/long/path", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_WithAmbiguousSymbolOnlyExternalContext_MarksAmbiguity()
+    {
+        var factory = CreateFactory();
+        var inspection = ResearchTestData.CreateInspection();
+        var externalContext = new TokenExternalContext(
+            TokenExternalContextAvailability.Unavailable,
+            TokenExternalAssetType.Unknown,
+            null,
+            null,
+            "LOW",
+            false,
+            true,
+            Array.Empty<TokenExternalContextEvidence>(),
+            TokenExternalContextFailureReason.AmbiguousEvidence);
+
+        var input = factory.Create(inspection, provenance: null, externalContext);
+
+        Assert.NotNull(input.ExternalContext);
+        Assert.Equal("UNAVAILABLE", input.ExternalContext!.Availability);
+        Assert.True(input.ExternalContext.AmbiguousIdentity);
+        Assert.False(input.ExternalContext.MintConfirmed);
     }
 
     private static AiSafetyCoachInputFactory CreateFactory(AiSafetyCoachOptions? options = null)

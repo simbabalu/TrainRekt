@@ -16,11 +16,20 @@ public sealed class AiSafetyCoachInputFactory
 
     public AiSafetyCoachInput Create(TokenInspection inspection, TokenIdentityProvenance? provenance = null)
     {
+        return Create(inspection, provenance, null);
+    }
+
+    public AiSafetyCoachInput Create(
+        TokenInspection inspection,
+        TokenIdentityProvenance? provenance,
+        TokenExternalContext? externalContext)
+    {
         var protocols = BuildProtocolBreakdown(inspection);
         var reviewSignals = BuildReviewSignals(inspection.ReviewSignals);
         var claimSummaries = BuildClaimSummaries(inspection.ProtocolContext);
         var uncertaintyMarkers = BuildUncertaintyMarkers(inspection, claimSummaries);
         var identity = BuildIdentityContext(provenance);
+        var mappedExternalContext = BuildExternalContext(externalContext);
 
         return new AiSafetyCoachInput(
             TokenName: Truncate(inspection.Identity.Name),
@@ -48,7 +57,58 @@ public sealed class AiSafetyCoachInputFactory
             ReviewSignals: reviewSignals,
             TrustedClaimSummaries: claimSummaries,
             UncertaintyMarkers: uncertaintyMarkers,
-            Identity: identity);
+            Identity: identity,
+            ExternalContext: mappedExternalContext);
+    }
+
+    private AiSafetyCoachExternalContextInput? BuildExternalContext(TokenExternalContext? externalContext)
+    {
+        if (externalContext is null)
+        {
+            return null;
+        }
+
+        var availability = externalContext.Availability switch
+        {
+            TokenExternalContextAvailability.Available => "AVAILABLE",
+            TokenExternalContextAvailability.Disabled => "DISABLED",
+            _ => "UNAVAILABLE"
+        };
+
+        var assetType = externalContext.AssetType switch
+        {
+            TokenExternalAssetType.TokenizedStock => "TOKENIZED_STOCK",
+            TokenExternalAssetType.Rwa => "RWA",
+            TokenExternalAssetType.Stablecoin => "STABLECOIN",
+            TokenExternalAssetType.WrappedAsset => "WRAPPED_ASSET",
+            TokenExternalAssetType.LiquidStakingToken => "LIQUID_STAKING_TOKEN",
+            TokenExternalAssetType.GovernanceToken => "GOVERNANCE_TOKEN",
+            TokenExternalAssetType.ProtocolToken => "PROTOCOL_TOKEN",
+            TokenExternalAssetType.MemeToken => "MEME_TOKEN",
+            TokenExternalAssetType.Other => "OTHER",
+            _ => "UNKNOWN"
+        };
+
+        var evidence = externalContext.Evidence
+            .Select(entry => new AiSafetyCoachExternalContextEvidenceInput(
+                SourceType: entry.SourceType.ToString().ToUpperInvariant(),
+                Title: Truncate(entry.Title) ?? string.Empty,
+                Domain: Truncate(entry.Domain) ?? string.Empty,
+                Claim: Truncate(entry.Claim) ?? string.Empty,
+                Url: Truncate(entry.Url)))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Claim))
+            .Take(_options.MaxEvidencePerSignal)
+            .ToArray();
+
+        return new AiSafetyCoachExternalContextInput(
+            Availability: availability,
+            AssetType: assetType,
+            ProjectName: Truncate(externalContext.ProjectName),
+            Summary: Truncate(externalContext.Summary),
+            Confidence: Truncate(externalContext.Confidence) ?? "LOW",
+            MintConfirmed: externalContext.MintConfirmed,
+            AmbiguousIdentity: externalContext.AmbiguousIdentity,
+            Evidence: evidence);
     }
 
     private static AiSafetyCoachIdentityInput? BuildIdentityContext(TokenIdentityProvenance? provenance)

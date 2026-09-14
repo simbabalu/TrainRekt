@@ -24,7 +24,7 @@ interface TokenAnalysisController {
   validationError: string | null;
   deterministicError: string | null;
   aiError: string | null;
-  analyzeToken: () => Promise<void>;
+  analyzeToken: (mintOverride?: string) => Promise<void>;
   explainWithAi: () => Promise<void>;
   clearInput: () => void;
 }
@@ -71,8 +71,8 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     setDeterministicStatus('idle');
   }, []);
 
-  const analyzeToken = useCallback(async () => {
-    const normalizedMint = normalizeMint(mintInput);
+  const analyzeToken = useCallback(async (mintOverride?: string) => {
+    const normalizedMint = normalizeMint(mintOverride ?? mintInput);
     const nextValidationError = validateMintInput(normalizedMint);
     if (nextValidationError) {
       setValidationError(nextValidationError);
@@ -85,6 +85,10 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
       return;
     }
 
+    if (normalizedMint !== mintInput) {
+      setMintInput(normalizedMint);
+    }
+
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
@@ -93,6 +97,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     setAiError(null);
     setAiStatus('idle');
     setCoach(null);
+    setReport(null);
     setDeterministicStatus('validating');
 
     try {

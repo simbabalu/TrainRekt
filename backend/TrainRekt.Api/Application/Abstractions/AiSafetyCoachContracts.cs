@@ -14,7 +14,25 @@ public sealed record AiSafetyCoachInput(
     IReadOnlyList<AiSafetyCoachReviewSignalInput> ReviewSignals,
     IReadOnlyList<AiSafetyCoachClaimSummaryInput> TrustedClaimSummaries,
     IReadOnlyList<string> UncertaintyMarkers,
-    AiSafetyCoachIdentityInput? Identity = null);
+    AiSafetyCoachIdentityInput? Identity = null,
+    AiSafetyCoachExternalContextInput? ExternalContext = null);
+
+public sealed record AiSafetyCoachExternalContextInput(
+    string Availability,
+    string AssetType,
+    string? ProjectName,
+    string? Summary,
+    string Confidence,
+    bool MintConfirmed,
+    bool AmbiguousIdentity,
+    IReadOnlyList<AiSafetyCoachExternalContextEvidenceInput> Evidence);
+
+public sealed record AiSafetyCoachExternalContextEvidenceInput(
+    string SourceType,
+    string Title,
+    string Domain,
+    string Claim,
+    string? Url);
 
 public sealed record AiSafetyCoachIdentityInput(
     string Classification,

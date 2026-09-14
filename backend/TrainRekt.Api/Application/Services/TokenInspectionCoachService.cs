@@ -11,6 +11,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
     private readonly ITokenInspectionService _inspectionService;
     private readonly ITokenIdentityProvenanceService _provenanceService;
     private readonly IAiSafetyCoach _coach;
+    private readonly ITokenExternalContextResearchService _externalContextService;
     private readonly IAiSafetyCoachSnapshotRepository _snapshotRepository;
     private readonly AiSafetyCoachInputFactory _inputFactory;
     private readonly AiSafetyCoachResponseValidator _responseValidator;
@@ -22,6 +23,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         ITokenInspectionService inspectionService,
         ITokenIdentityProvenanceService provenanceService,
         IAiSafetyCoach coach,
+        ITokenExternalContextResearchService externalContextService,
         IAiSafetyCoachSnapshotRepository snapshotRepository,
         AiSafetyCoachInputFactory inputFactory,
         AiSafetyCoachResponseValidator responseValidator,
@@ -32,6 +34,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         _inspectionService = inspectionService;
         _provenanceService = provenanceService;
         _coach = coach;
+        _externalContextService = externalContextService;
         _snapshotRepository = snapshotRepository;
         _inputFactory = inputFactory;
         _responseValidator = responseValidator;
@@ -42,6 +45,16 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
 
     public async Task<TokenInspectionCoachResult> GenerateAsync(string mint, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("AI safety coach generation started for mint {Mint}.", mint);
+        _logger.LogInformation(
+            "AI coach effective limits: maxSummaryLength={MaxSummaryLength} maxSummarySentences={MaxSummarySentences} maxOutputTokens={MaxOutputTokens} maxRiskExplanations={MaxRiskExplanations} maxWhatToCheckNext={MaxWhatToCheckNext} maxUncertaintyItems={MaxUncertaintyItems}.",
+            _options.MaxSummaryLength,
+            _options.MaxSummarySentences,
+            _options.MaxOutputTokens,
+            _options.MaxRiskExplanations,
+            _options.MaxWhatToCheckNext,
+            _options.MaxUncertaintyItems);
+
         var inspectionResult = await _inspectionService.InspectAsync(mint, cancellationToken);
         if (inspectionResult.Error is not null)
         {
@@ -76,7 +89,34 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         }
 
         var nowUtc = _timeProvider.GetUtcNow();
-        var input = _inputFactory.Create(inspection, provenance);
+        TokenExternalContext? externalContext = null;
+        try
+        {
+            _logger.LogInformation("External context research started for mint {Mint}.", inspection.Identity.Mint);
+            externalContext = await _externalContextService.GetContextAsync(inspection, provenance, cancellationToken);
+            _logger.LogInformation(
+                "External context research completed for mint {Mint}. availability={Availability} assetType={AssetType} mintConfirmed={MintConfirmed} confidence={Confidence} evidenceCount={EvidenceCount} failureReason={FailureReason}.",
+                inspection.Identity.Mint,
+                externalContext.Availability,
+                externalContext.AssetType,
+                externalContext.MintConfirmed,
+                externalContext.Confidence,
+                externalContext.Evidence.Count,
+                externalContext.FailureReason);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "External context enrichment failed for AI coach mint {Mint}. Continuing with deterministic base facts only.",
+                inspection.Identity.Mint);
+        }
+
+        var input = _inputFactory.Create(inspection, provenance, externalContext);
         var language = _options.Language;
         var fingerprint = AiSafetyCoachFingerprint.Compute(input);
 
@@ -111,11 +151,31 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         var modelResult = await _coach.GenerateAsync(input, cancellationToken);
         if (!modelResult.Success || modelResult.Content is null)
         {
-            return new TokenInspectionCoachResult(null, MapFailure(modelResult.FailureReason), null);
+            var status = MapFailure(modelResult.FailureReason);
+            _logger.LogWarning(
+                "AI safety coach model stage failed for mint {Mint}. mappedStatus={MappedStatus} failureReason={FailureReason} httpStatus={HttpStatusCode} detail={Detail}.",
+                inspection.Identity.Mint,
+                status,
+                modelResult.FailureReason,
+                modelResult.HttpStatusCode,
+                modelResult.Detail);
+            return new TokenInspectionCoachResult(null, status, null);
         }
 
-        if (!_responseValidator.TryValidate(modelResult.Content, out _))
+        var summaryDiagnostics = _responseValidator.DescribeSummary(modelResult.Content);
+        _logger.LogInformation(
+            "AI coach summary validation: length={Length} maxLength={MaxLength} sentences={Sentences} isEmpty={IsEmpty}.",
+            summaryDiagnostics.Length,
+            summaryDiagnostics.MaxLength,
+            summaryDiagnostics.Sentences,
+            summaryDiagnostics.IsEmpty);
+
+        if (!_responseValidator.TryValidate(modelResult.Content, out var validationReason))
         {
+            _logger.LogWarning(
+                "AI safety coach validation failed for mint {Mint}. reason={Reason}.",
+                inspection.Identity.Mint,
+                validationReason);
             return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.InvalidResponse, null);
         }
 
@@ -150,6 +210,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
                 inspection.Identity.Mint);
         }
 
+        _logger.LogInformation("AI safety coach generation completed for mint {Mint}. status={Status}.", inspection.Identity.Mint, AiSafetyCoachStatus.Available);
         return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.Available, payload);
     }
 

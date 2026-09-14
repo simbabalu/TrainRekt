@@ -8,6 +8,7 @@ interface TokenAnalysisInputCardProps {
   mintInput: string;
   onChangeMint: (value: string) => void;
   validationError: string | null;
+  inlineNotice?: string | null;
   deterministicStatus: 'idle' | 'validating' | 'loadingInspection' | 'loadingProvenance' | 'ready' | 'error';
   onAnalyze: () => void;
   onClear: () => void;
@@ -24,6 +25,7 @@ export function TokenAnalysisInputCard({
   mintInput,
   onChangeMint,
   validationError,
+  inlineNotice = null,
   deterministicStatus,
   onAnalyze,
   onClear,
@@ -47,7 +49,9 @@ export function TokenAnalysisInputCard({
         style={styles.input}
         value={mintInput}
       />
-      {validationError ? <Text style={styles.error}>{validationError}</Text> : <Text style={styles.hint}>Use the mint address of the token you want to understand.</Text>}
+      {validationError ? <Text style={styles.error}>{validationError}</Text> : null}
+      {!validationError && inlineNotice ? <Text style={styles.notice}>{inlineNotice}</Text> : null}
+      {!validationError && !inlineNotice ? <Text style={styles.hint}>Use the mint address of the token you want to understand.</Text> : null}
       <View style={styles.actions}>
         <PrimaryButton onPress={onAnalyze} disabled={isBusy}>{getButtonLabel(deterministicStatus)}</PrimaryButton>
         <PrimaryButton onPress={onClear} disabled={isBusy || mintInput.trim().length === 0} variant="secondary">CLEAR INPUT</PrimaryButton>
@@ -91,6 +95,12 @@ const styles = StyleSheet.create({
   },
   error: {
     color: Colors.negative,
+    fontSize: Typography.small,
+    fontWeight: '700',
+    marginTop: Spacing.xs,
+  },
+  notice: {
+    color: Colors.warning,
     fontSize: Typography.small,
     fontWeight: '700',
     marginTop: Spacing.xs,

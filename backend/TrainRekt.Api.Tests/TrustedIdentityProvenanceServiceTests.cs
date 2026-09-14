@@ -13,6 +13,7 @@ public sealed class TrustedIdentityProvenanceServiceTests
 {
     private const string ScannedMint = ProtocolConstants.SolanaMobileSkrMint;
     private const string CompetitorMint = "So11111111111111111111111111111111111111112";
+    private const string JupiterMint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
 
     [Fact]
     public async Task AnalyzeAsync_NoSourceAvailable_ReturnsUnknowns()
@@ -93,6 +94,189 @@ public sealed class TrustedIdentityProvenanceServiceTests
         Assert.Equal(IdentityMintLinkStatus.ReferencesScannedMint, result.Sources[0].MintLinkStatus);
         Assert.Contains(result.Evidence, entry => entry.Id == "SOURCE_MATCHES_TRUST_REGISTRY");
         Assert.Contains(result.Evidence, entry => entry.Id == "TRUSTED_SOURCE_REFERENCES_SCANNED_MINT");
+        Assert.DoesNotContain(TrustedIdentityProvenanceUnknown.OfficialIdentityNotVerified, result.Unknowns);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_JupiterMetadataDeterministicallyResolvesProjectPolicy_AndCanProduceExactMintMatch()
+    {
+        var metadataUri = "https://station.jup.ag/guides/token-list";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {JupiterMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.Equal(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+        Assert.Equal(IdentityMintLinkStatus.ReferencesScannedMint, result.Sources[0].MintLinkStatus);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_JupiterTrustedSourceWithoutInspectedMint_ProducesNoRelevantMintReference()
+    {
+        var metadataUri = "https://station.jup.ag/guides/token-list";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, "no relevant mint present");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.Equal(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+        Assert.Equal(IdentityMintLinkStatus.NoRelevantMintReference, result.Sources[0].MintLinkStatus);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_JupiterFetchFailure_ProducesFetchUnavailable()
+    {
+        var metadataUri = "https://station.jup.ag/guides/token-list";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddFailure(metadataUri, ResearchSourceAssessmentReason.Timeout);
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.Equal(IdentityMintLinkStatus.FetchUnavailable, result.Sources[0].MintLinkStatus);
+        Assert.Contains(TrustedIdentityProvenanceUnknown.SourceFetchPartial, result.Unknowns);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_LookalikeJupiterDomain_IsNeverTrusted()
+    {
+        var metadataUri = "https://jup.ag.evil.example/token";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {JupiterMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.NotEqual(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+        Assert.Equal(IdentityMintLinkStatus.ReferencesScannedMint, result.Sources[0].MintLinkStatus);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ArbitraryGithubRepositoryWithJupMint_IsNeverTrusted()
+    {
+        var metadataUri = "https://github.com/not-jup-org/fake-repo/blob/main/README.md";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {JupiterMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.NotEqual(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_UnknownProjectMetadata_FailsClosedWithoutTrustedSources()
+    {
+        var metadataUri = "https://unknown.example/token";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {JupiterMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.NotEqual(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+        Assert.Contains(TrustedIdentityProvenanceUnknown.NoTrustedIdentitySourceAvailable, result.Unknowns);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_JupiterTrustedConflictingMintEvidence_RecordsConflict()
+    {
+        var metadataUri = "https://station.jup.ag/guides/token-list";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {CompetitorMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 1;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: new[]
+                {
+                    CreateCollision(CompetitorMint, TokenIdentityMatchLevel.Exact, true, true, DateTimeOffset.UtcNow.AddMinutes(-10))
+                },
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Single(result.Sources);
+        Assert.Equal(IdentitySourceTrust.Trusted, result.Sources[0].SourceTrust);
+        Assert.Equal(IdentityMintLinkStatus.ReferencesCompetingMint, result.Sources[0].MintLinkStatus);
+        Assert.Contains(result.Conflicts, conflict => conflict.Id == "TRUSTED_SOURCE_REFERENCES_COMPETING_MINT");
+        Assert.Contains(TrustedIdentityProvenanceUnknown.IdentitySourceConflict, result.Unknowns);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_JupiterProjectPolicyWithTwoIndependentTrustedSources_ProducesTwoExactMatches()
+    {
+        var metadataUri = "https://station.jup.ag/guides/token-list";
+        var trustedDocs = "https://docs.jup.ag/";
+        var safeClient = new StubSafeResearchSourceClient();
+        safeClient.AddSuccess(metadataUri, $"mint {JupiterMint}");
+        safeClient.AddSuccess(trustedDocs, $"mint {JupiterMint}");
+
+        var options = DefaultOptions();
+        options.MaxSources = 2;
+        var result = await CreateService(safeClient, new StubSourceVerificationCache(), options).AnalyzeAsync(
+            new TrustedIdentityProvenanceRequest(
+                ScannedMint: JupiterMint,
+                ScannedMetadataUri: metadataUri,
+                Collisions: Array.Empty<TokenIdentityCollision>(),
+                AnalyzedAtUtc: DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Sources.Count(source =>
+            source.SourceTrust == IdentitySourceTrust.Trusted
+            && source.MintLinkStatus == IdentityMintLinkStatus.ReferencesScannedMint));
         Assert.DoesNotContain(TrustedIdentityProvenanceUnknown.OfficialIdentityNotVerified, result.Unknowns);
     }
 
@@ -332,12 +516,15 @@ public sealed class TrustedIdentityProvenanceServiceTests
         TrustedIdentityProvenanceOptions? options = null)
     {
         options ??= DefaultOptions();
+        var mintRegistry = new TrustedMintSourceRegistry();
+        var projectPolicyRegistry = new TrustedProjectSourcePolicyRegistry();
 
         return new TrustedIdentityProvenanceService(
-            new IdentitySourceCandidateExtractor(new TrustedMintSourceRegistry()),
+            new IdentitySourceCandidateExtractor(mintRegistry),
+            new DeterministicTrustedProjectPolicyResolver(projectPolicyRegistry, mintRegistry),
             safeClient,
             cache,
-            new TrustedMintSourceRegistry(),
+            mintRegistry,
             new TrustedSourceClassifier(),
             new ResearchContentNormalizer(),
             new SolanaMintEvidenceMatcher(),

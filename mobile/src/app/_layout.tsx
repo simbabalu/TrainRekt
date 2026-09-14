@@ -1,4 +1,5 @@
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { ShareIntentCoordinator } from '@/components/share/ShareIntentCoordinator';
 import { SurpriseChallengeProvider } from '@/context/SurpriseChallengeContext';
 import { WalletSafetyInspectionProvider } from '@/context/WalletSafetyInspectionContext';
 import { WalletProvider } from '@/context/WalletContext';
@@ -17,7 +18,7 @@ function HydratedApp() {
   const { isHydrated: progressHydrated } = useTrainingProgress();
   const { isHydrated: settingsHydrated } = useSettings();
   if (!progressHydrated || !settingsHydrated) return <View style={styles.loading}><ActivityIndicator color={Colors.accent} /></View>;
-  return <Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /></Stack>;
+  return <><ShareIntentCoordinator /><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /></Stack></>;
 }
 
 const styles = StyleSheet.create({ loading: { alignItems: 'center', backgroundColor: Colors.background, flex: 1, justifyContent: 'center' } });
