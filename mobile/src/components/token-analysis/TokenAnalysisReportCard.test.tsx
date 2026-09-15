@@ -128,15 +128,18 @@ function renderExpandedReportForAiState(options: {
 }
 
 describe('TokenAnalysisReportCard', () => {
-  it('shows the deterministic summary first and keeps the full analysis collapsed by default', () => {
+  it('renders summary, then AI coach, then analysis actions before full analysis', () => {
     const { renderer } = renderReport();
     const content = textContent(renderer);
 
     expect(content.indexOf('AI SAFETY COACH')).toBeGreaterThanOrEqual(0);
     expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeGreaterThanOrEqual(0);
+    expect(content.indexOf('UNDERSTAND THE SIGNALS')).toBeGreaterThanOrEqual(0);
+    expect(content.indexOf('VIEW FULL ANALYSIS')).toBeGreaterThanOrEqual(0);
     expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('UNDERSTAND THE SIGNALS'));
+    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('VIEW FULL ANALYSIS'));
     expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
-    expect(content).toContain('VIEW FULL ANALYSIS');
     expect(content).not.toContain('TOKEN IDENTITY');
   });
 

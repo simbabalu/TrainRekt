@@ -140,9 +140,6 @@ export function TokenAnalysisReportCard({
       <View onLayout={handleSummaryLayout}>
         <TokenAnalysisSummaryCard
           report={report}
-          isFullAnalysisVisible={showFullAnalysis}
-          onToggleFullAnalysis={handleToggleFullAnalysis}
-          onUnderstandSignals={handleUnderstandSignals}
         />
       </View>
       <SectionCard>
@@ -178,6 +175,14 @@ export function TokenAnalysisReportCard({
             ) : null}
           </View>
         )}
+      </SectionCard>
+      <SectionCard>
+        <View style={styles.actions}>
+          <PrimaryButton onPress={handleUnderstandSignals}>UNDERSTAND THE SIGNALS</PrimaryButton>
+          <PrimaryButton onPress={handleToggleFullAnalysis} variant="secondary">
+            {showFullAnalysis ? 'HIDE FULL ANALYSIS' : 'VIEW FULL ANALYSIS'}
+          </PrimaryButton>
+        </View>
       </SectionCard>
       {showFullAnalysis ? <View onLayout={handleFullAnalysisLayout}>
         {deterministicError ? (
@@ -398,5 +403,8 @@ const styles = StyleSheet.create({
   rowBlock: {
     gap: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  actions: {
+    gap: Spacing.sm,
   },
 });

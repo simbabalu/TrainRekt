@@ -16,10 +16,6 @@ vi.mock('@/components/SectionCard', () => ({
   SectionCard: ({ children }: { children: React.ReactNode }) => React.createElement('View', null, children),
 }));
 
-vi.mock('@/components/PrimaryButton', () => ({
-  PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Pressable', null, children),
-}));
-
 vi.mock('@/components/token-analysis/TokenAnalysisSignalRow', () => ({
   TokenAnalysisSignalRow: ({ signal }: { signal: { label: string; value: string } }) => React.createElement('Text', null, `${signal.label}:${signal.value}`),
 }));
@@ -90,9 +86,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={report()}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
@@ -112,9 +105,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       create(
         <TokenAnalysisSummaryCard
           report={report()}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
@@ -134,9 +124,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={report()}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />, 
       );
     });
@@ -166,9 +153,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={withComplete}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
@@ -195,9 +179,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={withPartial}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
@@ -224,9 +205,6 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={withUnavailable}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
@@ -255,13 +233,23 @@ describe('TokenAnalysisSummaryCard keys', () => {
       renderer = create(
         <TokenAnalysisSummaryCard
           report={withNotAttempted}
-          onUnderstandSignals={vi.fn()}
-          onToggleFullAnalysis={vi.fn()}
-          isFullAnalysisVisible={false}
         />,
       );
     });
 
     expect(textContent(renderer)).toContain('Optional external research: not attempted.');
+  });
+
+  it('does not render deeper-analysis actions inside the summary card', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(<TokenAnalysisSummaryCard report={report()} />);
+    });
+
+    const content = textContent(renderer);
+    expect(content).not.toContain('UNDERSTAND THE SIGNALS');
+    expect(content).not.toContain('VIEW FULL ANALYSIS');
+    expect(content).not.toContain('HIDE FULL ANALYSIS');
   });
 });
