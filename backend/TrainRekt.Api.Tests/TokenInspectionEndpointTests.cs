@@ -18,6 +18,8 @@ namespace TrainRekt.Api.Tests;
 
 public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private const string SecretExceptionDetail = "TRAINREKT_SECRET_EXCEPTION_DETAIL";
+
     private readonly WebApplicationFactory<Program> _factory;
 
     public TokenInspectionEndpointTests(WebApplicationFactory<Program> factory)
@@ -39,6 +41,70 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_WhenMintNotFound_ReturnsNotFound()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.AddSingleton<ITokenInspectionService>(new StubInspectionService(
+                    TokenInspectionResult.Failure(TokenInspectionErrorCode.MintNotFound, "mint not found")));
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = "SomeMissingMint11111111111111111111111111111"
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostTokenInspection_WhenUnhandledException_ReturnsSafeProblemDetails500()
+    {
+        var configuredFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITokenInspectionService>();
+                services.AddSingleton<ITokenInspectionService>(new ThrowingUnexpectedInspectionService());
+            });
+        });
+
+        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/token-inspections", new
+        {
+            mint = "ExceptionMint111111111111111111111111111111"
+        });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType?.MediaType, StringComparison.Ordinal);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        Assert.Equal(500, root.GetProperty("status").GetInt32());
+        Assert.Equal("An unexpected error occurred.", root.GetProperty("title").GetString());
+
+        Assert.DoesNotContain(SecretExceptionDetail, json, StringComparison.Ordinal);
+        Assert.DoesNotContain("InvalidOperationException", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/home/", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -695,6 +761,14 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         {
             CallCount += 1;
             throw new InvalidOperationException("final inspection should not be used by provenance");
+        }
+    }
+
+    private sealed class ThrowingUnexpectedInspectionService : ITokenInspectionService
+    {
+        public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException(SecretExceptionDetail);
         }
     }
 

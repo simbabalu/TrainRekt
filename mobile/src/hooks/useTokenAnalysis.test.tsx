@@ -69,7 +69,15 @@ function createCoach(available = true): TokenInspectionCoachResponse {
   };
 }
 
-function renderHook(service: TokenInspectionApiService): { getController: () => Controller } {
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function renderHook(service: TokenInspectionApiService): { getController: () => Controller; unmount: () => void } {
   let controller!: Controller;
 
   function Harness() {
@@ -77,12 +85,14 @@ function renderHook(service: TokenInspectionApiService): { getController: () => 
     return null;
   }
 
+  let renderer!: ReturnType<typeof create>;
   act(() => {
-    create(<Harness />);
+    renderer = create(<Harness />);
   });
 
   return {
     getController: () => controller,
+    unmount: () => renderer.unmount(),
   };
 }
 
@@ -420,5 +430,165 @@ describe('useTokenAnalysis', () => {
     expect(getController().deterministicStatus).toBe('error');
     expect(getController().report).toBeNull();
     expect(getController().deterministicError).toContain('second request failed');
+  });
+
+  it('aborts the previous analysis and ignores its late response', async () => {
+    const firstInspection = deferred<TokenInspectionResponse>();
+    const secondInspection = deferred<TokenInspectionResponse>();
+    const signals: AbortSignal[] = [];
+    let inspectCallCount = 0;
+    const service: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockImplementation((_request, signal?: AbortSignal) => {
+        signals.push(signal!);
+        inspectCallCount += 1;
+        return inspectCallCount === 1 ? firstInspection.promise : secondInspection.promise;
+      }),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockResolvedValue(createCoach()),
+    };
+
+    const { getController } = renderHook(service);
+
+    await act(async () => {
+      getController().setMintInput('Mint1111111111111111111111111111111111');
+    });
+    let firstCall!: Promise<void>;
+    act(() => {
+      firstCall = getController().analyzeToken();
+    });
+
+    await act(async () => {
+      getController().setMintInput('So11111111111111111111111111111111111111112');
+    });
+    let secondCall!: Promise<void>;
+    act(() => {
+      secondCall = getController().analyzeToken();
+    });
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+
+    secondInspection.resolve({
+      ...createInspection(),
+      identity: { ...createInspection().identity, mint: 'So11111111111111111111111111111111111111112' },
+    });
+    await act(async () => {
+      await secondCall;
+    });
+
+    firstInspection.resolve(createInspection());
+    await act(async () => {
+      await firstCall;
+    });
+
+    expect(getController().report?.mint).toBe('So11111111111111111111111111111111111111112');
+    expect(getController().deterministicError).toBeNull();
+  });
+
+  it('aborts an in-flight coach request when a new analysis starts', async () => {
+    const secondInspection = deferred<TokenInspectionResponse>();
+    const coachResponse = deferred<TokenInspectionCoachResponse>();
+    let inspectCallCount = 0;
+    let coachSignal!: AbortSignal;
+    const service: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockImplementation(() => {
+        inspectCallCount += 1;
+        return inspectCallCount === 1 ? Promise.resolve(createInspection()) : secondInspection.promise;
+      }),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockImplementation((_mint, signal?: AbortSignal) => {
+        coachSignal = signal!;
+        return coachResponse.promise;
+      }),
+    };
+
+    const { getController } = renderHook(service);
+    await act(async () => {
+      getController().setMintInput('Mint1111111111111111111111111111111111');
+    });
+    await act(async () => {
+      await getController().analyzeToken();
+    });
+
+    let coachCall!: Promise<void>;
+    act(() => {
+      coachCall = getController().explainWithAi();
+    });
+
+    await act(async () => {
+      getController().setMintInput('So11111111111111111111111111111111111111112');
+    });
+    let secondAnalysis!: Promise<void>;
+    act(() => {
+      secondAnalysis = getController().analyzeToken();
+    });
+
+    expect(coachSignal.aborted).toBe(true);
+
+    secondInspection.resolve({
+      ...createInspection(),
+      identity: { ...createInspection().identity, mint: 'So11111111111111111111111111111111111111112' },
+    });
+    await act(async () => {
+      await secondAnalysis;
+    });
+
+    coachResponse.resolve(createCoach());
+    await act(async () => {
+      await coachCall;
+    });
+
+    expect(getController().report?.mint).toBe('So11111111111111111111111111111111111111112');
+    expect(getController().aiError).toBeNull();
+  });
+
+  it('aborts active analysis and coach requests on unmount', async () => {
+    const pendingInspection = deferred<TokenInspectionResponse>();
+    const pendingCoach = deferred<TokenInspectionCoachResponse>();
+    let inspectionSignal!: AbortSignal;
+    let coachSignal!: AbortSignal;
+    const service: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockImplementation((_request, signal?: AbortSignal) => {
+        inspectionSignal = signal!;
+        return pendingInspection.promise;
+      }),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockImplementation((_mint, signal?: AbortSignal) => {
+        coachSignal = signal!;
+        return pendingCoach.promise;
+      }),
+    };
+
+    const hook = renderHook(service);
+    let analysisCall!: Promise<void>;
+    act(() => {
+      analysisCall = hook.getController().analyzeToken('Mint1111111111111111111111111111111111');
+    });
+    act(() => {
+      hook.unmount();
+    });
+    expect(inspectionSignal.aborted).toBe(true);
+    pendingInspection.resolve(createInspection());
+    await analysisCall;
+
+    const completedService: TokenInspectionApiService = {
+      inspectToken: vi.fn().mockResolvedValue(createInspection()),
+      getProvenance: vi.fn().mockResolvedValue(createProvenance()),
+      getCoach: vi.fn().mockImplementation((_mint, signal?: AbortSignal) => {
+        coachSignal = signal!;
+        return pendingCoach.promise;
+      }),
+    };
+    const coachHook = renderHook(completedService);
+    await act(async () => {
+      await coachHook.getController().analyzeToken('Mint1111111111111111111111111111111111');
+    });
+    act(() => {
+      void coachHook.getController().explainWithAi();
+    });
+    act(() => {
+      coachHook.unmount();
+    });
+    expect(coachSignal.aborted).toBe(true);
   });
 });

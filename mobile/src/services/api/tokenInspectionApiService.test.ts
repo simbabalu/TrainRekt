@@ -39,6 +39,34 @@ describe('HttpTokenInspectionApiService', () => {
     );
   });
 
+  it('forwards AbortSignal to inspection requests', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      identity: { mint: 'mint', name: 'Token', symbol: 'TOK' },
+      authorities: { mintAuthorityRevoked: true, freezeAuthorityRevoked: true, mintAuthority: null, freezeAuthority: null },
+      program: { programId: 'pid', programType: 'spl-token' },
+      age: { ageSeconds: 10, isReliable: true, unavailableReason: null },
+      holderConcentration: {
+        topHolderPercentage: 10,
+        top5HoldersPercentage: 20,
+        top10HoldersPercentage: 30,
+        semanticsNote: 'note',
+        unclassifiedTokenAccountConcentration: null,
+      },
+      largestTokenAccounts: [],
+      reviewSignals: [],
+      inspectedAtUtc: new Date().toISOString(),
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const signal = new AbortController().signal;
+    const service = new HttpTokenInspectionApiService({ baseUrl: 'https://api.trainrekt.test' });
+    await service.inspectToken({ mint: 'mint' }, signal);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.trainrekt.test/api/token-inspections',
+      expect.objectContaining({ signal }),
+    );
+  });
+
   it('calls provenance endpoint with mint path', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({
       result: 'COLLISION_OBSERVED',

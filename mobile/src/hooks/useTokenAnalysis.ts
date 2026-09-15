@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { TokenInspectionApiService } from '@/services/api/tokenInspectionApiService';
 import { tokenInspectionApiService } from '@/services/api/tokenInspectionApiService';
@@ -60,6 +60,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function isAborted(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted || (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError');
+}
+
 export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTokenAnalysisOptions = {}): TokenAnalysisController {
   const [mintInput, setMintInput] = useState('');
   const [deterministicStatus, setDeterministicStatus] = useState<TokenAnalysisDeterministicStatus>('idle');
@@ -70,9 +74,24 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
   const [deterministicError, setDeterministicError] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const analysisControllerRef = useRef<AbortController | null>(null);
+  const coachControllerRef = useRef<AbortController | null>(null);
   const coachRequestInFlightRef = useRef(false);
 
+  useEffect(() => {
+    return () => {
+      analysisControllerRef.current?.abort();
+      coachControllerRef.current?.abort();
+    };
+  }, []);
+
   const clearInput = useCallback(() => {
+    requestIdRef.current += 1;
+    analysisControllerRef.current?.abort();
+    coachControllerRef.current?.abort();
+    analysisControllerRef.current = null;
+    coachControllerRef.current = null;
+    coachRequestInFlightRef.current = false;
     setMintInput('');
     setValidationError(null);
     setDeterministicError(null);
@@ -87,6 +106,12 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     const normalizedMint = normalizeMint(mintOverride ?? mintInput);
     const nextValidationError = validateMintInput(normalizedMint);
     if (nextValidationError) {
+      requestIdRef.current += 1;
+      analysisControllerRef.current?.abort();
+      coachControllerRef.current?.abort();
+      analysisControllerRef.current = null;
+      coachControllerRef.current = null;
+      coachRequestInFlightRef.current = false;
       setValidationError(nextValidationError);
       setDeterministicError(null);
       setAiError(null);
@@ -101,8 +126,16 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
       setMintInput(normalizedMint);
     }
 
+    analysisControllerRef.current?.abort();
+    coachControllerRef.current?.abort();
+    analysisControllerRef.current = new AbortController();
+    coachControllerRef.current = null;
+    coachRequestInFlightRef.current = false;
+
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const controller = analysisControllerRef.current;
+    const { signal } = controller;
 
     setValidationError(null);
     setDeterministicError(null);
@@ -119,16 +152,16 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     try {
       setDeterministicStatus('loadingInspection');
       const inspectionStartedAtMs = nowMs();
-      const inspection = await service.inspectToken({ mint: normalizedMint });
+      const inspection = await service.inspectToken({ mint: normalizedMint }, signal);
       inspectionMs = elapsedMs(inspectionStartedAtMs);
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current || signal.aborted) return;
 
       setDeterministicStatus('loadingProvenance');
       const provenanceStartedAtMs = nowMs();
       try {
-        const provenance = await service.getProvenance(inspection.identity.mint);
+        const provenance = await service.getProvenance(inspection.identity.mint, signal);
         provenanceMs = elapsedMs(provenanceStartedAtMs);
-        if (requestId !== requestIdRef.current) return;
+        if (requestId !== requestIdRef.current || signal.aborted) return;
         setReport({
           mint: inspection.identity.mint,
           inspection,
@@ -137,7 +170,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
         });
       } catch (provenanceError) {
         provenanceMs = elapsedMs(provenanceStartedAtMs);
-        if (requestId !== requestIdRef.current) return;
+        if (isAborted(provenanceError, signal) || requestId !== requestIdRef.current) return;
         setReport({
           mint: inspection.identity.mint,
           inspection,
@@ -157,7 +190,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
         provenanceMs,
       });
     } catch (error) {
-      if (requestId !== requestIdRef.current) return;
+      if (isAborted(error, signal) || requestId !== requestIdRef.current) return;
       setReport(null);
       setDeterministicError(getErrorMessage(error, 'Token analysis failed. Please try again.'));
       setDeterministicStatus('error');
@@ -167,6 +200,10 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
         deterministicInspectionMs: inspectionMs,
         provenanceMs,
       });
+    } finally {
+      if (analysisControllerRef.current === controller) {
+        analysisControllerRef.current = null;
+      }
     }
   }, [mintInput, service]);
 
@@ -174,12 +211,16 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     if (!report || aiStatus === 'loading' || coachRequestInFlightRef.current) return;
 
     coachRequestInFlightRef.current = true;
+    const controller = new AbortController();
+    coachControllerRef.current = controller;
+    const requestId = requestIdRef.current;
 
     setAiStatus('loading');
     setAiError(null);
 
     try {
-      const result = await service.getCoach(report.mint);
+      const result = await service.getCoach(report.mint, controller.signal);
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       if (!result.available || !result.coach) {
         setCoach(null);
         setAiStatus('unavailable');
@@ -190,11 +231,15 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
       setCoach(result.coach);
       setAiStatus('ready');
     } catch (error) {
+      if (isAborted(error, controller.signal) || requestId !== requestIdRef.current) return;
       setCoach(null);
       setAiStatus('unavailable');
       setAiError(getErrorMessage(error, 'AI explanation is currently unavailable.'));
     } finally {
-      coachRequestInFlightRef.current = false;
+      if (coachControllerRef.current === controller) {
+        coachControllerRef.current = null;
+        coachRequestInFlightRef.current = false;
+      }
     }
   }, [aiStatus, report, service]);
 

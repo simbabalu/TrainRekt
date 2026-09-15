@@ -6,6 +6,8 @@ public static class ApplicationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        app.UseExceptionHandler();
+
         app.UseHttpsRedirection();
 
         if (app.Environment.IsDevelopment())

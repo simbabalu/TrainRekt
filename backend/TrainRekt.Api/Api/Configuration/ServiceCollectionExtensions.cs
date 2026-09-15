@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using TrainRekt.Api.Application.Abstractions;
@@ -20,6 +21,9 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddProblemDetails();
+        services.AddExceptionHandler<GlobalExceptionHandler>();
 
         services
             .AddOptions<HeliusOptions>()
