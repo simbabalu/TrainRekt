@@ -45,6 +45,10 @@ vi.mock('@/components/share/ShareIntentCoordinator', () => ({
   ShareIntentCoordinator: () => null,
 }));
 
+vi.mock('@/app/startupBrandingLogo', () => ({
+  startupBrandingLogo: { testUri: 'trainrekt-adaptive-foreground.png' },
+}));
+
 vi.mock('@/context/WalletContext', () => ({
   WalletProvider: walletProviderMock,
 }));
@@ -71,6 +75,7 @@ vi.mock('@/hooks/useSettings', () => ({
 
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
+  Image: 'Image',
   StyleSheet: { create: (styles: unknown) => styles },
   Text: 'Text',
   View: 'View',

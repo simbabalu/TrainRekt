@@ -18,7 +18,16 @@ export function deserializeSettings(value: string | null): TrainingSettings | nu
   try {
     const parsed: unknown = JSON.parse(value);
     if (!isStoredSettings(parsed)) return null;
-    return parsed.data;
+    const homeTourSeenVersion = Number.isInteger(parsed.data.homeTourSeenVersion) && (parsed.data.homeTourSeenVersion as number) >= 0
+      ? (parsed.data.homeTourSeenVersion as number)
+      : 0;
+    return {
+      difficulty: parsed.data.difficulty as TrainingSettings['difficulty'],
+      notificationsEnabled: parsed.data.notificationsEnabled as boolean,
+      soundEffectsEnabled: parsed.data.soundEffectsEnabled as boolean,
+      hapticFeedbackEnabled: parsed.data.hapticFeedbackEnabled as boolean,
+      homeTourSeenVersion,
+    };
   } catch (error) {
     console.warn('[TrainRekt] Could not parse stored settings.', error);
     return null;
@@ -54,7 +63,13 @@ export async function clearSettings(): Promise<void> {
 function isStoredSettings(value: unknown): value is StoredSettings {
   if (!isRecord(value) || value.version !== storageSchemaVersion || !isRecord(value.data)) return false;
   const data = value.data;
-  return difficultyOptions.includes(data.difficulty as TrainingSettings['difficulty']) && typeof data.notificationsEnabled === 'boolean' && typeof data.soundEffectsEnabled === 'boolean' && typeof data.hapticFeedbackEnabled === 'boolean';
+  const validTourVersion = data.homeTourSeenVersion === undefined
+    || (typeof data.homeTourSeenVersion === 'number' && Number.isInteger(data.homeTourSeenVersion) && data.homeTourSeenVersion >= 0);
+  return difficultyOptions.includes(data.difficulty as TrainingSettings['difficulty'])
+    && typeof data.notificationsEnabled === 'boolean'
+    && typeof data.soundEffectsEnabled === 'boolean'
+    && typeof data.hapticFeedbackEnabled === 'boolean'
+    && validTourVersion;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -5,4 +5,5 @@ export const mockSettings: TrainingSettings = {
   notificationsEnabled: true,
   soundEffectsEnabled: true,
   hapticFeedbackEnabled: true,
+  homeTourSeenVersion: 0,
 };

@@ -7,4 +7,5 @@ export interface TrainingSettings {
   notificationsEnabled: boolean;
   soundEffectsEnabled: boolean;
   hapticFeedbackEnabled: boolean;
+  homeTourSeenVersion: number;
 }

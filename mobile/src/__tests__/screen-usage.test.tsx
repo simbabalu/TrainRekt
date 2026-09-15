@@ -49,6 +49,7 @@ vi.mock('@/components/PageHeading', () => ({ PageHeading: () => null }));
 vi.mock('@/components/ProgressBar', () => ({ ProgressBar: () => null }));
 vi.mock('@/components/AppIcon', () => ({ AppIcon: () => null }));
 vi.mock('@/components/wallet/HomeWalletSafetyCard', () => ({ HomeWalletSafetyCard: () => null }));
+vi.mock('@/components/home/HomeOnboardingTour', () => ({ HomeOnboardingTour: () => null }));
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
   useTrainingProgress: () => ({
@@ -122,9 +123,11 @@ vi.mock('@/hooks/useSettings', () => ({
       notificationsEnabled: true,
       soundEffectsEnabled: true,
       hapticFeedbackEnabled: true,
+      homeTourSeenVersion: 1,
     },
     setDifficulty: vi.fn(),
     setPreference: vi.fn(),
+    setHomeTourSeenVersion: vi.fn(),
     resetSettings: vi.fn(),
   }),
 }));

@@ -26,12 +26,17 @@ vi.mock('@/components/SurpriseChallengeModal', () => ({
   },
 }));
 
+vi.mock('@/components/appHeaderLogo', () => ({
+  appHeaderLogo: { testUri: 'trainrekt-adaptive-foreground.png' },
+}));
+
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: 'SafeAreaView',
   useSafeAreaInsets: () => ({ bottom: 0 }),
 }));
 
 vi.mock('react-native', () => ({
+  Image: 'Image',
   Modal: ({ children, visible }: { children: React.ReactNode; visible?: boolean }) => visible ? React.createElement('View', null, children) : null,
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',

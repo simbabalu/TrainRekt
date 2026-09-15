@@ -1,0 +1,1 @@
+export const homeOnboardingTourLogo = require('../../../assets/images/trainrekt-adaptive-foreground.png');

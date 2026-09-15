@@ -5,14 +5,23 @@ import { describe, expect, it, vi } from 'vitest';
 import HomeScreen from '@/app/(tabs)/index';
 
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
+const useSettingsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
   useTrainingProgress: useTrainingProgressMock,
 }));
 
+vi.mock('@/hooks/useSettings', () => ({
+  useSettings: useSettingsMock,
+}));
+
 vi.mock('expo-router', () => ({
   Link: 'Link',
   useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock('@/components/home/HomeOnboardingTour', () => ({
+  HomeOnboardingTour: () => null,
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -93,6 +102,10 @@ function makeProgress(todayCompletedDecisions: number, dailyGoalCompleted: boole
 
 describe('HomeScreen simplified layout', () => {
   it('removes Today\'s Training and Your Skills while keeping Daily Goal central', () => {
+    useSettingsMock.mockReturnValue({
+      settings: { homeTourSeenVersion: 1 },
+      setHomeTourSeenVersion: vi.fn(),
+    });
     useTrainingProgressMock.mockReturnValue({
       progress: makeProgress(0, false),
     });
@@ -117,6 +130,10 @@ describe('HomeScreen simplified layout', () => {
   });
 
   it('shows CONTINUE TRAINING before daily goal completion when progress already started', () => {
+    useSettingsMock.mockReturnValue({
+      settings: { homeTourSeenVersion: 1 },
+      setHomeTourSeenVersion: vi.fn(),
+    });
     useTrainingProgressMock.mockReturnValue({
       progress: makeProgress(1, false),
     });
@@ -134,6 +151,10 @@ describe('HomeScreen simplified layout', () => {
   });
 
   it('shows EXTRA PRACTICE after daily completion and keeps train routing mode', () => {
+    useSettingsMock.mockReturnValue({
+      settings: { homeTourSeenVersion: 1 },
+      setHomeTourSeenVersion: vi.fn(),
+    });
     useTrainingProgressMock.mockReturnValue({
       progress: makeProgress(3, true),
     });

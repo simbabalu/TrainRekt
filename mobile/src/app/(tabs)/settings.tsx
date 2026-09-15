@@ -1,5 +1,6 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
+import { type Href, useRouter } from 'expo-router';
 import { useState } from 'react';
 
 import { AppIcon, type AppIconName } from '@/components/AppIcon';
@@ -15,9 +16,10 @@ import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
-  const { settings, setDifficulty, resetSettings } = useSettings();
+  const { settings, setDifficulty, setHomeTourSeenVersion, resetSettings } = useSettings();
   const { resetProgress, prepareDemo } = useTrainingProgress();
   const { status, wallet, error, realMessageSigningEnabled } = useWallet();
+  const router = useRouter();
   const [showSigningEducation, setShowSigningEducation] = useState(false);
   const isConnected = status === 'connected' && Boolean(wallet);
   const walletStatusLabel = status === 'connecting' ? 'Connecting' : isConnected ? 'Connected' : 'Disconnected';
@@ -47,6 +49,11 @@ export default function SettingsScreen() {
         { text: 'PREPARE DEMO', style: 'destructive', onPress: () => { void prepareDemo(); } },
       ],
     );
+  }
+
+  function replayAppTour() {
+    setHomeTourSeenVersion(0);
+    router.push('/' as Href);
   }
 
   return (
@@ -108,6 +115,7 @@ export default function SettingsScreen() {
           iconLabel="Reset"
         />
         <View style={styles.resetButtons}>
+          <Pressable accessibilityLabel="Replay app tour" onPress={replayAppTour} style={styles.replayButton}><Text style={styles.replayLabel}>REPLAY APP TOUR</Text></Pressable>
           <Pressable onPress={confirmResetProgress} style={styles.resetButton}><Text style={styles.resetLabel}>Reset training progress</Text></Pressable>
           <Pressable onPress={confirmResetSettings} style={styles.resetButton}><Text style={styles.resetLabel}>Reset settings</Text></Pressable>
         </View>
@@ -183,6 +191,8 @@ const styles = StyleSheet.create({
   unexpectedStateCopy: { color: Colors.warning, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
   about: { color: Colors.secondaryText, fontSize: Typography.body, lineHeight: TypographyLineHeight.body, marginTop: Spacing.md },
   resetButtons: { gap: Spacing.sm, marginTop: Spacing.lg },
+  replayButton: { alignItems: 'center', borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: Spacing.md },
+  replayLabel: { color: Colors.text, fontSize: Typography.small, fontWeight: '800', letterSpacing: 0.8 },
   resetButton: { alignItems: 'center', borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: Spacing.md },
   resetLabel: { color: Colors.negative, fontSize: Typography.small, fontWeight: '800' },
   version: { borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.lg, paddingTop: Spacing.lg },

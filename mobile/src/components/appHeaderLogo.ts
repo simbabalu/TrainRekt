@@ -1,0 +1,1 @@
+export const appHeaderLogo = require('../../assets/images/trainrekt-adaptive-foreground.png');

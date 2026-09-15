@@ -13,6 +13,7 @@ const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 const useWalletMock = vi.hoisted(() => vi.fn());
 const useSurpriseChallengeMock = vi.hoisted(() => vi.fn());
 const alertMock = vi.hoisted(() => vi.fn());
+const pushMock = vi.hoisted(() => vi.fn());
 const debugFlags = vi.hoisted(() => ({
   DEV_EXERCISE_PICKER_ENABLED: false,
   DEV_DEMO_TOOLS_ENABLED: true,
@@ -41,6 +42,10 @@ vi.mock('@/constants/debug', () => ({
   get DEV_DEMO_TOOLS_ENABLED() {
     return debugFlags.DEV_DEMO_TOOLS_ENABLED;
   },
+}));
+
+vi.mock('expo-router', () => ({
+  useRouter: () => ({ push: pushMock }),
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -89,9 +94,11 @@ function setupDefaultMocks() {
       notificationsEnabled: true,
       soundEffectsEnabled: true,
       hapticFeedbackEnabled: true,
+      homeTourSeenVersion: 1,
     },
     setDifficulty: vi.fn(),
     setPreference: vi.fn(),
+    setHomeTourSeenVersion: vi.fn(),
     resetSettings: vi.fn(),
   });
 
@@ -256,9 +263,10 @@ describe('SettingsScreen wallet card', () => {
     const resetProgress = vi.fn();
     const resetSettings = vi.fn();
     useSettingsMock.mockReturnValue({
-      settings: { difficulty: 'Intermediate', notificationsEnabled: true, soundEffectsEnabled: true, hapticFeedbackEnabled: true },
+      settings: { difficulty: 'Intermediate', notificationsEnabled: true, soundEffectsEnabled: true, hapticFeedbackEnabled: true, homeTourSeenVersion: 1 },
       setDifficulty,
       setPreference: vi.fn(),
+      setHomeTourSeenVersion: vi.fn(),
       resetSettings,
     });
     useTrainingProgressMock.mockReturnValue({
@@ -279,9 +287,17 @@ describe('SettingsScreen wallet card', () => {
     });
 
     const pressables = renderer.root.findAll((node) => String(node.type) === 'Pressable');
+    const advancedDifficultyButton = pressables[3];
+    const resetTrainingProgressButton = pressables[5];
+    const resetSettingsButton = pressables[6];
+
+    expect(advancedDifficultyButton).toBeDefined();
+    expect(resetTrainingProgressButton).toBeDefined();
+    expect(resetSettingsButton).toBeDefined();
+
     act(() => {
-      pressables[3]?.props.onPress();
-      pressables[4]?.props.onPress();
+      advancedDifficultyButton?.props.onPress();
+      resetTrainingProgressButton?.props.onPress();
     });
     expect(setDifficulty).toHaveBeenCalledWith('Advanced');
     expect(alertMock).toHaveBeenCalledTimes(1);
@@ -292,7 +308,7 @@ describe('SettingsScreen wallet card', () => {
     expect(resetProgress).toHaveBeenCalledTimes(1);
 
     act(() => {
-      pressables[5]?.props.onPress();
+      resetSettingsButton?.props.onPress();
     });
     expect(alertMock).toHaveBeenCalledTimes(2);
     const settingsResetAction = alertMock.mock.calls[1][2].find((action: { text: string }) => action.text === 'Reset');
@@ -404,9 +420,10 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('PREPARE DEMO');
 
     const pressables = renderer.root.findAll((node) => String(node.type) === 'Pressable');
-    expect(pressables[6]).toBeDefined();
+    const prepareDemoButton = pressables.at(-1);
+    expect(prepareDemoButton).toBeDefined();
     act(() => {
-      pressables[6]?.props.onPress();
+      prepareDemoButton?.props.onPress();
     });
 
     expect(alertMock).toHaveBeenCalled();
@@ -430,5 +447,52 @@ describe('SettingsScreen wallet card', () => {
     expect(signTrainingMessage).not.toHaveBeenCalled();
 
     Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
+  });
+
+  it('replays app tour by resetting only tour visibility state and returning to home', () => {
+    setupDefaultMocks();
+    const setHomeTourSeenVersion = vi.fn();
+    const resetProgress = vi.fn();
+    const resetSettings = vi.fn();
+
+    useSettingsMock.mockReturnValue({
+      settings: {
+        difficulty: 'Intermediate',
+        notificationsEnabled: true,
+        soundEffectsEnabled: true,
+        hapticFeedbackEnabled: true,
+        homeTourSeenVersion: 1,
+      },
+      setDifficulty: vi.fn(),
+      setPreference: vi.fn(),
+      setHomeTourSeenVersion,
+      resetSettings,
+    });
+    useTrainingProgressMock.mockReturnValue({
+      progress: { surpriseChallenges: { completed: {} } },
+      resetProgress,
+      prepareDemo: vi.fn(),
+      debugSimulatePreviousDay: vi.fn(),
+    });
+    useWalletMock.mockReturnValue({
+      status: 'disconnected', wallet: null, error: null, realMessageSigningEnabled: false,
+      trainingSigningMessage: { nonce: '001122334455', displayMessage: 'hidden', messageBytes: new Uint8Array([1]) },
+      signingStatus: 'idle', signingError: null, connect: vi.fn(), disconnect: vi.fn(), signTrainingMessage: vi.fn(),
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<SettingsScreen />);
+    });
+
+    const replayButton = renderer.root.find((node) => node.props.accessibilityLabel === 'Replay app tour');
+    act(() => {
+      replayButton.props.onPress();
+    });
+
+    expect(setHomeTourSeenVersion).toHaveBeenCalledWith(0);
+    expect(pushMock).toHaveBeenCalledWith('/');
+    expect(resetProgress).not.toHaveBeenCalled();
+    expect(resetSettings).not.toHaveBeenCalled();
   });
 });

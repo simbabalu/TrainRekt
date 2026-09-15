@@ -1,12 +1,20 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { WalletHeaderControl } from '@/components/WalletHeaderControl';
+import { appHeaderLogo } from '@/components/appHeaderLogo';
 
 export function AppHeader() {
   return (
     <View style={styles.header}>
-      <Text style={styles.title}>TRAINREKT</Text>
+      <View style={styles.brand}>
+        <Image
+          accessibilityLabel="TrainRekt logo"
+          source={appHeaderLogo}
+          style={styles.logo}
+        />
+        <Text style={styles.title}>TRAINREKT</Text>
+      </View>
       <WalletHeaderControl />
     </View>
   );
@@ -22,6 +30,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
+  },
+  brand: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  logo: {
+    height: 42,
+    width: 42,
   },
   title: {
     color: Colors.text,

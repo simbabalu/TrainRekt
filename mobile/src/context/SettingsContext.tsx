@@ -4,11 +4,16 @@ import { mockSettings } from '@/data/mockSettings';
 import { clearSettings, loadSettings, saveSettings } from '@/storage/settingsStorage';
 import { TrainingDifficulty, TrainingSettings } from '@/types/settings';
 
+type BooleanSettingKey = {
+  [Key in keyof TrainingSettings]: TrainingSettings[Key] extends boolean ? Key : never;
+}[keyof TrainingSettings];
+
 interface SettingsContextValue {
   settings: TrainingSettings;
   isHydrated: boolean;
   setDifficulty: (difficulty: TrainingDifficulty) => void;
-  setPreference: (name: keyof Omit<TrainingSettings, 'difficulty'>, value: boolean) => void;
+  setPreference: (name: BooleanSettingKey, value: boolean) => void;
+  setHomeTourSeenVersion: (version: number) => void;
   resetSettings: () => Promise<void>;
 }
 
@@ -36,8 +41,13 @@ export function SettingsProvider({ children }: PropsWithChildren) {
     setSettings((current) => ({ ...current, difficulty }));
   }
 
-  function setPreference(name: keyof Omit<TrainingSettings, 'difficulty'>, value: boolean) {
+  function setPreference(name: BooleanSettingKey, value: boolean) {
     setSettings((current) => ({ ...current, [name]: value }));
+  }
+
+  function setHomeTourSeenVersion(version: number) {
+    const normalizedVersion = Number.isInteger(version) && version >= 0 ? version : 0;
+    setSettings((current) => ({ ...current, homeTourSeenVersion: normalizedVersion }));
   }
 
   async function resetSettings() {
@@ -45,5 +55,5 @@ export function SettingsProvider({ children }: PropsWithChildren) {
     setSettings(mockSettings);
   }
 
-  return <SettingsContext.Provider value={{ settings, isHydrated, setDifficulty, setPreference, resetSettings }}>{children}</SettingsContext.Provider>;
+  return <SettingsContext.Provider value={{ settings, isHydrated, setDifficulty, setPreference, setHomeTourSeenVersion, resetSettings }}>{children}</SettingsContext.Provider>;
 }

@@ -4,7 +4,7 @@
     "slug": "trainrekt",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/trainrekt-logo.png",
     "scheme": "trainrekt",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -12,10 +12,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#050B18",
+        "foregroundImage": "./assets/images/trainrekt-adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.trainrekt",
@@ -38,10 +36,10 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#090B10",
-          "image": "./assets/images/icon.png",
+          "backgroundColor": "#050B18",
+          "image": "./assets/images/trainrekt-adaptive-foreground.png",
           "resizeMode": "contain",
-          "imageWidth": 160
+          "imageWidth": 240
         }
       ]
     ],

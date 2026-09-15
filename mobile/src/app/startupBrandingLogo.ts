@@ -1,0 +1,1 @@
+export const startupBrandingLogo = require('../../assets/images/trainrekt-adaptive-foreground.png');
