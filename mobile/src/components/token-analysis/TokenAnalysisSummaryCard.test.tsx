@@ -7,9 +7,14 @@ import { TokenAnalysisSummaryCard } from './TokenAnalysisSummaryCard';
 import type { TokenAnalysisReport } from '@/types/tokenAnalysis';
 
 vi.mock('react-native', () => ({
+  Image: 'Image',
   StyleSheet: { create: (styles: unknown) => styles },
   Text: 'Text',
   View: 'View',
+}));
+
+vi.mock('@/components/AppIcon', () => ({
+  AppIcon: () => React.createElement('View', null, React.createElement('Text', null, 'GENERIC_TOKEN_ICON')),
 }));
 
 vi.mock('@/components/SectionCard', () => ({
@@ -92,10 +97,13 @@ describe('TokenAnalysisSummaryCard keys', () => {
 
     const content = textContent(renderer);
     expect(content).not.toContain('IDENTITY:');
+    expect(content).toContain('Token');
+    expect(content).toContain('TOK');
+    expect(content).toContain('Mint');
     expect(content).toContain('MINT AUTHORITY:Active');
     expect(content).toContain('FREEZE AUTHORITY:Revoked');
     expect(content).toContain('TOKEN PROGRAM:SPL Token');
-    expect(content).toContain('LARGEST TOKEN ACCOUNT:46.17%');
+    expect(content).toContain('TOP 5 TOKEN ACCOUNTS:59.61%');
   });
 
   it('renders repeated findings without duplicate React key warnings', () => {
@@ -251,5 +259,29 @@ describe('TokenAnalysisSummaryCard keys', () => {
     expect(content).not.toContain('UNDERSTAND THE SIGNALS');
     expect(content).not.toContain('VIEW FULL ANALYSIS');
     expect(content).not.toContain('HIDE FULL ANALYSIS');
+  });
+
+  it('uses Unknown fallback values when metadata fields are unavailable', () => {
+    const unresolved: TokenAnalysisReport = {
+      ...report(),
+      inspection: {
+        ...report().inspection,
+        identity: {
+          ...report().inspection.identity,
+          name: null,
+          symbol: null,
+          logoUri: null,
+        },
+      },
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TokenAnalysisSummaryCard report={unresolved} />);
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('Unknown');
+    expect(content).toContain('GENERIC_TOKEN_ICON');
   });
 });

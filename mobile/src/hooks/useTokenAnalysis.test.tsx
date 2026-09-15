@@ -97,7 +97,7 @@ function renderHook(service: TokenInspectionApiService): { getController: () => 
 }
 
 describe('useTokenAnalysis', () => {
-  it('does not request AI coach during analyzeToken', async () => {
+  it('requests AI coach automatically after analyzeToken succeeds', async () => {
     const service: TokenInspectionApiService = {
       inspectToken: vi.fn().mockResolvedValue(createInspection()),
       getProvenance: vi.fn().mockResolvedValue(createProvenance()),
@@ -116,10 +116,10 @@ describe('useTokenAnalysis', () => {
 
     expect(service.inspectToken).toHaveBeenCalledTimes(1);
     expect(service.getProvenance).toHaveBeenCalledTimes(1);
-    expect(service.getCoach).not.toHaveBeenCalled();
+    expect(service.getCoach).toHaveBeenCalledTimes(1);
   });
 
-  it('requests AI coach only after explicit action', async () => {
+  it('allows explicit retry action after auto-load', async () => {
     const service: TokenInspectionApiService = {
       inspectToken: vi.fn().mockResolvedValue(createInspection()),
       getProvenance: vi.fn().mockResolvedValue(createProvenance()),
@@ -136,11 +136,13 @@ describe('useTokenAnalysis', () => {
       await getController().analyzeToken();
     });
 
+    expect(service.getCoach).toHaveBeenCalledTimes(1);
+
     await act(async () => {
       await getController().explainWithAi();
     });
 
-    expect(service.getCoach).toHaveBeenCalledTimes(1);
+    expect(service.getCoach).toHaveBeenCalledTimes(2);
     expect(getController().aiStatus).toBe('ready');
     expect(getController().coach?.summary).toBe('summary');
   });
@@ -160,10 +162,6 @@ describe('useTokenAnalysis', () => {
 
     await act(async () => {
       await getController().analyzeToken();
-    });
-
-    await act(async () => {
-      await getController().explainWithAi();
     });
 
     expect(getController().deterministicStatus).toBe('ready');
@@ -255,7 +253,7 @@ describe('useTokenAnalysis', () => {
     expect(getController().validationError).toContain('valid Solana mint format');
   });
 
-  it('coalesces concurrent explainWithAi calls while first request is pending then resolves ready', async () => {
+  it('starts exactly one automatic coach request while analyze is successful', async () => {
     let resolveCoach!: (value: TokenInspectionCoachResponse) => void;
     const pendingCoach = new Promise<TokenInspectionCoachResponse>((resolve) => {
       resolveCoach = resolve;
@@ -275,13 +273,6 @@ describe('useTokenAnalysis', () => {
 
     await act(async () => {
       await getController().analyzeToken();
-    });
-
-    let firstCall!: Promise<void>;
-    let secondCall!: Promise<void>;
-    act(() => {
-      firstCall = getController().explainWithAi();
-      secondCall = getController().explainWithAi();
     });
 
     expect(getController().aiStatus).toBe('loading');
@@ -290,8 +281,7 @@ describe('useTokenAnalysis', () => {
 
     await act(async () => {
       resolveCoach(createCoach(true));
-      await firstCall;
-      await secondCall;
+      await Promise.resolve();
     });
 
     expect(getController().aiStatus).toBe('ready');
@@ -299,7 +289,7 @@ describe('useTokenAnalysis', () => {
     expect(getController().report).not.toBeNull();
   });
 
-  it('coalesces concurrent explainWithAi calls while pending and resolves unavailable safely', async () => {
+  it('keeps deterministic result visible when automatic coach request resolves unavailable', async () => {
     let resolveCoach!: (value: TokenInspectionCoachResponse) => void;
     const pendingCoach = new Promise<TokenInspectionCoachResponse>((resolve) => {
       resolveCoach = resolve;
@@ -321,20 +311,12 @@ describe('useTokenAnalysis', () => {
       await getController().analyzeToken();
     });
 
-    let firstCall!: Promise<void>;
-    let secondCall!: Promise<void>;
-    act(() => {
-      firstCall = getController().explainWithAi();
-      secondCall = getController().explainWithAi();
-    });
-
     expect(getController().aiStatus).toBe('loading');
     expect(service.getCoach).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolveCoach(createCoach(false));
-      await firstCall;
-      await secondCall;
+      await Promise.resolve();
     });
 
     expect(getController().aiStatus).toBe('unavailable');
@@ -510,10 +492,7 @@ describe('useTokenAnalysis', () => {
       await getController().analyzeToken();
     });
 
-    let coachCall!: Promise<void>;
-    act(() => {
-      coachCall = getController().explainWithAi();
-    });
+    expect(getController().aiStatus).toBe('loading');
 
     await act(async () => {
       getController().setMintInput('So11111111111111111111111111111111111111112');
@@ -535,7 +514,7 @@ describe('useTokenAnalysis', () => {
 
     coachResponse.resolve(createCoach());
     await act(async () => {
-      await coachCall;
+      await Promise.resolve();
     });
 
     expect(getController().report?.mint).toBe('So11111111111111111111111111111111111111112');

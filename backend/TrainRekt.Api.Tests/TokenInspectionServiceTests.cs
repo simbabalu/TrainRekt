@@ -611,7 +611,7 @@ public sealed class TokenInspectionServiceTests
         {
             _started.TrySetResult(true);
             await _release.Task.WaitAsync(cancellationToken);
-            return new TokenMetadataResolution("Token", "TOK", null, true);
+            return new TokenMetadataResolution("Token", "TOK", null, null, true);
         }
     }
 }

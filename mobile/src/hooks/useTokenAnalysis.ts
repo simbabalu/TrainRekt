@@ -77,6 +77,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
   const analysisControllerRef = useRef<AbortController | null>(null);
   const coachControllerRef = useRef<AbortController | null>(null);
   const coachRequestInFlightRef = useRef(false);
+  const lastAutoCoachRequestIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -100,7 +101,49 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     setCoach(null);
     setReport(null);
     setDeterministicStatus('idle');
+    lastAutoCoachRequestIdRef.current = null;
   }, []);
+
+  const requestCoachForMint = useCallback(async (mint: string, requestId: number, mode: 'auto' | 'manual') => {
+    if (requestId !== requestIdRef.current) return;
+    if (coachRequestInFlightRef.current || aiStatus === 'loading') return;
+
+    if (mode === 'auto') {
+      if (lastAutoCoachRequestIdRef.current === requestId) return;
+      lastAutoCoachRequestIdRef.current = requestId;
+    }
+
+    coachRequestInFlightRef.current = true;
+    const controller = new AbortController();
+    coachControllerRef.current = controller;
+
+    setAiStatus('loading');
+    setAiError(null);
+
+    try {
+      const result = await service.getCoach(mint, controller.signal);
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      if (!result.available || !result.coach) {
+        setCoach(null);
+        setAiStatus('unavailable');
+        setAiError('AI explanation is currently unavailable.');
+        return;
+      }
+
+      setCoach(result.coach);
+      setAiStatus('ready');
+    } catch (error) {
+      if (isAborted(error, controller.signal) || requestId !== requestIdRef.current) return;
+      setCoach(null);
+      setAiStatus('unavailable');
+      setAiError(getErrorMessage(error, 'AI explanation is currently unavailable.'));
+    } finally {
+      if (coachControllerRef.current === controller) {
+        coachControllerRef.current = null;
+        coachRequestInFlightRef.current = false;
+      }
+    }
+  }, [aiStatus, service]);
 
   const analyzeToken = useCallback(async (mintOverride?: string) => {
     const normalizedMint = normalizeMint(mintOverride ?? mintInput);
@@ -144,6 +187,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
     setCoach(null);
     setReport(null);
     setDeterministicStatus('validating');
+    lastAutoCoachRequestIdRef.current = null;
 
     const totalStartedAtMs = nowMs();
     let inspectionMs = 0;
@@ -183,6 +227,7 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
       }
 
       setDeterministicStatus('ready');
+      void requestCoachForMint(inspection.identity.mint, requestId, 'auto');
       console.info('[TrainRekt][TokenAnalysis][MobileFlowTiming] analyze-complete', {
         mint: normalizedMint,
         totalMs: elapsedMs(totalStartedAtMs),
@@ -205,43 +250,12 @@ export function useTokenAnalysis({ service = tokenInspectionApiService }: UseTok
         analysisControllerRef.current = null;
       }
     }
-  }, [mintInput, service]);
+  }, [mintInput, requestCoachForMint, service]);
 
   const explainWithAi = useCallback(async () => {
-    if (!report || aiStatus === 'loading' || coachRequestInFlightRef.current) return;
-
-    coachRequestInFlightRef.current = true;
-    const controller = new AbortController();
-    coachControllerRef.current = controller;
-    const requestId = requestIdRef.current;
-
-    setAiStatus('loading');
-    setAiError(null);
-
-    try {
-      const result = await service.getCoach(report.mint, controller.signal);
-      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
-      if (!result.available || !result.coach) {
-        setCoach(null);
-        setAiStatus('unavailable');
-        setAiError('AI explanation is currently unavailable.');
-        return;
-      }
-
-      setCoach(result.coach);
-      setAiStatus('ready');
-    } catch (error) {
-      if (isAborted(error, controller.signal) || requestId !== requestIdRef.current) return;
-      setCoach(null);
-      setAiStatus('unavailable');
-      setAiError(getErrorMessage(error, 'AI explanation is currently unavailable.'));
-    } finally {
-      if (coachControllerRef.current === controller) {
-        coachControllerRef.current = null;
-        coachRequestInFlightRef.current = false;
-      }
-    }
-  }, [aiStatus, report, service]);
+    if (!report) return;
+    await requestCoachForMint(report.mint, requestIdRef.current, 'manual');
+  }, [report, requestCoachForMint]);
 
   return {
     mintInput,

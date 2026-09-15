@@ -115,7 +115,7 @@ describe('AppHeader wallet connect surprise integration', () => {
     });
 
     text = readAllText(renderer);
-    expect(text).toMatch(/pascalschaer\.skr\s+v/);
+    expect(text).toMatch(/pascalschaer\.skr\s+>/);
 
     act(() => {
       vi.advanceTimersByTime(3000);

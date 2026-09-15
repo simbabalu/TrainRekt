@@ -28,12 +28,14 @@ public sealed class TokenMetadataResolver : ITokenMetadataResolver
         string? name = null;
         string? symbol = null;
         string? metadataUri = null;
+        string? logoUri = null;
         bool? isFungibleByAsset = null;
 
         var dasMetadata = await TryLoadDasMetadataAsync(mint, cancellationToken);
         name = FirstNonEmpty(name, dasMetadata.Name);
         symbol = FirstNonEmpty(symbol, dasMetadata.Symbol);
         metadataUri = FirstNonEmpty(metadataUri, dasMetadata.MetadataUri);
+        logoUri = FirstNonEmpty(logoUri, dasMetadata.LogoUri);
         isFungibleByAsset = dasMetadata.IsFungibleByAsset;
 
         if (programId == SolanaTokenConstants.Token2022ProgramId)
@@ -52,10 +54,10 @@ public sealed class TokenMetadataResolver : ITokenMetadataResolver
             metadataUri = FirstNonEmpty(metadataUri, metaplexMetadata.MetadataUri);
         }
 
-        return new TokenMetadataResolution(name, symbol, metadataUri, isFungibleByAsset);
+        return new TokenMetadataResolution(name, symbol, metadataUri, logoUri, isFungibleByAsset);
     }
 
-    private async Task<(string? Name, string? Symbol, string? MetadataUri, bool? IsFungibleByAsset)> TryLoadDasMetadataAsync(
+    private async Task<(string? Name, string? Symbol, string? MetadataUri, string? LogoUri, bool? IsFungibleByAsset)> TryLoadDasMetadataAsync(
         string mint,
         CancellationToken cancellationToken)
     {
@@ -65,9 +67,13 @@ public sealed class TokenMetadataResolver : ITokenMetadataResolver
                 method: "getAsset",
                 parameters:
                 [
-                    new { id = mint }
+                    mint
                 ],
                 cancellationToken);
+
+            var name = FirstNonEmpty(
+                HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "content", "metadata", "name"),
+                HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "token_info", "name"));
 
             var symbol = FirstNonEmpty(
                 HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "content", "metadata", "symbol"),
@@ -77,20 +83,23 @@ public sealed class TokenMetadataResolver : ITokenMetadataResolver
                 HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "content", "json_uri"),
                 HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "metadata", "json_uri"));
 
+            var logoUri = HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "content", "links", "image");
+
             return (
-                Name: HeliusRpcResponseReader.TryGetNestedString(assetResult.RootElement, "result", "content", "metadata", "name"),
+                Name: name,
                 Symbol: symbol,
                 MetadataUri: metadataUri,
+                LogoUri: logoUri,
                 IsFungibleByAsset: TryInferFungibilityFromAsset(assetResult.RootElement)
             );
         }
         catch (HeliusRpcException)
         {
-            return (null, null, null, null);
+            return (null, null, null, null, null);
         }
         catch (InvalidOperationException)
         {
-            return (null, null, null, null);
+            return (null, null, null, null, null);
         }
     }
 

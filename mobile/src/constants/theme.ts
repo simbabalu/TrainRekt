@@ -40,10 +40,10 @@ export const Spacing = {
 export const LayoutSpacing = {
   pageHorizontal: Spacing.lg,
   pageTop: Spacing.lg,
-  pageSectionGap: Spacing.lg,
+  pageSectionGap: Spacing.xl,
   pageBottomInset: Spacing.xl,
   cardPadding: Spacing.lg,
-  cardSectionGap: Spacing.md,
+  cardSectionGap: Spacing.lg,
   buttonGroupGap: Spacing.sm,
   fieldGap: Spacing.sm,
 } as const;

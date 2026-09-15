@@ -4,7 +4,6 @@ import {
 } from '@/domain/token-analysis/tokenAnalysisAuthorityContext';
 import type {
   TokenAnalysisReport,
-  TokenInspectionLargestAccount,
   TokenInspectionReviewSignal,
 } from '@/types/tokenAnalysis';
 
@@ -28,19 +27,6 @@ export interface TokenAnalysisSummary {
 
 function formatPercentage(value: number | null): string {
   return value == null ? 'Unavailable' : `${value.toFixed(2)}%`;
-}
-
-function formatProtocolContext(account: TokenInspectionLargestAccount): string {
-  const protocol = account.classification.protocol;
-  if (protocol?.toLowerCase() === 'pumpswap') return 'PumpSwap liquidity context';
-  if (protocol) {
-    return `${protocol
-      .split(/[_-]/u)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')} protocol context`;
-  }
-
-  return 'Context unknown';
 }
 
 function summarizeReviewExplanation(signal: TokenInspectionReviewSignal): string {
@@ -82,17 +68,23 @@ function authoritySignal(id: string, label: string, revoked: boolean, descriptio
 }
 
 function concentrationSignal(report: TokenAnalysisReport): TokenAnalysisSignal | null {
-  const largestAccount = report.inspection.largestTokenAccounts[0];
-  const percentage = largestAccount?.percentage ?? report.inspection.holderConcentration.topHolderPercentage;
+  const topFiveAccounts = report.inspection.largestTokenAccounts.slice(0, 5);
+  const percentage = report.inspection.holderConcentration.top5HoldersPercentage;
   if (percentage == null) return null;
 
+  const protocolAccountCount = topFiveAccounts.filter((account) => Boolean(account.classification.protocol)).length;
+  const hasKnownProtocolAccounts = protocolAccountCount > 0;
+  const description = hasKnownProtocolAccounts
+    ? `${protocolAccountCount} of top 5 accounts are known protocol/liquidity accounts.`
+    : 'Top accounts include unknown or ordinary token accounts.';
+
   return {
-    id: `concentration:${largestAccount?.address ?? 'top-holder'}`,
+    id: 'concentration:top-5',
     icon: 'concentration',
-    label: 'LARGEST TOKEN ACCOUNT',
+    label: 'TOP 5 TOKEN ACCOUNTS',
     value: formatPercentage(percentage),
-    description: largestAccount ? formatProtocolContext(largestAccount) : 'Context unknown',
-    tone: largestAccount?.classification.protocol ? 'review' : 'neutral',
+    description,
+    tone: hasKnownProtocolAccounts ? 'informational' : 'review',
   };
 }
 
@@ -107,7 +99,7 @@ export function buildTokenAnalysisSummary(report: TokenAnalysisReport): TokenAna
     icon: 'tokenProgram',
     label: 'TOKEN PROGRAM',
     value: isToken2022 ? 'Token-2022' : 'SPL Token',
-    description: isToken2022 ? 'Additional capabilities detected' : undefined,
+    description: isToken2022 ? 'Extended token standard; features are informational, not a risk verdict.' : undefined,
     tone: 'informational',
   });
 

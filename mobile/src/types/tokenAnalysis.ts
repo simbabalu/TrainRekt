@@ -6,8 +6,10 @@ export interface TokenInspectionApiRequest {
 
 export interface TokenInspectionIdentity {
   mint: string;
-  name: string;
-  symbol: string;
+  name: string | null;
+  symbol: string | null;
+  metadataUri?: string | null;
+  logoUri?: string | null;
 }
 
 export interface TokenInspectionAuthorities {

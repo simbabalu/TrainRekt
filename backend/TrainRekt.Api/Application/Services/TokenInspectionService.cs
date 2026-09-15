@@ -139,7 +139,8 @@ public sealed class TokenInspectionService : ITokenInspectionDeterministicServic
                 Decimals: parsedMint.Decimals,
                 SupplyRaw: parsedMint.Supply.ToString(),
                 ProgramId: ownerProgramId,
-                MetadataUri: metadata.MetadataUri);
+                MetadataUri: metadata.MetadataUri,
+                LogoUri: metadata.LogoUri);
 
             var authorities = new TokenAuthorities(
                 MintAuthority: parsedMint.MintAuthority,

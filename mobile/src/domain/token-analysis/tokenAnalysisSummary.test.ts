@@ -72,7 +72,7 @@ describe('buildTokenAnalysisSummary', () => {
     expect(summary.findings.find((finding) => finding.label === 'MINT AUTHORITY')).toBeDefined();
     expect(summary.findings.find((finding) => finding.label === 'FREEZE AUTHORITY')).toBeDefined();
     expect(summary.findings.find((finding) => finding.label === 'TOKEN PROGRAM')).toBeDefined();
-    expect(summary.findings.find((finding) => finding.label === 'LARGEST TOKEN ACCOUNT')).toBeDefined();
+    expect(summary.findings.find((finding) => finding.label === 'TOP 5 TOKEN ACCOUNTS')).toBeDefined();
   });
 
   it('keeps deterministic mint authority state as Active without context inference', () => {
@@ -154,7 +154,7 @@ describe('buildTokenAnalysisSummary', () => {
     const summary = buildTokenAnalysisSummary(createReport({ program: { programId: 'TokenzQd', programType: 'token-2022' } }));
     const program = summary.findings.find((finding) => finding.label === 'TOKEN PROGRAM');
 
-    expect(program).toMatchObject({ value: 'Token-2022', description: 'Additional capabilities detected', tone: 'informational' });
+    expect(program).toMatchObject({ value: 'Token-2022', description: 'Extended token standard; features are informational, not a risk verdict.', tone: 'informational' });
   });
 
   it('supports SKR-style context through typed protocol claims, not UI token matching', () => {

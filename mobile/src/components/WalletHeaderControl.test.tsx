@@ -98,7 +98,7 @@ describe('WalletHeaderControl', () => {
     });
 
     const trigger = renderer.root.find((node) => node.props.accessibilityLabel === 'Wallet connected: pascalschaer.skr');
-    expect(renderedText(renderer.toJSON())).toMatch(/pascalschaer\.skr\s+v/);
+    expect(renderedText(renderer.toJSON())).toMatch(/pascalschaer\.skr\s+>/);
 
     act(() => {
       trigger.props.onPress();
@@ -132,7 +132,7 @@ describe('WalletHeaderControl', () => {
     });
 
     const text = renderedText(renderer.toJSON());
-    expect(text).toMatch(/7xKs\.\.\.k9Wq\s+v/);
+    expect(text).toMatch(/7xKs\.\.\.k9Wq\s+>/);
     const trigger = renderer.root.find((node) => node.props.accessibilityLabel === 'Wallet connected: 7xKs...k9Wq');
     expect(trigger.props.accessibilityRole).toBe('button');
   });

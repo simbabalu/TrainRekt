@@ -7,4 +7,5 @@ public sealed record TokenIdentity(
     int Decimals,
     string SupplyRaw,
     string ProgramId,
-    string? MetadataUri);
+    string? MetadataUri,
+    string? LogoUri = null);

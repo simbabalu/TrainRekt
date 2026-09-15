@@ -59,7 +59,10 @@ export function WalletHeaderControl() {
         style={({ pressed }) => [styles.control, pressed && styles.controlPressed]}
         onPress={() => setMenuVisible(true)}
       >
-        <Text style={styles.controlText}>{identity?.primary ?? 'CONNECTED'} v</Text>
+        <View style={styles.connectedRow}>
+          <Text style={styles.controlText}>{identity?.primary ?? 'CONNECTED'}</Text>
+          <Text style={styles.chevronText}>{'>'}</Text>
+        </View>
       </Pressable>
 
       <Modal visible={menuVisible} transparent animationType="fade" statusBarTranslucent>
@@ -108,6 +111,17 @@ const styles = StyleSheet.create({
     fontSize: Typography.small,
     fontWeight: '800',
     letterSpacing: 0.6,
+  },
+  connectedRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  chevronText: {
+    color: Colors.secondaryText,
+    fontSize: Typography.small,
+    fontWeight: '900',
+    lineHeight: Typography.small,
   },
   menuBackdrop: {
     alignItems: 'center',

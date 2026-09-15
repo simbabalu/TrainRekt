@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { PageHeading } from '@/components/PageHeading';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -47,7 +47,6 @@ export default function TokenAnalysisScreen() {
     autoAnalyze?: string | string[];
     shareStatus?: string | string[];
   }>();
-  const scrollRef = useRef<ScrollView>(null);
   const handledShareRouteKeyRef = useRef<string | null>(null);
   const [dismissedShareNoticeEventId, setDismissedShareNoticeEventId] = useState<string | null>(null);
   const {
@@ -96,27 +95,26 @@ export default function TokenAnalysisScreen() {
     }
   }, [analyzeToken, autoAnalyze, shareEventId, shareStatus, sharedMint, setMintInput]);
 
-  function handleAnalyzeAnotherToken() {
-    if (shareEventId) {
-      setDismissedShareNoticeEventId(shareEventId);
-    }
-    clearInput();
-  }
-
-  function scrollToContentY(y: number) {
-    scrollRef.current?.scrollTo({
-      y: Math.max(y - Spacing.sm, 0),
-      animated: true,
-    });
-  }
-
   return (
-    <Screen ref={scrollRef}>
-      <PageHeading
-        eyebrow="TOKEN IDENTITY"
-        title="Analyze token"
-        subtitle="Deterministic code establishes the facts. AI explains the facts."
-      />
+    <Screen>
+      {isResultState ? (
+        <View style={styles.resultHeaderRow}>
+          <PrimaryButton
+            variant="secondary"
+            onPress={() => {
+              router.push('/');
+            }}
+          >
+            {'< HOME'}
+          </PrimaryButton>
+        </View>
+      ) : (
+        <PageHeading
+          eyebrow="TOKEN IDENTITY"
+          title="Analyze token"
+          subtitle="Deterministic code establishes the facts. AI explains the facts."
+        />
+      )}
       {shouldShowInput ? <TokenAnalysisInputCard
         mintInput={mintInput}
         onChangeMint={(value) => {
@@ -140,7 +138,6 @@ export default function TokenAnalysisScreen() {
       /> : null}
       {isResultState && report ? (
         <>
-          <PrimaryButton onPress={handleAnalyzeAnotherToken} variant="secondary">ANALYZE ANOTHER TOKEN</PrimaryButton>
           <TokenAnalysisReportCard
             key={`${report.mint}:${report.inspection.inspectedAtUtc}`}
             report={report}
@@ -148,7 +145,7 @@ export default function TokenAnalysisScreen() {
             aiStatus={aiStatus}
             aiError={aiError}
             coach={coach}
-            onExplainWithAi={() => {
+            onRetryAi={() => {
               void explainWithAi();
             }}
             onStartTraining={(topic, exerciseId) => {
@@ -162,7 +159,6 @@ export default function TokenAnalysisScreen() {
                 },
               });
             }}
-            onRequestScrollTo={scrollToContentY}
           />
         </>
       ) : null}
@@ -170,3 +166,10 @@ export default function TokenAnalysisScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  resultHeaderRow: {
+    alignItems: 'flex-start',
+    marginBottom: Spacing.xs,
+  },
+});

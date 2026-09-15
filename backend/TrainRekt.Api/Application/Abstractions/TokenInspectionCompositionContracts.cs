@@ -6,6 +6,7 @@ public sealed record TokenMetadataResolution(
     string? Name,
     string? Symbol,
     string? MetadataUri,
+    string? LogoUri,
     bool? IsFungibleByAsset);
 
 public sealed record LargestTokenAccountEntry(string Address, ulong AmountRaw);

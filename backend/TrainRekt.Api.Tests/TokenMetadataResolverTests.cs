@@ -10,9 +10,14 @@ namespace TrainRekt.Api.Tests;
 
 public sealed class TokenMetadataResolverTests
 {
+    private sealed record RpcCall(string Method, IReadOnlyList<object?> Parameters);
+
     private sealed class FakeHeliusClient : IHeliusClient
     {
         private readonly Dictionary<string, Queue<string>> _responsesByMethod = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Queue<Exception>> _exceptionsByMethod = new(StringComparer.Ordinal);
+
+        public List<RpcCall> Calls { get; } = [];
 
         public void Enqueue(string method, string json)
         {
@@ -23,6 +28,17 @@ public sealed class TokenMetadataResolverTests
             }
 
             queue.Enqueue(json);
+        }
+
+        public void EnqueueException(string method, Exception exception)
+        {
+            if (!_exceptionsByMethod.TryGetValue(method, out var queue))
+            {
+                queue = new Queue<Exception>();
+                _exceptionsByMethod[method] = queue;
+            }
+
+            queue.Enqueue(exception);
         }
 
         public HttpRequestMessage CreateRpcPostRequest(string jsonRpcPayload)
@@ -36,6 +52,13 @@ public sealed class TokenMetadataResolverTests
         public Task<JsonDocument> SendRpcRequestAsync(string method, IReadOnlyList<object?> parameters, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            Calls.Add(new RpcCall(method, parameters));
+
+            if (_exceptionsByMethod.TryGetValue(method, out var exceptions) && exceptions.Count > 0)
+            {
+                throw exceptions.Dequeue();
+            }
 
             if (!_responsesByMethod.TryGetValue(method, out var queue) || queue.Count == 0)
             {
@@ -64,7 +87,86 @@ public sealed class TokenMetadataResolverTests
         Assert.Equal("DAS Name", result.Name);
         Assert.Equal("DAS", result.Symbol);
         Assert.Equal("https://das.example/meta.json", result.MetadataUri);
+        Assert.Null(result.LogoUri);
         Assert.Equal(true, result.IsFungibleByAsset);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DasGetAsset_UsesStringMintParameter()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var resolver = new TokenMetadataResolver(fakeClient);
+        const string mint = "So11111111111111111111111111111111111111112";
+
+        fakeClient.Enqueue("getAsset", "{\"jsonrpc\":\"2.0\",\"result\":{\"content\":{\"metadata\":{\"name\":\"Wrapped SOL\",\"symbol\":\"SOL\"},\"json_uri\":\"\"}}}");
+
+        await resolver.ResolveAsync(
+            mint,
+            SolanaTokenConstants.SplTokenProgramId,
+            new byte[SolanaTokenConstants.MintAccountBaseLengthBytes],
+            CancellationToken.None);
+
+        var getAssetCall = Assert.Single(fakeClient.Calls.Where((call) => call.Method == "getAsset"));
+        var mintParameter = Assert.Single(getAssetCall.Parameters);
+        Assert.IsType<string>(mintParameter);
+        Assert.Equal(mint, mintParameter);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DasTokenInfoFallback_UsesTokenInfoNameAndSymbolAndLogo()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var resolver = new TokenMetadataResolver(fakeClient);
+        const string mint = "So11111111111111111111111111111111111111112";
+
+        fakeClient.Enqueue("getAsset", "{\"jsonrpc\":\"2.0\",\"result\":{\"interface\":\"FungibleToken\",\"content\":{\"metadata\":{},\"json_uri\":\"https://token.example/metadata.json\",\"links\":{\"image\":\"https://token.example/logo.png\"}},\"token_info\":{\"name\":\"Wrapped SOL\",\"symbol\":\"SOL\",\"token_standard\":\"Fungible\"}}}");
+
+        var result = await resolver.ResolveAsync(
+            mint,
+            SolanaTokenConstants.SplTokenProgramId,
+            new byte[SolanaTokenConstants.MintAccountBaseLengthBytes],
+            CancellationToken.None);
+
+        Assert.Equal("Wrapped SOL", result.Name);
+        Assert.Equal("SOL", result.Symbol);
+        Assert.Equal("https://token.example/metadata.json", result.MetadataUri);
+        Assert.Equal("https://token.example/logo.png", result.LogoUri);
+        Assert.Equal(true, result.IsFungibleByAsset);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DasProviderError_FallsThroughToMetaplex()
+    {
+        var fakeClient = new FakeHeliusClient();
+        var resolver = new TokenMetadataResolver(fakeClient);
+        const string mint = "So11111111111111111111111111111111111111112";
+
+        fakeClient.EnqueueException(
+            "getAsset",
+            new HeliusRpcException(HeliusRpcFailureKind.ProviderError, "invalid getAsset payload"));
+
+        var metaplexPayload = BuildMetaplexMetadataPayload(
+            mint,
+            "Metaplex Name",
+            "MPLX",
+            "https://mplx.example/meta.json");
+
+        var metaplexResult =
+            "{\"jsonrpc\":\"2.0\",\"result\":[{" +
+            "\"account\":{\"data\":[\"" + Convert.ToBase64String(metaplexPayload) + "\",\"base64\"]}" +
+            "}]}";
+
+        fakeClient.Enqueue("getProgramAccounts", metaplexResult);
+
+        var result = await resolver.ResolveAsync(
+            mint,
+            SolanaTokenConstants.SplTokenProgramId,
+            new byte[SolanaTokenConstants.MintAccountBaseLengthBytes],
+            CancellationToken.None);
+
+        Assert.Equal("Metaplex Name", result.Name);
+        Assert.Equal("MPLX", result.Symbol);
+        Assert.Equal("https://mplx.example/meta.json", result.MetadataUri);
     }
 
     [Fact]
@@ -145,6 +247,24 @@ public sealed class TokenMetadataResolverTests
         var emptyVectorLength = new byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(emptyVectorLength, 0);
         stream.Write(emptyVectorLength);
+
+        return stream.ToArray();
+    }
+
+    private static byte[] BuildMetaplexMetadataPayload(string mint, string name, string symbol, string uri)
+    {
+        if (!Base58Codec.TryDecode(mint, out var mintBytes) || mintBytes.Length != 32)
+        {
+            throw new InvalidOperationException("Mint must decode to 32 bytes.");
+        }
+
+        using var stream = new MemoryStream();
+        stream.WriteByte(4);
+        stream.Write(new byte[32]);
+        stream.Write(mintBytes);
+        WriteBorshString(stream, name);
+        WriteBorshString(stream, symbol);
+        WriteBorshString(stream, uri);
 
         return stream.ToArray();
     }
