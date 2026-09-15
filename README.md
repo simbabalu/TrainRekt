@@ -126,6 +126,8 @@ Wallet/native integration is isolated behind service boundaries in [mobile/src/s
 
 See [mobile/README.md](mobile/README.md) for full setup and Android development-build workflow.
 
+For the reproducible backend/mobile setup, exact demo configuration, Seeker workflow, validation commands, and preflight checklist, see [docs/DEMO_PREFLIGHT.md](docs/DEMO_PREFLIGHT.md).
+
 Note: Expo Go is not sufficient for MWA functionality in this project.
 
 ## Android Release / Hackathon APK
