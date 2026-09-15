@@ -8,7 +8,6 @@ import { PageHeading } from '@/components/PageHeading';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { Colors, Radius, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
-import { DEV_DEMO_TOOLS_ENABLED } from '@/constants/debug';
 import { getWalletDisplayIdentity } from '@/domain/wallet/getWalletDisplayIdentity';
 import { difficultyOptions } from '@/types/settings';
 import { useSettings } from '@/hooks/useSettings';
@@ -17,7 +16,7 @@ import { useWallet } from '@/hooks/useWallet';
 
 export default function SettingsScreen() {
   const { settings, setDifficulty, setHomeTourSeenVersion, resetSettings } = useSettings();
-  const { resetProgress, prepareDemo } = useTrainingProgress();
+  const { resetProgress } = useTrainingProgress();
   const { status, wallet, error, realMessageSigningEnabled } = useWallet();
   const router = useRouter();
   const [showSigningEducation, setShowSigningEducation] = useState(false);
@@ -38,17 +37,6 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reset', style: 'destructive', onPress: () => { void resetSettings(); } },
     ]);
-  }
-
-  function confirmPrepareDemo() {
-    Alert.alert(
-      'Prepare demo?',
-      'This resets local training progress, achievements, daily progress and demo challenge completion. Your wallet and on-chain data are not changed.',
-      [
-        { text: 'CANCEL', style: 'cancel' },
-        { text: 'PREPARE DEMO', style: 'destructive', onPress: () => { void prepareDemo(); } },
-      ],
-    );
   }
 
   function replayAppTour() {
@@ -82,8 +70,8 @@ export default function SettingsScreen() {
       <SectionCard>
         <View style={styles.compactItem}>
           <SectionHeader
-            title="REAL WALLET TRAINING"
-            subtitle="Real message signing is currently disabled."
+            title="SAFE WALLET TRAINING"
+            subtitle="Training never requests real signatures or asset movement."
             iconName={{ ios: 'signature', android: 'draw', web: 'draw' }}
             iconLabel="Real wallet training"
           />
@@ -92,7 +80,9 @@ export default function SettingsScreen() {
           </Pressable>
           {showSigningEducation && (
             <Text style={styles.educationCopy}>
-              TrainRekt teaches how to review wallet prompts. This simulator does not request a real signature, transaction, or asset movement.
+              TrainRekt uses wallet context to personalize security training.{`\n`}
+              Training scenarios are simulated and never request a real signature,{`\n`}
+              transaction, or asset movement.
             </Text>
           )}
           {realMessageSigningEnabled && <Text style={styles.unexpectedStateCopy}>Signing availability is controlled by the wallet safety runtime.</Text>}
@@ -120,18 +110,9 @@ export default function SettingsScreen() {
           <Pressable onPress={confirmResetSettings} style={styles.resetButton}><Text style={styles.resetLabel}>Reset settings</Text></Pressable>
         </View>
       </SectionCard>
-      {DEV_DEMO_TOOLS_ENABLED && __DEV__ && (
-        <SectionCard>
-          <Text style={styles.sectionTitle}>DEMO TOOLS</Text>
-          <Text style={styles.devStatusCopy}>Reset local training state for a repeatable hackathon demo.</Text>
-          <View style={styles.resetButtons}>
-            <Pressable onPress={confirmPrepareDemo} style={styles.resetButton}><Text style={styles.resetLabel}>PREPARE DEMO</Text></Pressable>
-          </View>
-        </SectionCard>
-      )}
       <SectionCard>
         <Text style={styles.sectionTitle}>ABOUT</Text>
-        <Text style={styles.about}>TrainRekt is a crypto decision-training simulator.{`\n`}No real assets are traded.</Text>
+        <Text style={styles.about}>TrainRekt is a Web3 security training platform that helps you recognize risky wallet interactions, token signals and unsafe decisions.{`\n`}{`\n`}Training scenarios are simulated. No real assets are traded.</Text>
         <View style={styles.version}><Text style={styles.muted}>Version</Text><Text style={styles.value}>{appVersion}</Text></View>
       </SectionCard>
     </Screen>

@@ -233,8 +233,8 @@ describe('SettingsScreen wallet card', () => {
     expect(text).toContain('Reset training progress');
     expect(text).toContain('1.0.1');
     expect(text).not.toContain('Disconnect');
-    expect(text).toContain('REAL WALLET TRAINING');
-    expect(text).toContain('Real message signing is currently disabled.');
+    expect(text).toContain('SAFE WALLET TRAINING');
+    expect(text).toContain('Training never requests real signatures or asset movement.');
     expect(text).toContain('LEARN MORE');
     expect(text).not.toContain('001122334455');
     expect(text).not.toContain('TrainRekt Wallet Safety Training');
@@ -249,12 +249,16 @@ describe('SettingsScreen wallet card', () => {
     act(() => {
       learnMore?.props.onPress();
     });
-    expect(renderedText(renderer.toJSON())).toContain('This simulator does not request a real signature');
+    expect(renderedText(renderer.toJSON())).toContain('TrainRekt uses wallet context to personalize security training.');
+    expect(renderedText(renderer.toJSON())).toMatch(/Training scenarios are simulated and never request a real signature,\s*transaction, or asset movement\./);
     expect(useWalletMock.mock.results[0]?.value.signTrainingMessage).not.toHaveBeenCalled();
     expect(signMessages).not.toHaveBeenCalled();
     expect(signTransactions).not.toHaveBeenCalled();
     expect(signAndSendTransactions).not.toHaveBeenCalled();
     expect(deauthorize).not.toHaveBeenCalled();
+    expect(text).toContain('TrainRekt is a Web3 security training platform that helps you recognize risky wallet interactions, token signals and unsafe decisions.');
+    expect(text).toContain('Training scenarios are simulated. No real assets are traded.');
+    expect(text).not.toContain('TrainRekt is a crypto decision-training simulator.');
   });
 
   it('keeps difficulty selection interactive and routes reset actions through confirmation', () => {
@@ -318,7 +322,7 @@ describe('SettingsScreen wallet card', () => {
     expect(resetSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('shows only demo tools when __DEV__ and DEV_DEMO_TOOLS_ENABLED are true', () => {
+  it('keeps demo tools out of the normal Settings UI even in DEV', () => {
     setupDefaultMocks();
     useWalletMock.mockReturnValue({
       status: 'disconnected',
@@ -342,8 +346,8 @@ describe('SettingsScreen wallet card', () => {
     });
 
     const text = renderedText(renderer.toJSON());
-    expect(text).toContain('DEMO TOOLS');
-    expect(text).toContain('PREPARE DEMO');
+    expect(text).not.toContain('DEMO TOOLS');
+    expect(text).not.toContain('PREPARE DEMO');
     expect(text).not.toContain('DEVELOPER TOOLS');
     expect(text).not.toContain('Preview fake airdrop challenge');
     expect(text).not.toContain('Simulate previous day');
@@ -378,74 +382,6 @@ describe('SettingsScreen wallet card', () => {
     expect(text).not.toContain('PREPARE DEMO');
 
     debugFlags.DEV_DEMO_TOOLS_ENABLED = true;
-    Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
-  });
-
-  it('routes PREPARE DEMO through confirmation and allows cancel without changing state', () => {
-    setupDefaultMocks();
-    const prepareDemo = vi.fn();
-    const connect = vi.fn();
-    const disconnect = vi.fn();
-    const signTrainingMessage = vi.fn();
-    useTrainingProgressMock.mockReturnValue({
-      progress: { surpriseChallenges: { completed: {} } },
-      resetProgress: vi.fn(),
-      prepareDemo,
-      debugSimulatePreviousDay: vi.fn(),
-    });
-    useWalletMock.mockReturnValue({
-      status: 'connected',
-      wallet: {
-        label: 'demo.skr',
-        address: '51SYwT7hXpnYccF6Uabvwp7mQkY6MoBVVqf3v83oJZ',
-      },
-      error: null,
-      realMessageSigningEnabled: false,
-      trainingSigningMessage: { nonce: '001122334455', displayMessage: 'hidden', messageBytes: new Uint8Array([1]) },
-      signingStatus: 'idle',
-      signingError: null,
-      connect,
-      disconnect,
-      signTrainingMessage,
-    });
-
-    Object.defineProperty(globalThis, '__DEV__', { value: true, configurable: true });
-
-    let renderer!: ReturnType<typeof create>;
-    act(() => {
-      renderer = create(<SettingsScreen />);
-    });
-
-    const text = renderedText(renderer.toJSON());
-    expect(text).toContain('PREPARE DEMO');
-
-    const pressables = renderer.root.findAll((node) => String(node.type) === 'Pressable');
-    const prepareDemoButton = pressables.at(-1);
-    expect(prepareDemoButton).toBeDefined();
-    act(() => {
-      prepareDemoButton?.props.onPress();
-    });
-
-    expect(alertMock).toHaveBeenCalled();
-    const latestCall = alertMock.mock.calls.at(-1);
-    expect(latestCall?.[0]).toBe('Prepare demo?');
-    expect(latestCall?.[1]).toContain('Your wallet and on-chain data are not changed.');
-
-    const cancelAction = latestCall?.[2].find((action: { text: string }) => action.text === 'CANCEL');
-    act(() => {
-      cancelAction.onPress?.();
-    });
-    expect(prepareDemo).not.toHaveBeenCalled();
-
-    const confirmAction = latestCall?.[2].find((action: { text: string }) => action.text === 'PREPARE DEMO');
-    act(() => {
-      confirmAction.onPress();
-    });
-    expect(prepareDemo).toHaveBeenCalledTimes(1);
-    expect(connect).not.toHaveBeenCalled();
-    expect(disconnect).not.toHaveBeenCalled();
-    expect(signTrainingMessage).not.toHaveBeenCalled();
-
     Object.defineProperty(globalThis, '__DEV__', { value: false, configurable: true });
   });
 

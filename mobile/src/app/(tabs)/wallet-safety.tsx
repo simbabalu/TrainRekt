@@ -1,8 +1,7 @@
-import { StyleSheet, Text } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRef } from 'react';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { PageHeading } from '@/components/PageHeading';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { WalletSafetySnapshotCard } from '@/components/WalletSafetySnapshotCard';
 import { WalletSafetyInspection } from '@/components/wallet/WalletSafetyInspection';
@@ -13,7 +12,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useTrainingProgress } from '@/hooks/useTrainingProgress';
 
 export default function WalletSafetyScreen() {
-  const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
   const { wallet, connect } = useWallet();
   const { progress } = useTrainingProgress();
   const { isConnected, status, snapshot, error, network, refresh } = useWalletSnapshot();
@@ -30,13 +29,12 @@ export default function WalletSafetyScreen() {
   };
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <PageHeading
         eyebrow="WALLET SAFETY"
         title="Read-only wallet snapshot"
         subtitle="Inspect your connected wallet with public RPC reads only."
       />
-      <PrimaryButton variant="secondary" onPress={() => { router.push('/(tabs)/token-analysis' as Href); }}>ANALYZE TOKEN</PrimaryButton>
       <WalletSafetySnapshotCard
         wallet={wallet}
         connected={isConnected}
@@ -52,6 +50,7 @@ export default function WalletSafetyScreen() {
         }}
       />
       <WalletSafetyInspection
+        scrollRef={scrollRef}
         connected={isConnected}
         status={inspectionStatus}
         viewMode={inspectionViewMode}

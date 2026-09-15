@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -18,6 +19,7 @@ import { WalletInspectionEducationDetails } from './WalletInspectionEducationDet
 import { WalletTrainingRecommendationCard } from './WalletTrainingRecommendationCard';
 
 interface WalletSafetyInspectionProps {
+  scrollRef?: React.RefObject<ScrollView | null>;
   connected: boolean;
   status: WalletInspectionStatus;
   viewMode: WalletInspectionViewMode;
@@ -113,8 +115,12 @@ function DisclosureControls({
   );
 }
 
-export function WalletSafetyInspection({ connected, status, viewMode, inspection, error, onViewModeChange, onRefresh, walletLessonProgress = {} }: WalletSafetyInspectionProps) {
+export function WalletSafetyInspection({ scrollRef, connected, status, viewMode, inspection, error, onViewModeChange, onRefresh, walletLessonProgress = {} }: WalletSafetyInspectionProps) {
   const router = useRouter();
+  const cardLayoutYRef = useRef<number | null>(null);
+  const containerLayoutYRef = useRef<number | null>(null);
+  const sectionLayoutYRefs = useRef<Partial<Record<Extract<WalletInspectionViewMode, 'review' | 'informational' | 'all'>, number>>>({});
+  const pendingScrollModeRef = useRef<Extract<WalletInspectionViewMode, 'review' | 'informational' | 'all'> | null>(null);
   const tokenAccounts = inspection?.tokenAccounts ?? [];
   const mintInspections = inspection?.mintInspections ?? [];
   const mintByAddress = new Map(mintInspections.map((mintInspection) => [mintInspection.mintAddress, mintInspection]));
@@ -148,9 +154,47 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
 
   const canRenderInspection = Boolean(inspection);
 
+  function scrollToExpandedSection(mode: Extract<WalletInspectionViewMode, 'review' | 'informational' | 'all'>) {
+    const cardLayoutY = cardLayoutYRef.current;
+    const containerLayoutY = containerLayoutYRef.current;
+    const sectionLayoutY = sectionLayoutYRefs.current[mode];
+    if (cardLayoutY === null || containerLayoutY === null || sectionLayoutY === undefined) return;
+
+    pendingScrollModeRef.current = null;
+    scrollRef?.current?.scrollTo({ y: Math.max(cardLayoutY + containerLayoutY + sectionLayoutY - Spacing.md, 0), animated: true });
+  }
+
+  function handleLayout(mode: Extract<WalletInspectionViewMode, 'review' | 'informational' | 'all'>, event: LayoutChangeEvent) {
+    sectionLayoutYRefs.current[mode] = event.nativeEvent.layout.y;
+    if (pendingScrollModeRef.current === mode) scrollToExpandedSection(mode);
+  }
+
+  function handleCardLayout(event: LayoutChangeEvent) {
+    cardLayoutYRef.current = event.nativeEvent.layout.y;
+    if (pendingScrollModeRef.current) scrollToExpandedSection(pendingScrollModeRef.current);
+  }
+
+  function handleContainerLayout(event: LayoutChangeEvent) {
+    containerLayoutYRef.current = event.nativeEvent.layout.y;
+    if (pendingScrollModeRef.current) scrollToExpandedSection(pendingScrollModeRef.current);
+  }
+
+  function handleViewModeChange(nextMode: WalletInspectionViewMode) {
+    if (nextMode === 'review' || nextMode === 'informational' || nextMode === 'all') {
+      pendingScrollModeRef.current = nextMode;
+    } else {
+      pendingScrollModeRef.current = null;
+    }
+    onViewModeChange(nextMode);
+  }
+
   return (
-    <SectionCard>
-      <View style={styles.container}>
+    <View onLayout={handleCardLayout}>
+      <SectionCard>
+        <View
+          style={styles.container}
+          onLayout={handleContainerLayout}
+        >
         <Text style={styles.title}>WALLET SAFETY INSPECTION</Text>
         <Text style={styles.subtitle}>Review public wallet signals that may deserve attention.</Text>
 
@@ -175,10 +219,10 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                 )}
 
                 {viewMode === 'review' && (
-                  <>
+                  <View onLayout={(event) => handleLayout('review', event)}>
                     <Text style={styles.sectionTitle}>{`NEEDS REVIEW (${categorySummary.reviewAccountCount})`}</Text>
                     <PrimaryButton
-                      onPress={() => onViewModeChange('collapsed')}
+                      onPress={() => handleViewModeChange('collapsed')}
                       disabled={status === 'loading'}
                       variant="secondary"
                     >
@@ -190,14 +234,14 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                       mintByAddress={mintByAddress}
                       emptyMessage="No review signals detected in the inspected token accounts."
                     />
-                  </>
+                  </View>
                 )}
 
                 {viewMode !== 'review' && (
                   <>
                     <Text style={styles.sectionTitle}>{`NEEDS REVIEW (${categorySummary.reviewAccountCount})`}</Text>
                     <PrimaryButton
-                      onPress={() => onViewModeChange('review')}
+                      onPress={() => handleViewModeChange('review')}
                       disabled={status === 'loading'}
                       variant="secondary"
                     >
@@ -211,26 +255,28 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
                   informationalAccountCount={categorySummary.informationalAccountCount}
                   inspectedAccountCount={categorySummary.inspectedAccountCount}
                   status={status}
-                  onViewModeChange={onViewModeChange}
+                  onViewModeChange={handleViewModeChange}
                 />
 
                 {viewMode === 'informational' && (
-                  <>
+                  <View onLayout={(event) => handleLayout('informational', event)}>
                     <Text style={styles.info}>Token-2022 is informational. Token-2022 itself is not a warning.</Text>
                     <AccountListSection
                       title={`INFORMATIONAL (${categorySummary.informationalAccountCount})`}
                       accounts={categorized.informationalAccounts}
                       mintByAddress={mintByAddress}
                     />
-                  </>
+                  </View>
                 )}
 
                 {viewMode === 'all' && (
-                  <AccountListSection
-                    title={`ALL ACCOUNTS (${categorySummary.inspectedAccountCount})`}
-                    accounts={tokenAccounts}
-                    mintByAddress={mintByAddress}
-                  />
+                  <View onLayout={(event) => handleLayout('all', event)}>
+                    <AccountListSection
+                      title={`ALL ACCOUNTS (${categorySummary.inspectedAccountCount})`}
+                      accounts={tokenAccounts}
+                      mintByAddress={mintByAddress}
+                    />
+                  </View>
                 )}
 
                 <View style={styles.lessonBox}>
@@ -279,8 +325,9 @@ export function WalletSafetyInspection({ connected, status, viewMode, inspection
             )}
           </>
         )}
-      </View>
-    </SectionCard>
+        </View>
+      </SectionCard>
+    </View>
   );
 }
 

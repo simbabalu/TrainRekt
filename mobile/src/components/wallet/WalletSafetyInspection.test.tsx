@@ -90,6 +90,61 @@ describe('WalletSafetyInspection', () => {
     );
   }
 
+  it.each([
+    ['review', 'SHOW NEEDS REVIEW', 'HIDE NEEDS REVIEW'],
+    ['informational', 'SHOW INFORMATIONAL', 'HIDE INFORMATIONAL'],
+    ['all', 'SHOW ALL 2 ACCOUNTS', 'HIDE ALL ACCOUNTS'],
+  ] as const)('scrolls to the expanded %s section after layout', (mode, openLabel, closeLabel) => {
+    const scrollToMock = vi.fn();
+    const scrollRef = { current: { scrollTo: scrollToMock } } as unknown as React.ComponentProps<typeof WalletSafetyInspection>['scrollRef'];
+    const inspection = mode === 'informational'
+      ? {
+          ...createInspection(),
+          tokenAccounts: [{
+            ...createInspection().tokenAccounts[0],
+            state: 'initialized' as const,
+            delegateAddress: null,
+            delegatedAmountRaw: null,
+          }],
+        }
+      : createInspection();
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createHarness({ viewMode: 'collapsed', scrollRef, inspection }));
+    });
+
+    const openButton = renderer.root.findAll((node) => String(node.type) === 'Pressable').find((node) => flattenText(node).includes(openLabel));
+    expect(openButton).toBeDefined();
+
+    act(() => {
+      openButton?.props.onPress();
+      renderer.update(createHarness({ viewMode: mode, scrollRef, inspection }));
+    });
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+
+    const layoutNodes = renderer.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+    act(() => {
+      layoutNodes.forEach((node, index) => {
+        node.props.onLayout({ nativeEvent: { layout: { y: [100, 20, 300][index] ?? 0 } } });
+      });
+    });
+
+    expect(scrollToMock).toHaveBeenCalledWith({ y: 408, animated: true });
+
+    const closeButton = renderer.root.findAll((node) => String(node.type) === 'Pressable').find((node) => flattenText(node).includes(closeLabel));
+    expect(closeButton).toBeDefined();
+    scrollToMock.mockClear();
+
+    act(() => {
+      closeButton?.props.onPress();
+      renderer.update(createHarness({ viewMode: 'collapsed', scrollRef, inspection }));
+    });
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+  });
+
   it('renders account-category summary with precedence-safe semantics', () => {
     let renderer!: ReturnType<typeof create>;
 

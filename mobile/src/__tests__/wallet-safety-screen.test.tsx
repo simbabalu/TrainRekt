@@ -8,11 +8,6 @@ const useWalletMock = vi.hoisted(() => vi.fn());
 const useWalletSnapshotMock = vi.hoisted(() => vi.fn());
 const useWalletSafetyInspectionMock = vi.hoisted(() => vi.fn());
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
-const pushMock = vi.hoisted(() => vi.fn());
-
-vi.mock('expo-router', () => ({
-  useRouter: () => ({ push: pushMock }),
-}));
 
 vi.mock('@/hooks/useWallet', () => ({
   useWallet: useWalletMock,
