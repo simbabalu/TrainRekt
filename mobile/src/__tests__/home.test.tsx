@@ -1,11 +1,13 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HomeScreen from '@/app/(tabs)/index';
 
 const useTrainingProgressMock = vi.hoisted(() => vi.fn());
 const useSettingsMock = vi.hoisted(() => vi.fn());
+const routeState = vi.hoisted(() => ({ pathname: '/' }));
+const latestTourProps = vi.hoisted(() => ({ current: null as null | Record<string, unknown> }));
 
 vi.mock('@/hooks/useTrainingProgress', () => ({
   useTrainingProgress: useTrainingProgressMock,
@@ -18,10 +20,14 @@ vi.mock('@/hooks/useSettings', () => ({
 vi.mock('expo-router', () => ({
   Link: 'Link',
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => routeState.pathname,
 }));
 
 vi.mock('@/components/home/HomeOnboardingTour', () => ({
-  HomeOnboardingTour: () => null,
+  HomeOnboardingTour: (props: Record<string, unknown>) => {
+    latestTourProps.current = props;
+    return React.createElement('Text', null, props.visible ? 'HOME_TOUR_VISIBLE' : 'HOME_TOUR_HIDDEN');
+  },
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -51,8 +57,56 @@ vi.mock('@/components/wallet/HomeWalletSafetyCard', () => ({
 vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   Text: 'Text',
-  View: 'View',
+  View: React.forwardRef(function ViewMock(
+    {
+      children,
+      onLayout,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      onLayout?: (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void;
+      [key: string]: unknown;
+    },
+    ref: React.ForwardedRef<{ measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void } | null>,
+  ) {
+    const layoutRef = React.useRef({ x: 40, y: 300, width: 200, height: 72 });
+
+    if (typeof ref === 'function') {
+      ref({
+        measureInWindow: (callback) => {
+          const { x, y, width, height } = layoutRef.current;
+          callback(x, y, width, height);
+        },
+      });
+    } else if (ref && 'current' in ref) {
+      ref.current = {
+        measureInWindow: (callback) => {
+          const { x, y, width, height } = layoutRef.current;
+          callback(x, y, width, height);
+        },
+      };
+    }
+
+    return React.createElement('View', {
+      ...props,
+      onLayout: (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => {
+        const { y, height } = event.nativeEvent.layout;
+        layoutRef.current = { x: 40, y, width: 200, height };
+        onLayout?.(event);
+      },
+    }, children);
+  }),
 }));
+
+beforeEach(() => {
+  routeState.pathname = '/';
+  latestTourProps.current = null;
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function renderedText(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number') return String(value);
@@ -172,5 +226,48 @@ describe('HomeScreen simplified layout', () => {
 
     const linkNode = renderer.root.findAll((node) => String(node.type) === 'Link')[0];
     expect(linkNode.props.href).toEqual({ pathname: '/train', params: { mode: 'practice' } });
+  });
+
+  it('keeps tour hidden off-home route and measures token spotlight after Home becomes active', () => {
+    useSettingsMock.mockReturnValue({
+      settings: { homeTourSeenVersion: 0 },
+      setHomeTourSeenVersion: vi.fn(),
+    });
+    useTrainingProgressMock.mockReturnValue({
+      progress: makeProgress(0, false),
+    });
+
+    routeState.pathname = '/settings';
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<HomeScreen />);
+    });
+
+    expect(latestTourProps.current?.visible).toBe(false);
+
+    routeState.pathname = '/';
+    act(() => {
+      renderer.update(<HomeScreen />);
+    });
+    expect(latestTourProps.current?.visible).toBe(true);
+
+    act(() => {
+      (latestTourProps.current?.onNext as (() => void) | undefined)?.();
+    });
+
+    const targetLayouts = renderer.root.findAll((node) => typeof node.props.onLayout === 'function');
+    expect(targetLayouts.length).toBeGreaterThan(0);
+
+    act(() => {
+      targetLayouts.forEach((node) => {
+        node.props.onLayout({ nativeEvent: { layout: { x: 0, y: 320, width: 320, height: 72 } } });
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(latestTourProps.current?.stepIndex).toBe(1);
+    expect(latestTourProps.current?.spotlightRect).toMatchObject({ x: 40, y: 320, width: 200, height: 72 });
   });
 });

@@ -261,11 +261,12 @@ describe('SettingsScreen wallet card', () => {
     expect(text).not.toContain('TrainRekt is a crypto decision-training simulator.');
   });
 
-  it('keeps difficulty selection interactive and routes reset actions through confirmation', () => {
+  it('keeps difficulty selection interactive and routes reset actions through confirmation', async () => {
     setupDefaultMocks();
+    pushMock.mockReset();
     const setDifficulty = vi.fn();
     const resetProgress = vi.fn();
-    const resetSettings = vi.fn();
+    const resetSettings = vi.fn().mockResolvedValue(undefined);
     useSettingsMock.mockReturnValue({
       settings: { difficulty: 'Intermediate', notificationsEnabled: true, soundEffectsEnabled: true, hapticFeedbackEnabled: true, homeTourSeenVersion: 1 },
       setDifficulty,
@@ -316,10 +317,11 @@ describe('SettingsScreen wallet card', () => {
     });
     expect(alertMock).toHaveBeenCalledTimes(2);
     const settingsResetAction = alertMock.mock.calls[1][2].find((action: { text: string }) => action.text === 'Reset');
-    act(() => {
+    await act(async () => {
       settingsResetAction.onPress();
     });
     expect(resetSettings).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith('/');
   });
 
   it('keeps demo tools out of the normal Settings UI even in DEV', () => {

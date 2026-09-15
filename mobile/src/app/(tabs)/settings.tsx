@@ -35,7 +35,16 @@ export default function SettingsScreen() {
   function confirmResetSettings() {
     Alert.alert('Reset settings?', 'This will restore the default training preferences.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Reset', style: 'destructive', onPress: () => { void resetSettings(); } },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            await resetSettings();
+            router.push('/' as Href);
+          })();
+        },
+      },
     ]);
   }
 

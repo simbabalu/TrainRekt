@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HomeScreen from '@/app/(tabs)/index';
 
@@ -8,10 +8,12 @@ const pushMock = vi.hoisted(() => vi.fn());
 const setHomeTourSeenVersionMock = vi.hoisted(() => vi.fn());
 const tokenActionMock = vi.hoisted(() => vi.fn());
 const settingsState = vi.hoisted(() => ({ homeTourSeenVersion: 0 }));
+const routeState = vi.hoisted(() => ({ pathname: '/' }));
 
 vi.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
   useRouter: () => ({ push: pushMock }),
+  usePathname: () => routeState.pathname,
 }));
 
 vi.mock('@/components/home/homeOnboardingTourLogo', () => ({
@@ -109,7 +111,49 @@ vi.mock('react-native', () => ({
   ScrollView: 'ScrollView',
   StyleSheet: { create: (styles: unknown) => styles, absoluteFillObject: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } },
   Text: 'Text',
-  View: 'View',
+  View: React.forwardRef(function ViewMock(
+    {
+      children,
+      onLayout,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      onLayout?: (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void;
+      [key: string]: unknown;
+    },
+    ref: React.ForwardedRef<{ measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void } | null>,
+  ) {
+    const layoutRef = React.useRef({ x: 40, y: 300, width: 200, height: 72 });
+
+    if (typeof ref === 'function') {
+      ref({
+        measureInWindow: (callback) => {
+          const { x, y, width, height } = layoutRef.current;
+          callback(x, y, width, height);
+        },
+      });
+    } else if (ref && 'current' in ref) {
+      ref.current = {
+        measureInWindow: (callback) => {
+          const { x, y, width, height } = layoutRef.current;
+          callback(x, y, width, height);
+        },
+      };
+    }
+
+    return React.createElement(
+      'View',
+      {
+        ...props,
+        onLayout: (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => {
+          const { y, height } = event.nativeEvent.layout;
+          layoutRef.current = { x: 40, y, width: 200, height };
+          onLayout?.(event);
+        },
+      },
+      children,
+    );
+  }),
   useWindowDimensions: () => ({ width: 420, height: 900 }),
 }));
 
@@ -137,10 +181,16 @@ function goToFinalStep(renderer: ReturnType<typeof create>) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
   pushMock.mockReset();
   setHomeTourSeenVersionMock.mockReset();
   tokenActionMock.mockReset();
   settingsState.homeTourSeenVersion = 0;
+  routeState.pathname = '/';
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('Home onboarding tour', () => {
@@ -281,4 +331,5 @@ describe('Home onboarding tour', () => {
 
     expect(tokenActionMock).not.toHaveBeenCalled();
   });
+
 });

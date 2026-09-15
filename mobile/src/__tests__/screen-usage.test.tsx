@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, '__DEV__', {
 vi.mock('expo-router', () => ({
   Link: 'Link',
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/',
   useLocalSearchParams: () => ({}),
 }));
 

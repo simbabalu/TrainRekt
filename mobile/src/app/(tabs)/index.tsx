@@ -1,4 +1,4 @@
-import { Link, type Href } from 'expo-router';
+import { Link, type Href, usePathname } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, ScrollView, View } from 'react-native';
 
@@ -27,6 +27,7 @@ const homeTourTargets: Record<number, HomeTourTarget | null> = {
 export default function HomeScreen() {
   const { progress } = useTrainingProgress();
   const { settings, setHomeTourSeenVersion } = useSettings();
+  const pathname = usePathname();
 
   const scrollRef = useRef<ScrollView>(null);
   const dailyTargetRef = useRef<View>(null);
@@ -40,7 +41,7 @@ export default function HomeScreen() {
 
   const dailyGoalProgress = calculateDailyGoalProgress(progress.daily);
   const trainingCta = getHomeTrainingCta(dailyGoalProgress);
-  const tourVisible = settings.homeTourSeenVersion < HOME_TOUR_VERSION;
+  const tourVisible = pathname === '/' && settings.homeTourSeenVersion < HOME_TOUR_VERSION;
 
   const targetRefs = useMemo(
     () => ({ daily: dailyTargetRef, token: tokenTargetRef, wallet: walletTargetRef }),
@@ -56,11 +57,11 @@ export default function HomeScreen() {
     }
 
     const layout = targetLayouts[target];
+    if (!layout) return;
+
     const targetRef = targetRefs[target].current as unknown as { measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void } | null;
     const scrollNode = scrollRef.current as unknown as { scrollTo?: (options: { y: number; animated: boolean }) => void } | null;
-    if (layout) {
-      scrollNode?.scrollTo?.({ y: Math.max(layout.y - 24, 0), animated: true });
-    }
+    scrollNode?.scrollTo?.({ y: Math.max(layout.y - 24, 0), animated: true });
 
     if (measureTimerRef.current) clearTimeout(measureTimerRef.current);
     measureTimerRef.current = setTimeout(() => {
@@ -76,7 +77,7 @@ export default function HomeScreen() {
         }
         setSpotlightRect({ x, y, width, height });
       });
-    }, layout ? 280 : 0);
+    }, 280);
 
     return () => {
       if (measureTimerRef.current) {
@@ -113,8 +114,14 @@ export default function HomeScreen() {
       </View>
 
       <HomeOnboardingTour
-        onBack={() => setTourStepIndex((current) => Math.max(0, current - 1))}
-        onNext={() => setTourStepIndex((current) => Math.min(3, current + 1))}
+        onBack={() => {
+          setSpotlightRect(null);
+          setTourStepIndex((current) => Math.max(0, current - 1));
+        }}
+        onNext={() => {
+          setSpotlightRect(null);
+          setTourStepIndex((current) => Math.min(3, current + 1));
+        }}
         onSkip={closeTourAsSeen}
         onFinish={closeTourAsSeen}
         spotlightRect={spotlightRect}
