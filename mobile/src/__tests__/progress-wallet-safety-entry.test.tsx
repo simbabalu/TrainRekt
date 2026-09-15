@@ -170,6 +170,10 @@ describe('Progress screen focus', () => {
     expect(text).toContain('Best streak');
     expect(text).toContain('3');
     expect(text).toContain('67%');
+    expect(text.indexOf('TRAINING OVERVIEW')).toBeLessThan(text.indexOf('YOUR SKILLS'));
+    expect(text.indexOf('YOUR SKILLS')).toBeLessThan(text.indexOf('DAILY TRAINING'));
+    expect(text.indexOf('DAILY TRAINING')).toBeLessThan(text.indexOf('ACHIEVEMENTS'));
+    expect(text.indexOf('ACHIEVEMENTS')).toBeLessThan(text.indexOf('RECENT TRAINING'));
     expect(text).toContain('DAILY TRAINING');
     expect(text).toContain('3/3');
     expect(text).toContain('Day streak');

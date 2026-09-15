@@ -62,15 +62,6 @@ export default function ProgressScreen() {
       </SectionCard>
 
       <SectionCard>
-        <SectionHeader title="DAILY TRAINING" iconName={{ ios: 'calendar.badge.checkmark', android: 'event_available', web: 'event_available' }} iconLabel="Daily training" />
-        <View style={styles.metricGridCompact}>
-          <Metric value={`${dailyGoalProgress.completed}/${dailyGoalProgress.goal}`} label="Today" />
-          <Metric value={`${progress.daily.dailyTrainingStreak}`} label="Day streak" />
-          <Metric value={`${progress.daily.bestDailyTrainingStreak}`} label="Best" />
-        </View>
-      </SectionCard>
-
-      <SectionCard>
         <SectionHeader title="YOUR SKILLS" iconName={{ ios: 'scope', android: 'target', web: 'target' }} iconLabel="Skills" />
         {!showAllSkills && (
           <View style={styles.skillsSummary}>
@@ -121,6 +112,15 @@ export default function ProgressScreen() {
           <PrimaryButton variant="secondary" onPress={() => setShowAllSkills((value) => !value)}>
             {showAllSkills ? 'SHOW LESS' : 'VIEW ALL SKILLS'}
           </PrimaryButton>
+        </View>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionHeader title="DAILY TRAINING" iconName={{ ios: 'calendar.badge.checkmark', android: 'event_available', web: 'event_available' }} iconLabel="Daily training" />
+        <View style={styles.metricGridCompact}>
+          <Metric value={`${dailyGoalProgress.completed}/${dailyGoalProgress.goal}`} label="Today" />
+          <Metric value={`${progress.daily.dailyTrainingStreak}`} label="Day streak" />
+          <Metric value={`${progress.daily.bestDailyTrainingStreak}`} label="Best" />
         </View>
       </SectionCard>
 
