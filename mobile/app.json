@@ -16,6 +16,7 @@
         "foregroundImage": "./assets/images/trainrekt-adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "package": "com.anonymous.trainrekt",
       "versionCode": 2
     },
