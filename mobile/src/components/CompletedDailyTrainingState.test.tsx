@@ -14,7 +14,6 @@ vi.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock('./ProgressBar', () => ({ ProgressBar: ({ label, percentage }: { label: string; percentage: number }) => React.createElement('Text', null, `${label} ${percentage}%`) }));
 vi.mock('./AppIcon', () => ({ AppIcon: () => null }));
 vi.mock('./SectionCard', () => ({ SectionCard: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('./PrimaryButton', () => ({ PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Text', null, children) }));
@@ -34,9 +33,9 @@ describe('CompletedDailyTrainingState', () => {
     });
     const rendered = text(renderer.toJSON());
     expect(rendered).toContain("TODAY'S TRAINING COMPLETE");
-    expect(rendered).toContain('3 / 3');
+    expect(rendered).toMatch(/3\s+\/\s+3/);
     expect(rendered.replace(/\s+/g, ' ')).toContain('+ 150 XP');
-    expect(rendered).toContain('100%');
+    expect(rendered).not.toContain('100%');
     expect(rendered).toContain('EXTRA PRACTICE');
     expect(rendered).not.toContain('Decision');
   });

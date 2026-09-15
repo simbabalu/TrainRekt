@@ -95,7 +95,7 @@ function TrainSession({ mode, source, topic, initialExerciseId }: { mode: Traini
   function handleResultAnchorLayout(event: LayoutChangeEvent) {
     if (!result || scrolledResultRef.current === result) return;
     scrolledResultRef.current = result;
-    scrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: true });
+    scrollRef.current?.scrollTo({ y: Math.max(event.nativeEvent.layout.y - Spacing.md, 0), animated: true });
   }
 
   function scrollToTopAfterExerciseChange() {

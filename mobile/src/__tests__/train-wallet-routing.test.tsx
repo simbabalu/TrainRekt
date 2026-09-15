@@ -19,6 +19,8 @@ Object.defineProperty(globalThis, 'requestAnimationFrame', {
   configurable: true,
 });
 
+const scrollToMock = vi.hoisted(() => vi.fn());
+
 vi.mock('expo-router', () => ({
   useLocalSearchParams: useLocalSearchParamsMock,
   useRouter: () => ({ replace: routerReplaceMock, back: routerBackMock }),
@@ -70,7 +72,11 @@ vi.mock('@/hooks/useTrainingProgress', () => ({
 }));
 
 vi.mock('@/components/Screen', () => ({
-  Screen: ({ children }: { children: React.ReactNode }) => children,
+  Screen: React.forwardRef(function ScreenMock({ children }: { children: React.ReactNode }, ref) {
+    if (typeof ref === 'function') ref({ scrollTo: scrollToMock });
+    else if (ref && 'current' in ref) (ref as React.MutableRefObject<unknown>).current = { scrollTo: scrollToMock };
+    return children;
+  }),
 }));
 vi.mock('@/components/TrainingModeHeader', () => ({
   TrainingModeHeader: () => React.createElement('Text', null, 'MODE_HEADER'),
@@ -106,6 +112,67 @@ vi.mock('react-native', () => ({
 }));
 
 describe('Train wallet routing', () => {
+  it('scrolls once to newly rendered feedback and keeps next exercise manual', () => {
+    const nextExercise = vi.fn();
+    scrollToMock.mockReset();
+    useLocalSearchParamsMock.mockReturnValue({ mode: 'practice' });
+    useTrainingScenarioMock.mockReturnValue({
+      currentExercise: { id: 'practice-exercise', type: 'transaction-inspection', skill: 'walletSafety', difficulty: 'Beginner' },
+      selectedAnswer: 'inspect',
+      result: { title: 'Good decision', isCorrect: true, xpEarned: 20, explanation: 'Explanation' },
+      submitAnswer: vi.fn(),
+      nextExercise,
+      debugSelectExercise: vi.fn(),
+    });
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TrainScreen />);
+    });
+
+    const resultAnchor = renderer.root.findAll((node) => typeof node.props.onLayout === 'function').at(-1);
+    act(() => resultAnchor?.props.onLayout({ nativeEvent: { layout: { y: 100 } } }));
+    act(() => resultAnchor?.props.onLayout({ nativeEvent: { layout: { y: 100 } } }));
+
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith({ y: 88, animated: true });
+
+    const nextButton = renderer.root.findAll((node) => String(node.type) === 'Pressable')
+      .find((node) => String(node.props.children?.props?.children ?? '').includes('NEXT EXERCISE'));
+    act(() => nextButton?.props.onPress());
+    expect(nextExercise).toHaveBeenCalledTimes(1);
+  });
+
+  it('scrolls again when a new answered exercise renders feedback', () => {
+    scrollToMock.mockReset();
+    useLocalSearchParamsMock.mockReturnValue({ mode: 'practice' });
+    const scenario = {
+      currentExercise: { id: 'practice-exercise', type: 'transaction-inspection' as const, skill: 'walletSafety' as const, difficulty: 'Beginner' as const },
+      selectedAnswer: 'inspect' as const,
+      result: { title: 'Risky decision', isCorrect: false, xpEarned: 0, explanation: 'Explanation' },
+      submitAnswer: vi.fn(),
+      nextExercise: vi.fn(),
+      debugSelectExercise: vi.fn(),
+    };
+    useTrainingScenarioMock.mockReturnValue(scenario);
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<TrainScreen />);
+    });
+    const firstAnchor = renderer.root.findAll((node) => typeof node.props.onLayout === 'function').at(-1);
+    act(() => firstAnchor?.props.onLayout({ nativeEvent: { layout: { y: 120 } } }));
+
+    scenario.currentExercise = { ...scenario.currentExercise, id: 'next-exercise' };
+    scenario.result = { ...scenario.result, title: 'Good decision', isCorrect: true, xpEarned: 20 };
+    act(() => renderer.update(<TrainScreen />));
+    const secondAnchor = renderer.root.findAll((node) => typeof node.props.onLayout === 'function').at(-1);
+    act(() => secondAnchor?.props.onLayout({ nativeEvent: { layout: { y: 160 } } }));
+
+    expect(scrollToMock).toHaveBeenCalledTimes(2);
+    expect(scrollToMock).toHaveBeenLastCalledWith({ y: 148, animated: true });
+  });
+
   it('forces wallet route entries into practice mode and passes wallet topic/exercise into useTrainingScenario', () => {
     useLocalSearchParamsMock.mockReturnValue({
       mode: 'daily',

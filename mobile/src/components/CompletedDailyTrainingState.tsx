@@ -4,7 +4,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Colors, Spacing, Training, Typography } from '@/constants/theme';
 import { DailyGoalProgress } from '@/domain/training/calculateDailyGoalProgress';
 import { PrimaryButton } from './PrimaryButton';
-import { ProgressBar } from './ProgressBar';
 import { SectionCard } from './SectionCard';
 
 interface CompletedDailyTrainingStateProps {
@@ -15,7 +14,6 @@ interface CompletedDailyTrainingStateProps {
 export function CompletedDailyTrainingState({ goalProgress, dailyTrainingStreak }: CompletedDailyTrainingStateProps) {
   return (
     <>
-      <ProgressBar label={`${goalProgress.completed} / ${goalProgress.goal} COMPLETE`} percentage={100} />
       <SectionCard>
         <Text style={styles.title}>TODAY&apos;S TRAINING COMPLETE</Text>
         <View style={styles.summaryRow}>
