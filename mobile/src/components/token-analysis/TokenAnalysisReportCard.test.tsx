@@ -128,13 +128,13 @@ function renderExpandedReportForAiState(options: {
 }
 
 describe('TokenAnalysisReportCard', () => {
-  it('shows AI safety coach first and keeps the full analysis collapsed by default', () => {
+  it('shows the deterministic summary first and keeps the full analysis collapsed by default', () => {
     const { renderer } = renderReport();
     const content = textContent(renderer);
 
     expect(content.indexOf('AI SAFETY COACH')).toBeGreaterThanOrEqual(0);
     expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeGreaterThanOrEqual(0);
-    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
     expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
     expect(content).toContain('VIEW FULL ANALYSIS');
     expect(content).not.toContain('TOKEN IDENTITY');
@@ -1067,7 +1067,7 @@ describe('TokenAnalysisReportCard', () => {
     const content = textContent(renderer);
     expect(content).toContain('AI SAFETY COACH');
     expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
-    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
     expect(content).toContain('EXPLAIN WITH AI');
     expect(content).not.toContain('TOKEN IDENTITY');
   });
@@ -1083,7 +1083,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(loadingButton!.props.disabled).toBe(true);
 
     const content = textContent(renderer);
-    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
     expect(content).not.toContain('TOKEN IDENTITY');
   });
 
@@ -1098,7 +1098,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).toContain('AI explanation is currently unavailable.');
     expect(content).not.toContain('TOKEN IDENTITY');
     expect(content).toContain('TOKEN ANALYSIS SUMMARY');
-    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
     expect(content).toContain('Mint1111111111111111111111111111111111');
   });
 
@@ -1127,7 +1127,7 @@ describe('TokenAnalysisReportCard', () => {
     expect(content).not.toContain('TOKEN IDENTITY');
     expect(content).toContain('VIEW FULL ANALYSIS');
     expect(content).toContain('TOKEN ANALYSIS SUMMARY');
-    expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+    expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
     expect(content).not.toContain('Recommended training:');
 
     const practiceButton = renderer.root
@@ -1175,7 +1175,7 @@ describe('TokenAnalysisReportCard', () => {
       const content = textContent(renderer);
       expect(content).toContain('AI SAFETY COACH');
       expect(content).not.toContain('OPTIONAL AI SAFETY COACH');
-      expect(content.indexOf('AI SAFETY COACH')).toBeLessThan(content.indexOf('TOKEN ANALYSIS SUMMARY'));
+      expect(content.indexOf('TOKEN ANALYSIS SUMMARY')).toBeLessThan(content.indexOf('AI SAFETY COACH'));
       expect(content).toContain('TOKEN ANALYSIS SUMMARY');
       expect(content).toContain('Mint1111111111111111111111111111111111');
     });
