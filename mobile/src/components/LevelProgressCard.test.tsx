@@ -40,4 +40,18 @@ describe('LevelProgressCard Home presentation', () => {
     expect(text).toMatch(/258\s+XP to Level\s+8/);
     expect(text).not.toContain('6742 XP total');
   });
+
+  it('formats singular and plural daily streak labels', () => {
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<LevelProgressCard summary={summary} totalXp={6742} showTotalXp={false} dailyStreak={1} />);
+    });
+    expect(textFrom(renderer.toJSON())).toMatch(/1\s+day/);
+    expect(textFrom(renderer.toJSON())).not.toMatch(/1\s+days/);
+
+    act(() => {
+      renderer.update(<LevelProgressCard summary={summary} totalXp={6742} showTotalXp={false} dailyStreak={2} />);
+    });
+    expect(textFrom(renderer.toJSON())).toMatch(/2\s+days/);
+  });
 });

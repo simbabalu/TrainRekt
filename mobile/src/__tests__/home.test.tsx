@@ -125,6 +125,9 @@ describe('HomeScreen simplified layout', () => {
     expect(text).toContain('START TRAINING');
     expect(text).toContain('TOKEN SAFETY CHECK CARD');
     expect(text).toContain('HOME WALLET SAFETY CARD');
+    expect(text.indexOf('LEVEL_PROGRESS_CARD')).toBeLessThan(text.indexOf('TOKEN SAFETY CHECK CARD'));
+    expect(text.indexOf('TOKEN SAFETY CHECK CARD')).toBeLessThan(text.indexOf('HOME WALLET SAFETY CARD'));
+    expect(text.indexOf('HOME WALLET SAFETY CARD')).toBeLessThan(text.indexOf('DAILY GOAL'));
     expect(text).not.toContain("TODAY'S TRAINING");
     expect(text).not.toContain('YOUR SKILLS');
   });

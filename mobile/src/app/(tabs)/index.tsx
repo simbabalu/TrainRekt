@@ -99,17 +99,17 @@ export default function HomeScreen() {
   return (
     <Screen ref={scrollRef}>
       <LevelProgressCard summary={progress} totalXp={progress.totalXp} showTotalXp={false} dailyStreak={progress.daily.dailyTrainingStreak} />
-      <View collapsable={false} onLayout={registerTargetLayout('daily')} ref={dailyTargetRef}>
-        <DailyGoalCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
-        <Link href={{ pathname: '/train', params: { mode: trainingCta.mode } } as Href} asChild>
-          <PrimaryButton variant={trainingCta.mode === 'practice' ? 'secondary' : 'primary'} onPress={() => undefined}>{trainingCta.label}</PrimaryButton>
-        </Link>
-      </View>
       <View collapsable={false} onLayout={registerTargetLayout('token')} ref={tokenTargetRef}>
         <TokenSafetyCheckCard />
       </View>
       <View collapsable={false} onLayout={registerTargetLayout('wallet')} ref={walletTargetRef}>
         <HomeWalletSafetyCard />
+      </View>
+      <View collapsable={false} onLayout={registerTargetLayout('daily')} ref={dailyTargetRef}>
+        <DailyGoalCard goalProgress={dailyGoalProgress} dailyTrainingStreak={progress.daily.dailyTrainingStreak} />
+        <Link href={{ pathname: '/train', params: { mode: trainingCta.mode } } as Href} asChild>
+          <PrimaryButton variant={trainingCta.mode === 'practice' ? 'secondary' : 'primary'} onPress={() => undefined}>{trainingCta.label}</PrimaryButton>
+        </Link>
       </View>
 
       <HomeOnboardingTour

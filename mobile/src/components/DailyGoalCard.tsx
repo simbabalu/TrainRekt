@@ -28,10 +28,10 @@ export function DailyGoalCard({ goalProgress, dailyTrainingStreak }: DailyGoalCa
 }
 
 const styles = StyleSheet.create({
-  titleRow: { alignItems: 'center', flexDirection: 'row', marginBottom: Spacing.md },
+  titleRow: { alignItems: 'center', flexDirection: 'row', marginBottom: Spacing.sm },
   title: { color: Colors.text, fontSize: Typography.small, fontWeight: '900', letterSpacing: 1.2 },
-  completeBlock: { marginTop: Spacing.md },
+  completeBlock: { marginTop: Spacing.sm },
   complete: { color: Colors.positive, fontSize: Typography.body, fontWeight: '800' },
   bonus: { color: Colors.positive, fontSize: Typography.small, fontWeight: '700', marginTop: Spacing.xs },
-  streak: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800', marginTop: Spacing.md },
+  streak: { color: Colors.accent, fontSize: Typography.small, fontWeight: '800', marginTop: Spacing.sm },
 });
