@@ -150,9 +150,6 @@ public static class ServiceCollectionExtensions
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenInspectionCollectionName),
                 "MongoDb:TokenInspectionCollectionName must be configured when MongoDb:Enabled is true.")
             .Validate(
-                options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenResearchCollectionName),
-                "MongoDb:TokenResearchCollectionName must be configured when MongoDb:Enabled is true.")
-            .Validate(
                 options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TokenInspectionCoachCollectionName),
                 "MongoDb:TokenInspectionCoachCollectionName must be configured when MongoDb:Enabled is true.")
             .Validate(
@@ -177,15 +174,7 @@ public static class ServiceCollectionExtensions
         services
             .AddOptions<TokenResearchOptions>()
             .Bind(configuration.GetSection(TokenResearchOptions.SectionName))
-            .Validate(options => options.FreshnessHours > 0, "TokenResearch:FreshnessHours must be greater than zero.")
             .Validate(options => options.LargestUnknownTokenAccountThresholdPercent >= 0m, "TokenResearch:LargestUnknownTokenAccountThresholdPercent must be non-negative.")
-            .Validate(options => options.MaxSources > 0, "TokenResearch:MaxSources must be greater than zero.")
-            .Validate(options => options.MaxClaims > 0, "TokenResearch:MaxClaims must be greater than zero.")
-            .Validate(options => options.MaxStatementLength > 0, "TokenResearch:MaxStatementLength must be greater than zero.")
-            .Validate(options => options.MaxUrlLength > 0, "TokenResearch:MaxUrlLength must be greater than zero.")
-            .Validate(options => options.MaxTitleLength > 0, "TokenResearch:MaxTitleLength must be greater than zero.")
-            .Validate(options => options.MaxPublisherLength > 0, "TokenResearch:MaxPublisherLength must be greater than zero.")
-            .Validate(options => options.ProviderTimeoutSeconds > 0, "TokenResearch:ProviderTimeoutSeconds must be greater than zero.")
             .Validate(options => options.SourceTimeoutSeconds > 0, "TokenResearch:SourceTimeoutSeconds must be greater than zero.")
             .Validate(options => options.MaxRedirects >= 0, "TokenResearch:MaxRedirects must be non-negative.")
             .Validate(options => options.MaxResponseBytes > 0, "TokenResearch:MaxResponseBytes must be greater than zero.")
@@ -235,37 +224,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AiSafetyCoachResponseValidator>();
         services.AddSingleton<ITokenExternalContextResearchService, TokenExternalContextResearchService>();
         services.AddScoped<ITokenInspectionCoachService, TokenInspectionCoachService>();
-        services.AddScoped<ITokenResearchOrchestrator, TokenResearchOrchestrator>();
-        services.AddScoped<IResearchTrustAssessor, ProductionResearchTrustAssessor>();
-        services.AddScoped<NoOpResearchTrustAssessor>();
-        services.AddScoped<ResearchRequestFactory>();
-        services.AddScoped<DeterministicResearchVerifier>();
-        services.AddScoped<ProtocolResearchContextMerger>();
         services.AddScoped<ResearchContentNormalizer>();
         services.AddScoped<SolanaMintEvidenceMatcher>();
         services.AddScoped<TrustedSourceClassifier>();
-        services.AddScoped<GeminiGroundingNormalizer>();
-        services.AddScoped<GeminiCandidateMapper>(serviceProvider =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
-            return new GeminiCandidateMapper(options);
-        });
         services.AddSingleton<ITrustedMintSourceRegistry, TrustedMintSourceRegistry>();
         services.AddScoped<ResearchUrlSafetyPolicy>();
         services.AddSingleton<IResearchDnsResolver, DefaultResearchDnsResolver>();
-        services.AddHttpClient<IGeminiInteractionClient, GeminiInteractionClient>((serviceProvider, client) =>
-            {
-                var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
-                client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
-            })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                UseCookies = false,
-                AutomaticDecompression = System.Net.DecompressionMethods.None
-            })
-            // Request payloads and headers may contain sensitive metadata; suppress automatic logging.
-            .RemoveAllLoggers();
         services.AddHttpClient<IAiSafetyCoach, GeminiAiSafetyCoach>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<GeminiOptions>>().Value;
@@ -302,17 +266,11 @@ public static class ServiceCollectionExtensions
             })
             // URLs may carry secrets in query strings; suppress automatic URL logging.
             .RemoveAllLoggers();
-        services.AddScoped<CandidateResearchPromoter>(serviceProvider =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
-            return new CandidateResearchPromoter(options);
-        });
         services.AddScoped<ResearchNeedDetector>(serviceProvider =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<TokenResearchOptions>>().Value;
             return new ResearchNeedDetector(options);
         });
-        services.AddScoped<ITokenResearchProvider, GeminiTokenResearchProvider>();
         services.AddScoped<ISolanaAccountReader, ScopedSolanaAccountReader>();
         services.AddScoped<ITokenMetadataResolver, TokenMetadataResolver>();
         services.AddScoped<ILargestTokenAccountAnalysisService, LargestTokenAccountAnalysisService>();
@@ -338,7 +296,6 @@ public static class ServiceCollectionExtensions
             });
             services.AddScoped<ITokenRepository, MongoTokenRepository>();
             services.AddScoped<ITokenInspectionSnapshotRepository, MongoTokenInspectionSnapshotRepository>();
-            services.AddScoped<ITokenResearchRepository, MongoTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, MongoTokenInspectionCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, MongoTokenIdentityObservationRepository>();
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, MongoTokenIdentityChronologySnapshotRepository>();
@@ -354,7 +311,6 @@ public static class ServiceCollectionExtensions
         }
         else
         {
-            services.AddScoped<ITokenResearchRepository, NoOpTokenResearchRepository>();
             services.AddScoped<IAiSafetyCoachSnapshotRepository, NoOpAiSafetyCoachSnapshotRepository>();
             services.AddScoped<ITokenIdentityObservationRepository, NoOpTokenIdentityObservationRepository>();
             services.AddScoped<ITokenIdentityChronologySnapshotRepository, NoOpTokenIdentityChronologySnapshotRepository>();

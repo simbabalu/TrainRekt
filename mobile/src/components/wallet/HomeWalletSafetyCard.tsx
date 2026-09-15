@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/AppIcon';
@@ -39,14 +39,6 @@ export function HomeWalletSafetyCard() {
         >
           CONNECT WALLET
         </PrimaryButton>
-        <PrimaryButton
-          variant="secondary"
-          onPress={() => {
-            router.push('/(tabs)/token-analysis' as Href);
-          }}
-        >
-          ANALYZE TOKEN
-        </PrimaryButton>
       </SectionCard>
     );
   }
@@ -66,14 +58,6 @@ export function HomeWalletSafetyCard() {
           }}
         >
           CHECK WALLET
-        </PrimaryButton>
-        <PrimaryButton
-          variant="secondary"
-          onPress={() => {
-            router.push('/(tabs)/token-analysis' as Href);
-          }}
-        >
-          ANALYZE TOKEN
         </PrimaryButton>
       </SectionCard>
     );
@@ -105,14 +89,6 @@ export function HomeWalletSafetyCard() {
         }}
       >
         REVIEW WALLET
-      </PrimaryButton>
-      <PrimaryButton
-        variant="secondary"
-        onPress={() => {
-          router.push('/(tabs)/token-analysis' as Href);
-        }}
-      >
-        ANALYZE TOKEN
       </PrimaryButton>
     </SectionCard>
   );

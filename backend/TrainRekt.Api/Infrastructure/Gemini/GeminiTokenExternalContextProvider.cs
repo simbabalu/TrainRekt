@@ -91,10 +91,32 @@ public sealed class GeminiTokenExternalContextProvider : ITokenExternalContextPr
             };
         }
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!TryExtractJsonObject(body, out var normalized))
+        var bodyRead = await ReadBodyBytesAsync(response.Content, _geminiOptions.MaxResponseBytes, cancellationToken);
+        if (!bodyRead.Success)
         {
-            _logger.LogWarning("External context provider parsing failed for mint {Mint}. stage=normalize-json.", request.Mint);
+            _logger.LogWarning(
+                "External context provider response read failed for mint {Mint}. stage=read-body maxResponseBytes={MaxResponseBytes}.",
+                request.Mint,
+                _geminiOptions.MaxResponseBytes);
+            return Unavailable(TokenExternalContextFailureReason.InvalidResponse);
+        }
+
+        var body = Encoding.UTF8.GetString(bodyRead.Value!);
+        if (!TryExtractJsonObject(body, out var normalized, out var extractionDiagnostics))
+        {
+            var truncationSuspected = IsTokenLimitTermination(extractionDiagnostics.FinishReason);
+            _logger.LogWarning(
+                "External context provider parsing failed for mint {Mint}. stage=normalize-json extractionResult={ExtractionResult} finishReason={FinishReason} truncationSuspected={TruncationSuspected} fencedBlockDetected={FencedBlockDetected} candidateObjectCount={CandidateObjectCount} textLength={TextLength} maxOutputTokens={MaxOutputTokens} jsonExceptionCategory={JsonExceptionCategory} jsonExceptionMessage={JsonExceptionMessage}.",
+                request.Mint,
+                extractionDiagnostics.ExtractionResult,
+                extractionDiagnostics.FinishReason,
+                truncationSuspected,
+                extractionDiagnostics.FencedBlockDetected,
+                extractionDiagnostics.CandidateObjectCount,
+                extractionDiagnostics.TextLength,
+                _options.MaxOutputTokens,
+                extractionDiagnostics.JsonExceptionCategory,
+                extractionDiagnostics.JsonExceptionMessage);
             return Unavailable(TokenExternalContextFailureReason.InvalidResponse);
         }
 
@@ -259,92 +281,404 @@ public sealed class GeminiTokenExternalContextProvider : ITokenExternalContextPr
         };
     }
 
-    private static bool TryExtractJsonObject(string body, out string normalized)
+    private enum ExternalContextJsonExtractionResult
+    {
+        Success,
+        Empty,
+        NoJsonObject,
+        AmbiguousMultipleObjects,
+        UnbalancedBraces,
+        InvalidJson,
+        RootNotObject
+    }
+
+    private sealed record ExternalContextJsonExtractionDiagnostics(
+        int TextLength,
+        bool FencedBlockDetected,
+        int CandidateObjectCount,
+        ExternalContextJsonExtractionResult ExtractionResult,
+        string? JsonExceptionCategory,
+        string? JsonExceptionMessage,
+        string? FinishReason);
+
+    private static readonly string[] FinishReasonPropertyNames = { "finishReason", "finish_reason" };
+
+    // Never lets JsonException escape: malformed or truncated model output must degrade to a safe failure, not a crash.
+    private static bool TryExtractJsonObject(string body, out string normalized, out ExternalContextJsonExtractionDiagnostics diagnostics)
     {
         normalized = string.Empty;
+        JsonDocument? envelope = null;
 
-        using var doc = JsonDocument.Parse(body);
-        if (!doc.RootElement.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+        try
         {
-            return false;
-        }
+            envelope = JsonDocument.Parse(body);
+            var finishReason = FindFirstString(envelope.RootElement, FinishReasonPropertyNames);
 
-        var blocks = new List<string>();
-        foreach (var step in steps.EnumerateArray())
-        {
-            if (!step.TryGetProperty("type", out var typeElement)
-                || typeElement.ValueKind != JsonValueKind.String
-                || !string.Equals(typeElement.GetString(), "model_output", StringComparison.Ordinal))
+            if (!envelope.RootElement.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
             {
-                continue;
+                diagnostics = new ExternalContextJsonExtractionDiagnostics(body.Length, false, 0, ExternalContextJsonExtractionResult.NoJsonObject, null, null, finishReason);
+                return false;
             }
 
-            if (!step.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            var blocks = new List<string>();
+            foreach (var step in steps.EnumerateArray())
             {
-                continue;
-            }
+                finishReason ??= FindFirstString(step, FinishReasonPropertyNames);
 
-            foreach (var piece in content.EnumerateArray())
-            {
-                if (!piece.TryGetProperty("type", out var contentType)
-                    || contentType.ValueKind != JsonValueKind.String
-                    || !string.Equals(contentType.GetString(), "text", StringComparison.Ordinal))
+                if (!step.TryGetProperty("type", out var typeElement)
+                    || typeElement.ValueKind != JsonValueKind.String
+                    || !string.Equals(typeElement.GetString(), "model_output", StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                if (piece.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+                if (!step.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
                 {
-                    var text = textElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(text))
+                    continue;
+                }
+
+                foreach (var piece in content.EnumerateArray())
+                {
+                    if (!piece.TryGetProperty("type", out var contentType)
+                        || contentType.ValueKind != JsonValueKind.String
+                        || !string.Equals(contentType.GetString(), "text", StringComparison.Ordinal))
                     {
-                        blocks.Add(text);
+                        continue;
                     }
+
+                    if (piece.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+                    {
+                        var text = textElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            blocks.Add(text);
+                        }
+                    }
+                }
+            }
+
+            if (blocks.Count == 0)
+            {
+                diagnostics = new ExternalContextJsonExtractionDiagnostics(0, false, 0, ExternalContextJsonExtractionResult.Empty, null, null, finishReason);
+                return false;
+            }
+
+            var combined = string.Join("\n", blocks).Trim();
+            return TryExtractStructuredObject(combined, finishReason, out normalized, out diagnostics);
+        }
+        catch (JsonException exception)
+        {
+            diagnostics = new ExternalContextJsonExtractionDiagnostics(
+                body.Length,
+                false,
+                0,
+                ExternalContextJsonExtractionResult.InvalidJson,
+                "json_parse",
+                TruncateExceptionMessage(exception.Message),
+                null);
+            return false;
+        }
+        finally
+        {
+            envelope?.Dispose();
+        }
+    }
+
+    private static bool TryExtractStructuredObject(
+        string text,
+        string? finishReason,
+        out string normalized,
+        out ExternalContextJsonExtractionDiagnostics diagnostics)
+    {
+        normalized = string.Empty;
+        var textLength = text.Length;
+        var fenced = TryUnwrapSingleCodeFence(text, out var unfenced, out _);
+        var candidateSource = fenced ? unfenced : text;
+
+        JsonDocument? direct = null;
+        try
+        {
+            direct = JsonDocument.Parse(candidateSource);
+        }
+        catch (JsonException)
+        {
+            // Not standalone JSON on its own; fall through to prose/fence-wrapped candidate scanning below.
+        }
+
+        if (direct is not null)
+        {
+            using (direct)
+            {
+                if (direct.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    normalized = direct.RootElement.GetRawText();
+                    diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 1, ExternalContextJsonExtractionResult.Success, null, null, finishReason);
+                    return true;
+                }
+
+                if (direct.RootElement.ValueKind == JsonValueKind.String)
+                {
+                    var wrapped = direct.RootElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(wrapped)
+                        && TryParseJsonObject(wrapped, out var unwrappedNormalized, out _, out _))
+                    {
+                        normalized = unwrappedNormalized;
+                        diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 1, ExternalContextJsonExtractionResult.Success, null, null, finishReason);
+                        return true;
+                    }
+                }
+
+                // Valid JSON, but not the required object shape (array/number/bool/null/unwrappable string).
+                diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 0, ExternalContextJsonExtractionResult.RootNotObject, null, null, finishReason);
+                return false;
+            }
+        }
+
+        if (!TryExtractJsonObjectCandidates(candidateSource, out var candidates, out var extractionResult))
+        {
+            diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, candidates.Count, extractionResult, null, null, finishReason);
+            return false;
+        }
+
+        if (candidates.Count == 0)
+        {
+            diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 0, ExternalContextJsonExtractionResult.NoJsonObject, null, null, finishReason);
+            return false;
+        }
+
+        if (candidates.Count > 1)
+        {
+            diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, candidates.Count, ExternalContextJsonExtractionResult.AmbiguousMultipleObjects, null, null, finishReason);
+            return false;
+        }
+
+        if (!TryParseJsonObject(candidates[0], out var singleNormalized, out var jsonExceptionCategory, out var jsonExceptionMessage))
+        {
+            diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 1, ExternalContextJsonExtractionResult.InvalidJson, jsonExceptionCategory, jsonExceptionMessage, finishReason);
+            return false;
+        }
+
+        normalized = singleNormalized;
+        diagnostics = new ExternalContextJsonExtractionDiagnostics(textLength, fenced, 1, ExternalContextJsonExtractionResult.Success, null, null, finishReason);
+        return true;
+    }
+
+    // String/escape-aware balanced-brace scan: braces inside quoted string values never count as structural.
+    private static bool TryExtractJsonObjectCandidates(
+        string text,
+        out List<string> candidates,
+        out ExternalContextJsonExtractionResult extractionResult)
+    {
+        candidates = new List<string>();
+        extractionResult = ExternalContextJsonExtractionResult.Success;
+
+        var inString = false;
+        var escaping = false;
+        var depth = 0;
+        var startIndex = -1;
+
+        for (var index = 0; index < text.Length; index++)
+        {
+            var ch = text[index];
+
+            if (inString)
+            {
+                if (escaping)
+                {
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                if (depth == 0)
+                {
+                    startIndex = index;
+                }
+
+                depth++;
+                continue;
+            }
+
+            if (ch == '}')
+            {
+                if (depth == 0)
+                {
+                    extractionResult = ExternalContextJsonExtractionResult.UnbalancedBraces;
+                    return false;
+                }
+
+                depth--;
+                if (depth == 0 && startIndex >= 0)
+                {
+                    var length = index - startIndex + 1;
+                    candidates.Add(text.Substring(startIndex, length));
+                    startIndex = -1;
                 }
             }
         }
 
-        if (blocks.Count == 0)
+        if (depth != 0 || inString)
+        {
+            extractionResult = ExternalContextJsonExtractionResult.UnbalancedBraces;
+            return false;
+        }
+
+        if (candidates.Count == 0)
+        {
+            extractionResult = ExternalContextJsonExtractionResult.NoJsonObject;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseJsonObject(string candidate, out string normalized, out string? exceptionCategory, out string? exceptionMessage)
+    {
+        normalized = string.Empty;
+        exceptionCategory = null;
+        exceptionMessage = null;
+
+        try
+        {
+            using var parsed = JsonDocument.Parse(candidate);
+            if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            normalized = parsed.RootElement.GetRawText();
+            return true;
+        }
+        catch (JsonException exception)
+        {
+            exceptionCategory = "json_parse";
+            exceptionMessage = TruncateExceptionMessage(exception.Message);
+            return false;
+        }
+    }
+
+    private static bool TryUnwrapSingleCodeFence(string candidate, out string unfenced, out string? fenceKind)
+    {
+        unfenced = string.Empty;
+        fenceKind = null;
+        if (!candidate.StartsWith("```", StringComparison.Ordinal)
+            || !candidate.EndsWith("```", StringComparison.Ordinal)
+            || candidate.Length <= 6)
         {
             return false;
         }
 
-        var combined = string.Join("\n", blocks).Trim();
-        if (combined.StartsWith("```", StringComparison.Ordinal) && combined.EndsWith("```", StringComparison.Ordinal))
+        var firstLineEnd = candidate.IndexOf('\n');
+        if (firstLineEnd <= 0)
         {
-            var firstLine = combined.IndexOf('\n');
-            if (firstLine > 0)
+            return false;
+        }
+
+        var language = candidate[3..firstLineEnd].Trim();
+        if (language.Length != 0 && language.Contains(' '))
+        {
+            return false;
+        }
+
+        unfenced = candidate[(firstLineEnd + 1)..^3].Trim();
+        if (unfenced.Length == 0)
+        {
+            return false;
+        }
+
+        fenceKind = string.Equals(language, "json", StringComparison.OrdinalIgnoreCase)
+            ? "markdown-fence-json"
+            : "markdown-fence-generic";
+        return true;
+    }
+
+    private static bool IsTokenLimitTermination(string? finishReason)
+    {
+        if (string.IsNullOrWhiteSpace(finishReason))
+        {
+            return false;
+        }
+
+        var normalized = finishReason.Trim().Replace("-", string.Empty, StringComparison.Ordinal).Replace("_", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        return normalized.Contains("MAXTOKEN", StringComparison.Ordinal)
+            || normalized.Contains("TOKENLIMIT", StringComparison.Ordinal)
+            || normalized.Contains("LENGTH", StringComparison.Ordinal);
+    }
+
+    private static string? FindFirstString(JsonElement element, IReadOnlyList<string> propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (element.TryGetProperty(propertyName, out var property)
+                && property.ValueKind == JsonValueKind.String)
             {
-                combined = combined[(firstLine + 1)..^3].Trim();
+                var value = property.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
             }
         }
 
-        using var parsed = JsonDocument.Parse(combined);
-        if (parsed.RootElement.ValueKind == JsonValueKind.Object)
-        {
-            normalized = parsed.RootElement.GetRawText();
-            return true;
-        }
+        return null;
+    }
 
-        if (parsed.RootElement.ValueKind == JsonValueKind.String)
+    private static string TruncateExceptionMessage(string message)
+    {
+        const int maxLength = 180;
+        var normalized = string.Join(" ", message.Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private async Task<GeminiClientResult<byte[]>> ReadBodyBytesAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var memory = new MemoryStream();
+        var buffer = new byte[8192];
+        var total = 0;
+
+        while (true)
         {
-            var wrapped = parsed.RootElement.GetString();
-            if (string.IsNullOrWhiteSpace(wrapped))
+            var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+            if (read == 0)
             {
-                return false;
+                break;
             }
 
-            using var unwrapped = JsonDocument.Parse(wrapped);
-            if (unwrapped.RootElement.ValueKind != JsonValueKind.Object)
+            total += read;
+            if (total > maxBytes)
             {
-                return false;
+                return new GeminiClientResult<byte[]>(
+                    false,
+                    null,
+                    GeminiFailureReason.MalformedResponse,
+                    "External context provider response exceeded configured byte limit.");
             }
 
-            normalized = unwrapped.RootElement.GetRawText();
-            return true;
+            memory.Write(buffer, 0, read);
         }
 
-        return false;
+        return new GeminiClientResult<byte[]>(true, memory.ToArray(), null, null);
     }
 
     private static bool TryParseContext(string rawJson, out TokenExternalContext context)

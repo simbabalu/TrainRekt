@@ -44,23 +44,6 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
 
         await snapshotCollection.Indexes.CreateManyAsync(snapshotIndexes, cancellationToken);
 
-        var researchCollection = _database.GetCollection<TokenResearchSnapshotDocument>(_options.TokenResearchCollectionName);
-        var researchIndexes = new[]
-        {
-            new CreateIndexModel<TokenResearchSnapshotDocument>(
-                Builders<TokenResearchSnapshotDocument>.IndexKeys.Ascending(entry => entry.Mint),
-                new CreateIndexOptions { Name = "ix_tokenResearch_mint" }),
-            new CreateIndexModel<TokenResearchSnapshotDocument>(
-                Builders<TokenResearchSnapshotDocument>.IndexKeys
-                    .Ascending(entry => entry.Mint)
-                    .Ascending(entry => entry.ResearchVersion)
-                    .Descending(entry => entry.ExpiresAtUtc)
-                    .Descending(entry => entry.ResearchedAtUtc),
-                new CreateIndexOptions { Name = "ix_tokenResearch_cache_lookup" })
-        };
-
-        await researchCollection.Indexes.CreateManyAsync(researchIndexes, cancellationToken);
-
         var coachCollection = _database.GetCollection<TokenInspectionCoachSnapshotDocument>(_options.TokenInspectionCoachCollectionName);
         var coachIndexes = new[]
         {

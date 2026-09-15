@@ -23,40 +23,7 @@ public sealed record ResearchNeed(
     IReadOnlyList<ObservedFactReference> ObservedFactReferences,
     string Reason);
 
-public sealed record ResearchRequest(
-    string Mint,
-    string? TokenName,
-    string? TokenSymbol,
-    string TokenProgram,
-    TokenAuthorities Authorities,
-    IReadOnlyList<string> ClassifiedProtocols,
-    IReadOnlyList<ResearchNeed> Needs,
-    IReadOnlyList<string> ExistingSourceIds,
-    IReadOnlyList<string> ExistingClaimIds);
-
-public enum ResearchIdentityMatch
-{
-    Confirmed,
-    Partial,
-    Unconfirmed,
-    Conflict
-}
-
-public enum ResearchIdentityEvidenceType
-{
-    MintAddressMentioned,
-    RepositoryConfigurationMentionsMint,
-    IdlMentionsMint,
-    CanonicalPageMentionsMint,
-    DeterministicProtocolRelationship,
-    SymbolOrNameMatch
-}
-
-public sealed record CandidateIdentityEvidence(
-    ResearchIdentityEvidenceType EvidenceType,
-    string? Value,
-    string? Note);
-
+// Shared with the active trusted-identity source fetch path (ISafeResearchSourceClient.FetchAsync).
 public sealed record CandidateResearchSource(
     string Id,
     ResearchSourceType ClaimedSourceType,
@@ -66,19 +33,7 @@ public sealed record CandidateResearchSource(
     bool ClaimedCanonicalProjectWebsite,
     DateTimeOffset? PublishedAtUtc);
 
-public sealed record CandidateDocumentedClaim(
-    string Id,
-    string Category,
-    string Statement,
-    IReadOnlyList<string> SourceIds,
-    IReadOnlyList<ObservedFactReference> ObservedFactReferences,
-    string? ExtractionNote);
-
-public sealed record CandidateResearchResult(
-    IReadOnlyList<CandidateIdentityEvidence> IdentityEvidence,
-    IReadOnlyList<CandidateResearchSource> Sources,
-    IReadOnlyList<CandidateDocumentedClaim> Claims);
-
+// Shared with the active URL-safety/fetch infrastructure (ResearchUrlSafetyPolicy, SafeResearchSourceClient).
 public enum ResearchSourceAssessmentReason
 {
     None,
@@ -101,31 +56,6 @@ public enum ResearchSourceAssessmentReason
     RepositoryUnconfirmed,
     ConflictingMint
 }
-
-public enum ResearchSourceAssessmentDecision
-{
-    Accepted,
-    Rejected
-}
-
-public sealed record AssessedResearchSource(
-    string CandidateSourceId,
-    ResearchSourceAssessmentDecision Decision,
-    ResearchSourceType? EffectiveSourceType,
-    bool IsCanonicalProjectWebsite,
-    string? AssessmentNote,
-    ResearchSourceAssessmentReason Reason = ResearchSourceAssessmentReason.None,
-    bool HasExactMintMatch = false,
-    string? NormalizedHost = null);
-
-public sealed record ResearchIdentityAssessment(
-    ResearchIdentityMatch Match,
-    bool HasExactMintMatch,
-    IReadOnlyList<string> EvidenceNotes);
-
-public sealed record ResearchTrustAssessment(
-    ResearchIdentityAssessment Identity,
-    IReadOnlyList<AssessedResearchSource> Sources);
 
 public enum ResearchOutcomeStatus
 {
@@ -158,20 +88,6 @@ public enum ResearchFailureCategory
     MissingApiKey,
     Unknown
 }
-
-public enum ResearchExecutionStatus
-{
-    Complete,
-    Partial,
-    Unavailable
-}
-
-public sealed record ResearchProviderResult(
-    ResearchExecutionStatus Status,
-    CandidateResearchResult Candidate,
-    ResearchFailureCategory? FailureCategory,
-    string? FailureStage,
-    string? Detail);
 
 public sealed record ResearchOutcome(
     ResearchOutcomeStatus Status,

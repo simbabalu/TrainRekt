@@ -7,8 +7,6 @@ namespace TrainRekt.Api.Application.Services;
 
 internal static class AiSafetyCoachFingerprint
 {
-    private const string MintScopedFingerprintVersion = "coach-mint-scope-v1";
-
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false
@@ -22,11 +20,10 @@ internal static class AiSafetyCoachFingerprint
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    public static string ComputeMintScoped(string normalizedMint)
+    // Coach cache identity is scoped to deterministic + provenance data only, so the same
+    // fingerprint can be validated before external context/Gemini run and reused when persisting.
+    public static string ComputeCoachDependencyFingerprint(AiSafetyCoachInput input)
     {
-        var payload = $"{MintScopedFingerprintVersion}:{normalizedMint}";
-        var bytes = Encoding.UTF8.GetBytes(payload);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return Compute(input with { ExternalContext = null });
     }
 }

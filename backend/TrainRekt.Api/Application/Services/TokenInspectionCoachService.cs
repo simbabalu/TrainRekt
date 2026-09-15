@@ -88,60 +88,6 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
 
         var nowUtc = _timeProvider.GetUtcNow();
         var language = _options.Language;
-        var earlyFingerprint = AiSafetyCoachFingerprint.ComputeMintScoped(normalizedMint);
-
-        var earlyCacheStopwatch = Stopwatch.StartNew();
-        try
-        {
-            var earlyCached = await _snapshotRepository.GetFreshAsync(
-                normalizedMint,
-                language,
-                AiSafetyCoachVersion.Current,
-                earlyFingerprint,
-                nowUtc,
-                cancellationToken);
-
-            cacheMs = ElapsedMilliseconds(earlyCacheStopwatch);
-
-            if (earlyCached is not null)
-            {
-                _logger.LogInformation(
-                    "AI coach timing for mint {Mint}: totalCoachMs={TotalCoachMs} inspectionMs={InspectionMs} provenanceMs={ProvenanceMs} externalContextMs={ExternalContextMs} cacheMs={CacheMs} geminiCoachMs={GeminiCoachMs} outcome={Outcome}.",
-                    normalizedMint,
-                    ElapsedMilliseconds(totalCoachStopwatch),
-                    inspectionMs,
-                    provenanceMs,
-                    externalContextMs,
-                    cacheMs,
-                    geminiCoachMs,
-                    "cache-hit");
-
-                return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.Available, earlyCached.Coach);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            cacheMs = ElapsedMilliseconds(earlyCacheStopwatch);
-            _logger.LogWarning(
-                exception,
-                "AI safety coach cache read failed for mint {Mint}. Returning safe unavailable state.",
-                normalizedMint);
-            _logger.LogInformation(
-                "AI coach timing for mint {Mint}: totalCoachMs={TotalCoachMs} inspectionMs={InspectionMs} provenanceMs={ProvenanceMs} externalContextMs={ExternalContextMs} cacheMs={CacheMs} geminiCoachMs={GeminiCoachMs} outcome={Outcome}.",
-                normalizedMint,
-                ElapsedMilliseconds(totalCoachStopwatch),
-                inspectionMs,
-                provenanceMs,
-                externalContextMs,
-                cacheMs,
-                geminiCoachMs,
-                "cache-read-failure");
-            return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.CacheUnavailable, null);
-        }
 
         var inspectionStopwatch = Stopwatch.StartNew();
         var inspectionResult = await _inspectionService.InspectAsync(normalizedMint, cancellationToken);
@@ -203,6 +149,64 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
             provenanceMs = ElapsedMilliseconds(provenanceStopwatch);
         }
 
+        // Fingerprint over deterministic + provenance facts only (no external context), so this
+        // exact value can validate the cache now and be reused as the persisted fingerprint below.
+        var dependencyFingerprint = AiSafetyCoachFingerprint.ComputeCoachDependencyFingerprint(
+            _inputFactory.Create(inspection, provenance));
+
+        var earlyCacheStopwatch = Stopwatch.StartNew();
+        try
+        {
+            var earlyCached = await _snapshotRepository.GetFreshAsync(
+                normalizedMint,
+                language,
+                AiSafetyCoachVersion.Current,
+                dependencyFingerprint,
+                nowUtc,
+                cancellationToken);
+
+            cacheMs = ElapsedMilliseconds(earlyCacheStopwatch);
+
+            if (earlyCached is not null)
+            {
+                _logger.LogInformation(
+                    "AI coach timing for mint {Mint}: totalCoachMs={TotalCoachMs} inspectionMs={InspectionMs} provenanceMs={ProvenanceMs} externalContextMs={ExternalContextMs} cacheMs={CacheMs} geminiCoachMs={GeminiCoachMs} outcome={Outcome}.",
+                    normalizedMint,
+                    ElapsedMilliseconds(totalCoachStopwatch),
+                    inspectionMs,
+                    provenanceMs,
+                    externalContextMs,
+                    cacheMs,
+                    geminiCoachMs,
+                    "cache-hit");
+
+                return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.Available, earlyCached.Coach);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            cacheMs = ElapsedMilliseconds(earlyCacheStopwatch);
+            _logger.LogWarning(
+                exception,
+                "AI safety coach cache read failed for mint {Mint}. Returning safe unavailable state.",
+                normalizedMint);
+            _logger.LogInformation(
+                "AI coach timing for mint {Mint}: totalCoachMs={TotalCoachMs} inspectionMs={InspectionMs} provenanceMs={ProvenanceMs} externalContextMs={ExternalContextMs} cacheMs={CacheMs} geminiCoachMs={GeminiCoachMs} outcome={Outcome}.",
+                normalizedMint,
+                ElapsedMilliseconds(totalCoachStopwatch),
+                inspectionMs,
+                provenanceMs,
+                externalContextMs,
+                cacheMs,
+                geminiCoachMs,
+                "cache-read-failure");
+            return new TokenInspectionCoachResult(null, AiSafetyCoachStatus.CacheUnavailable, null);
+        }
+
         TokenExternalContext? externalContext = null;
         var externalContextStopwatch = Stopwatch.StartNew();
         try
@@ -236,7 +240,6 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
         }
 
         var input = _inputFactory.Create(inspection, provenance, externalContext);
-        var fingerprint = AiSafetyCoachFingerprint.ComputeMintScoped(normalizedMint);
 
         var geminiCoachStopwatch = Stopwatch.StartNew();
         var modelResult = await _coach.GenerateAsync(input, cancellationToken);
@@ -299,7 +302,7 @@ public sealed class TokenInspectionCoachService : ITokenInspectionCoachService
             Mint: normalizedMint,
             Language: language,
             CoachVersion: AiSafetyCoachVersion.Current,
-            InputFingerprint: fingerprint,
+            InputFingerprint: dependencyFingerprint,
             CachedAtUtc: nowUtc,
             ExpiresAtUtc: nowUtc.AddHours(_options.FreshnessHours),
             Coach: payload);

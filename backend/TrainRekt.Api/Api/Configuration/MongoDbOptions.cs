@@ -14,8 +14,6 @@ public sealed class MongoDbOptions
 
     public string TokenInspectionCollectionName { get; set; } = "tokenInspections";
 
-    public string TokenResearchCollectionName { get; set; } = "tokenResearch";
-
     public string TokenInspectionCoachCollectionName { get; set; } = "tokenInspectionCoach";
 
     public string TokenIdentityObservationCollectionName { get; set; } = "tokenIdentityObservations";

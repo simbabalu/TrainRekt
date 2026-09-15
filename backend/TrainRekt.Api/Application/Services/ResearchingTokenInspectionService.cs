@@ -1,35 +1,36 @@
 using System.Diagnostics;
 using TrainRekt.Api.Application.Abstractions;
 using TrainRekt.Api.Application.Research;
-using TrainRekt.Api.Domain.Analysis;
+using TrainRekt.Api.Domain.Models;
 
 namespace TrainRekt.Api.Application.Services;
 
+// Thin compatibility wrapper: the legacy optional-research enrichment pipeline was removed
+// because it had no active producer (see P0-2 audit). This preserves the researchStatus API
+// shape by synthesizing NotRequired/ResearchRequired locally from deterministic facts only.
 public sealed class ResearchingTokenInspectionService : ITokenInspectionService
 {
     private readonly ITokenInspectionService _innerService;
-    private readonly ITokenResearchOrchestrator _researchOrchestrator;
+    private readonly ResearchNeedDetector _needDetector;
     private readonly ILogger<ResearchingTokenInspectionService> _logger;
 
     public ResearchingTokenInspectionService(
         ITokenInspectionService innerService,
-        ITokenResearchOrchestrator researchOrchestrator,
+        ResearchNeedDetector needDetector,
         ILogger<ResearchingTokenInspectionService> logger)
     {
         _innerService = innerService;
-        _researchOrchestrator = researchOrchestrator;
+        _needDetector = needDetector;
         _logger = logger;
     }
 
     public async Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
     {
         var totalStopwatch = Stopwatch.StartNew();
-        long deterministicInspectionMs = 0;
-        long researchMs = 0;
 
         var deterministicStopwatch = Stopwatch.StartNew();
         var deterministicResult = await _innerService.InspectAsync(mint, cancellationToken);
-        deterministicInspectionMs = ElapsedMilliseconds(deterministicStopwatch);
+        var deterministicInspectionMs = ElapsedMilliseconds(deterministicStopwatch);
         if (deterministicResult.Error is not null || deterministicResult.Inspection is null)
         {
             _logger.LogInformation(
@@ -37,93 +38,17 @@ public sealed class ResearchingTokenInspectionService : ITokenInspectionService
                 mint,
                 ElapsedMilliseconds(totalStopwatch),
                 deterministicInspectionMs,
-                researchMs,
+                0,
                 "deterministic-error");
             return deterministicResult;
         }
 
         var deterministicInspection = deterministicResult.Inspection;
-        ResearchOutcome outcome;
+
         var researchStopwatch = Stopwatch.StartNew();
-        try
-        {
-            outcome = await _researchOrchestrator.RunCacheOnlyAsync(deterministicInspection, cancellationToken);
-            researchMs = ElapsedMilliseconds(researchStopwatch);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            researchMs = ElapsedMilliseconds(researchStopwatch);
-            _logger.LogWarning(
-                "Optional research timed out for mint {Mint}. Returning deterministic inspection.",
-                deterministicInspection.Identity.Mint);
+        var outcome = SynthesizeOutcome(deterministicInspection);
+        var researchMs = ElapsedMilliseconds(researchStopwatch);
 
-            _logger.LogInformation(
-                "Token analysis timing for mint {Mint}: totalMs={TotalMs} deterministicInspectionMs={DeterministicInspectionMs} researchMs={ResearchMs} outcome={Outcome}.",
-                deterministicInspection.Identity.Mint,
-                ElapsedMilliseconds(totalStopwatch),
-                deterministicInspectionMs,
-                researchMs,
-                "research-timeout");
-
-            return TokenInspectionResult.Success(
-                deterministicInspection,
-                CreateResearchStatus(
-                    TokenInspectionResearchAvailability.Unavailable,
-                    TokenInspectionResearchFailureCategory.Timeout,
-                    "provider_timeout",
-                    "Optional research timed out."));
-        }
-        catch (Exception exception)
-        {
-            researchMs = ElapsedMilliseconds(researchStopwatch);
-            _logger.LogWarning(
-                exception,
-                "Research enrichment failed for mint {Mint}. Returning deterministic inspection.",
-                deterministicInspection.Identity.Mint);
-
-            _logger.LogInformation(
-                "Token analysis timing for mint {Mint}: totalMs={TotalMs} deterministicInspectionMs={DeterministicInspectionMs} researchMs={ResearchMs} outcome={Outcome}.",
-                deterministicInspection.Identity.Mint,
-                ElapsedMilliseconds(totalStopwatch),
-                deterministicInspectionMs,
-                researchMs,
-                "research-exception");
-
-            return TokenInspectionResult.Success(
-                deterministicInspection,
-                CreateResearchStatus(
-                    TokenInspectionResearchAvailability.Unavailable,
-                    TokenInspectionResearchFailureCategory.Unknown,
-                    "research",
-                    "Optional research failed."));
-        }
-
-        if (outcome.Status != ResearchOutcomeStatus.Completed || outcome.Context is null)
-        {
-            _logger.LogInformation(
-                "Token analysis timing for mint {Mint}: totalMs={TotalMs} deterministicInspectionMs={DeterministicInspectionMs} researchMs={ResearchMs} outcome={Outcome} availability={Availability} failureStage={FailureStage}.",
-                deterministicInspection.Identity.Mint,
-                ElapsedMilliseconds(totalStopwatch),
-                deterministicInspectionMs,
-                researchMs,
-                outcome.Status,
-                outcome.Availability,
-                outcome.FailureStage);
-            return TokenInspectionResult.Success(
-                deterministicInspection,
-                MapResearchStatus(outcome));
-        }
-
-        var withResearchContext = deterministicInspection with
-        {
-            ProtocolContext = outcome.Context
-        };
-
-        var reviewSignals = TokenReviewSignalFactory.Create(withResearchContext);
         _logger.LogInformation(
             "Token analysis timing for mint {Mint}: totalMs={TotalMs} deterministicInspectionMs={DeterministicInspectionMs} researchMs={ResearchMs} outcome={Outcome} availability={Availability}.",
             deterministicInspection.Identity.Mint,
@@ -133,11 +58,37 @@ public sealed class ResearchingTokenInspectionService : ITokenInspectionService
             outcome.Status,
             outcome.Availability);
 
-        return TokenInspectionResult.Success(withResearchContext with
+        return TokenInspectionResult.Success(deterministicInspection, MapResearchStatus(outcome));
+    }
+
+    private ResearchOutcome SynthesizeOutcome(TokenInspection inspection)
+    {
+        var needs = _needDetector.Detect(inspection);
+        if (needs.Count == 0)
         {
-            ReviewSignals = reviewSignals
-        },
-        MapResearchStatus(outcome));
+            return new ResearchOutcome(
+                ResearchOutcomeStatus.NotRequired,
+                needs,
+                0,
+                0,
+                0,
+                inspection.ProtocolContext,
+                false,
+                ResearchAvailability.NotAttempted);
+        }
+
+        return new ResearchOutcome(
+            ResearchOutcomeStatus.ResearchRequired,
+            needs,
+            0,
+            0,
+            0,
+            inspection.ProtocolContext,
+            false,
+            ResearchAvailability.NotAttempted,
+            null,
+            "deferred",
+            "Optional research deferred outside the deterministic inspect response path.");
     }
 
     private static TokenInspectionResearchStatus MapResearchStatus(ResearchOutcome outcome)

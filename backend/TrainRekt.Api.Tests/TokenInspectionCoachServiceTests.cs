@@ -26,7 +26,7 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_CacheHit_DoesNotCallCoach()
+    public async Task GenerateAsync_CacheHit_ValidatesViaCachedInspectionAndProvenance_SkipsExternalContextAndCoach()
     {
         var inspection = ResearchTestData.CreateInspection();
         var cachedPayload = new AiSafetyCoachPayload(
@@ -48,16 +48,18 @@ public sealed class TokenInspectionCoachServiceTests
 
         var inspectionService = new StubInspectionService(TokenInspectionResult.Success(inspection));
         var provenance = new StubProvenanceService();
+        var externalContext = new StubExternalContextResearchService();
         var coach = new StubCoach();
-        var service = CreateService(inspectionService, provenance, coach, snapshotRepository);
+        var service = CreateService(inspectionService, provenance, coach, snapshotRepository, externalContext);
 
         var result = await service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.True(result.Available);
         Assert.Equal(AiSafetyCoachStatus.Available, result.Status);
         Assert.Equal("sum", result.Coach!.Content.Summary);
-        Assert.Equal(0, inspectionService.CallCount);
-        Assert.Equal(0, provenance.AnalyzeFromInspectionCallCount);
+        Assert.Equal(1, inspectionService.CallCount);
+        Assert.Equal(1, provenance.AnalyzeFromInspectionCallCount);
+        Assert.Equal(0, externalContext.CallCount);
         Assert.Equal(0, coach.CallCount);
     }
 
@@ -198,7 +200,7 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_CacheMiss_CallsCoachAndPersists()
+    public async Task GenerateAsync_CacheMiss_CallsExternalContextAndCoachAndPersists()
     {
         var inspection = ResearchTestData.CreateInspection();
         var coach = new StubCoach
@@ -209,12 +211,14 @@ public sealed class TokenInspectionCoachServiceTests
                 null,
                 null)
         };
+        var externalContext = new StubExternalContextResearchService();
         var repo = new StubCoachSnapshotRepository();
-        var service = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspection)), new StubProvenanceService(), coach, repo);
+        var service = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspection)), new StubProvenanceService(), coach, repo, externalContext);
 
         var result = await service.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
 
         Assert.True(result.Available);
+        Assert.Equal(1, externalContext.CallCount);
         Assert.Equal(1, coach.CallCount);
         Assert.Single(repo.Inserts);
     }
@@ -626,43 +630,267 @@ public sealed class TokenInspectionCoachServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_IdentityClassificationChanges_UsesSameMintScopedCacheKey()
+    public async Task GenerateAsync_IdentityClassificationChanges_InvalidatesStaleCache()
     {
         var inspection = ResearchTestData.CreateInspection();
         var coach = new StubCoach
         {
             NextResult = new AiSafetyCoachModelResult(
                 true,
-                new AiSafetyCoachContent("summary", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null),
+                new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null),
                 null,
                 null)
         };
+        var repo = new StubCoachSnapshotRepository();
 
-        var repoA = new StubCoachSnapshotRepository();
-        var repoB = new StubCoachSnapshotRepository();
-
-        var serviceA = CreateService(
+        var serviceCollisionDetected = CreateService(
             new StubInspectionService(TokenInspectionResult.Success(inspection)),
             new StubProvenanceService
             {
                 NextResult = new TokenIdentityProvenanceResult(null, CreateProvenance(TokenIdentityClassificationType.CollisionDetected))
             },
             coach,
-            repoA);
+            repo);
 
-        var serviceB = CreateService(
+        var first = await serviceCollisionDetected.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+        Assert.Equal("first", first.Coach!.Content.Summary);
+
+        coach.NextResult = new AiSafetyCoachModelResult(
+            true,
+            new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null),
+            null,
+            null);
+
+        var servicePossibleCopycat = CreateService(
             new StubInspectionService(TokenInspectionResult.Success(inspection)),
             new StubProvenanceService
             {
                 NextResult = new TokenIdentityProvenanceResult(null, CreateProvenance(TokenIdentityClassificationType.PossibleCopycat))
             },
             coach,
-            repoB);
+            repo);
 
-        _ = await serviceA.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
-        _ = await serviceB.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
+        var second = await servicePossibleCopycat.GenerateAsync(inspection.Identity.Mint, CancellationToken.None);
 
-        Assert.Equal(repoA.LastReadFingerprint, repoB.LastReadFingerprint);
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+        Assert.Equal("second", second.Coach!.Content.Summary);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MintAuthorityStateChanges_InvalidatesStaleCache()
+    {
+        var revoked = ResearchTestData.CreateInspection(mintAuthorityRevoked: true);
+        var active = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        Assert.Equal(revoked.Identity.Mint, active.Identity.Mint);
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceRevoked = CreateService(new StubInspectionService(TokenInspectionResult.Success(revoked)), new StubProvenanceService(), coach, repo);
+        var first = await serviceRevoked.GenerateAsync(revoked.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        coach.NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null);
+
+        var serviceActive = CreateService(new StubInspectionService(TokenInspectionResult.Success(active)), new StubProvenanceService(), coach, repo);
+        var second = await serviceActive.GenerateAsync(active.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_FreezeAuthorityStateChanges_InvalidatesStaleCache()
+    {
+        var revoked = ResearchTestData.CreateInspection(freezeAuthorityRevoked: true);
+        var active = ResearchTestData.CreateInspection(freezeAuthorityRevoked: false);
+        Assert.Equal(revoked.Identity.Mint, active.Identity.Mint);
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceRevoked = CreateService(new StubInspectionService(TokenInspectionResult.Success(revoked)), new StubProvenanceService(), coach, repo);
+        var first = await serviceRevoked.GenerateAsync(revoked.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        coach.NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null);
+
+        var serviceActive = CreateService(new StubInspectionService(TokenInspectionResult.Success(active)), new StubProvenanceService(), coach, repo);
+        var second = await serviceActive.GenerateAsync(active.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_TokenProgramStateChanges_InvalidatesStaleCache()
+    {
+        var baseInspection = ResearchTestData.CreateInspection();
+        var splToken = baseInspection with { Program = baseInspection.Program with { ProgramType = "spl-token" } };
+        var token2022 = baseInspection with { Program = baseInspection.Program with { ProgramType = "token-2022" } };
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceSpl = CreateService(new StubInspectionService(TokenInspectionResult.Success(splToken)), new StubProvenanceService(), coach, repo);
+        var first = await serviceSpl.GenerateAsync(splToken.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        coach.NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null);
+
+        var serviceToken2022 = CreateService(new StubInspectionService(TokenInspectionResult.Success(token2022)), new StubProvenanceService(), coach, repo);
+        var second = await serviceToken2022.GenerateAsync(token2022.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ReviewSignalsChange_InvalidatesStaleCache()
+    {
+        var baseInspection = ResearchTestData.CreateInspection();
+        var withoutSignals = baseInspection with { ReviewSignals = Array.Empty<TokenReviewSignal>() };
+        var withSignal = baseInspection with
+        {
+            ReviewSignals = new[]
+            {
+                new TokenReviewSignal(
+                    "ACTIVE_MINT_AUTHORITY",
+                    "review",
+                    "medium",
+                    "An active mint authority can increase token supply.",
+                    new Dictionary<string, string> { ["mintAuthority"] = "MintAuth1111111111111111111111111111111" })
+            }
+        };
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceWithoutSignals = CreateService(new StubInspectionService(TokenInspectionResult.Success(withoutSignals)), new StubProvenanceService(), coach, repo);
+        var first = await serviceWithoutSignals.GenerateAsync(withoutSignals.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        coach.NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null);
+
+        var serviceWithSignal = CreateService(new StubInspectionService(TokenInspectionResult.Success(withSignal)), new StubProvenanceService(), coach, repo);
+        var second = await serviceWithSignal.GenerateAsync(withSignal.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_HolderConcentrationChangesMaterially_InvalidatesStaleCache()
+    {
+        var baseInspection = ResearchTestData.CreateInspection();
+        var lowConcentration = baseInspection with { HolderConcentration = baseInspection.HolderConcentration with { TopHolderPercentage = 5m } };
+        var highConcentration = baseInspection with { HolderConcentration = baseInspection.HolderConcentration with { TopHolderPercentage = 92m } };
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceLow = CreateService(new StubInspectionService(TokenInspectionResult.Success(lowConcentration)), new StubProvenanceService(), coach, repo);
+        var first = await serviceLow.GenerateAsync(lowConcentration.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        coach.NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("second", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null);
+
+        var serviceHigh = CreateService(new StubInspectionService(TokenInspectionResult.Success(highConcentration)), new StubProvenanceService(), coach, repo);
+        var second = await serviceHigh.GenerateAsync(highConcentration.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(2, coach.CallCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_TimestampOnlyChange_DoesNotInvalidateCache()
+    {
+        var baseInspection = ResearchTestData.CreateInspection();
+        var inspectedEarlier = baseInspection with { InspectedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+        var inspectedLater = baseInspection with { InspectedAtUtc = new DateTimeOffset(2026, 1, 2, 12, 30, 0, TimeSpan.Zero) };
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceEarlier = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspectedEarlier)), new StubProvenanceService(), coach, repo);
+        var first = await serviceEarlier.GenerateAsync(inspectedEarlier.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        var serviceLater = CreateService(new StubInspectionService(TokenInspectionResult.Success(inspectedLater)), new StubProvenanceService(), coach, repo);
+        var second = await serviceLater.GenerateAsync(inspectedLater.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(1, coach.CallCount);
+        Assert.Equal("first", second.Coach!.Content.Summary);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SemanticallyUnorderedReviewSignalOrdering_DoesNotInvalidateCache()
+    {
+        var signalA = new TokenReviewSignal("ACTIVE_MINT_AUTHORITY", "review", "medium", "explanation-a", new Dictionary<string, string>());
+        var signalB = new TokenReviewSignal("LARGE_UNKNOWN_CONCENTRATION", "review", "medium", "explanation-b", new Dictionary<string, string>());
+
+        var baseInspection = ResearchTestData.CreateInspection();
+        var orderAB = baseInspection with { ReviewSignals = new[] { signalA, signalB } };
+        var orderBA = baseInspection with { ReviewSignals = new[] { signalB, signalA } };
+
+        var coach = new StubCoach
+        {
+            NextResult = new AiSafetyCoachModelResult(true, new AiSafetyCoachContent("first", new[] { "risk" }, new[] { "check" }, new[] { "uncertainty" }, null), null, null)
+        };
+        var repo = new StubCoachSnapshotRepository();
+
+        var serviceAB = CreateService(new StubInspectionService(TokenInspectionResult.Success(orderAB)), new StubProvenanceService(), coach, repo);
+        var first = await serviceAB.GenerateAsync(orderAB.Identity.Mint, CancellationToken.None);
+        Assert.True(first.Available);
+        Assert.Equal(1, coach.CallCount);
+
+        var serviceBA = CreateService(new StubInspectionService(TokenInspectionResult.Success(orderBA)), new StubProvenanceService(), coach, repo);
+        var second = await serviceBA.GenerateAsync(orderBA.Identity.Mint, CancellationToken.None);
+
+        Assert.True(second.Available);
+        Assert.Equal(1, coach.CallCount);
+        Assert.Equal("first", second.Coach!.Content.Summary);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CancellationDuringInspection_Propagates()
+    {
+        var inspectionService = new StubInspectionService(TokenInspectionResult.Failure(TokenInspectionErrorCode.ProviderMalformedResponse, "unused"))
+        {
+            ThrowCancellation = true
+        };
+        var service = CreateService(inspectionService, new StubProvenanceService(), new StubCoach(), new StubCoachSnapshotRepository());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.GenerateAsync("ResearchMint1111111111111111111111111111111", CancellationToken.None));
     }
 
     private static TokenInspectionCoachService CreateService(
@@ -715,8 +943,12 @@ public sealed class TokenInspectionCoachServiceTests
 
         public bool RespectCallerCancellation { get; set; }
 
+        public int CallCount { get; private set; }
+
         public Task<TokenExternalContext> GetContextAsync(TokenInspection inspection, TokenIdentityProvenance? provenance, CancellationToken cancellationToken)
         {
+            CallCount += 1;
+
             if (RespectCallerCancellation)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -810,9 +1042,17 @@ public sealed class TokenInspectionCoachServiceTests
 
         public int CallCount { get; private set; }
 
+        public bool ThrowCancellation { get; set; }
+
         public Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
         {
             CallCount += 1;
+
+            if (ThrowCancellation)
+            {
+                throw new OperationCanceledException("inspection cancelled");
+            }
+
             return Task.FromResult(_result);
         }
     }

@@ -12,6 +12,7 @@ vi.mock('@/hooks/useTrainingProgress', () => ({
 
 vi.mock('expo-router', () => ({
   Link: 'Link',
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock('@/components/Screen', () => ({
@@ -28,6 +29,10 @@ vi.mock('@/components/DailyGoalCard', () => ({
 
 vi.mock('@/components/PrimaryButton', () => ({
   PrimaryButton: ({ children }: { children: React.ReactNode }) => React.createElement('Text', null, children),
+}));
+
+vi.mock('@/components/TokenSafetyCheckCard', () => ({
+  TokenSafetyCheckCard: () => React.createElement('Text', null, 'TOKEN SAFETY CHECK CARD'),
 }));
 
 vi.mock('@/components/wallet/HomeWalletSafetyCard', () => ({
@@ -105,6 +110,7 @@ describe('HomeScreen simplified layout', () => {
     expect(text).not.toContain('DAILY STREAK');
     expect(text).not.toContain('2240 XP total');
     expect(text).toContain('START TRAINING');
+    expect(text).toContain('TOKEN SAFETY CHECK CARD');
     expect(text).toContain('HOME WALLET SAFETY CARD');
     expect(text).not.toContain("TODAY'S TRAINING");
     expect(text).not.toContain('YOUR SKILLS');

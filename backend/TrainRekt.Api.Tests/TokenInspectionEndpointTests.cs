@@ -72,23 +72,20 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
     }
 
     [Fact]
-    public async Task PostTokenInspection_DeterministicSuccess_WithOptionalResearchTimeout_ReturnsSuccessWithDegradedResearchStatus()
+    public async Task PostTokenInspection_NoResearchNeedDetected_ReturnsNotAttemptedResearchStatus()
     {
-        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
+        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: true, freezeAuthorityRevoked: true);
         var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
-        var orchestrator = new TimeoutResearchOrchestrator();
 
         var configuredFactory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ITokenInspectionService>();
-                services.RemoveAll<ITokenResearchOrchestrator>();
-                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
                 services.AddScoped<ITokenInspectionService>(_ =>
                     new ResearchingTokenInspectionService(
                         deterministicService,
-                        orchestrator,
+                        new ResearchNeedDetector(new TokenResearchOptions()),
                         NullLogger<ResearchingTokenInspectionService>.Instance));
             });
         });
@@ -106,36 +103,29 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var root = json.RootElement;
+        var researchStatus = json.RootElement.GetProperty("researchStatus");
 
-        Assert.Equal(deterministicInspection.Identity.Mint, root.GetProperty("identity").GetProperty("mint").GetString());
-        Assert.Equal(deterministicInspection.Authorities.MintAuthorityRevoked, root.GetProperty("authorities").GetProperty("mintAuthorityRevoked").GetBoolean());
-
-        var researchStatus = root.GetProperty("researchStatus");
-        Assert.Equal("unavailable", researchStatus.GetProperty("availability").GetString());
-        Assert.Equal("timeout", researchStatus.GetProperty("failureCategory").GetString());
-        Assert.Equal("provider_timeout", researchStatus.GetProperty("failureStage").GetString());
-        Assert.Equal("Optional research timed out.", researchStatus.GetProperty("message").GetString());
+        Assert.Equal("not-attempted", researchStatus.GetProperty("availability").GetString());
+        Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureCategory").ValueKind);
+        Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureStage").ValueKind);
+        Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("message").ValueKind);
     }
 
     [Fact]
-    public async Task PostTokenInspection_DeterministicSuccess_WithCompletedResearch_ReturnsSuccessWithCompleteResearchStatus_AndStringEnumWireFormat()
+    public async Task PostTokenInspection_ResearchNeedDetected_StaysNotAttempted_NoApiContractChange()
     {
-        var deterministicInspection = CreateInspectionWithProtocolContext();
+        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false, freezeAuthorityRevoked: false);
         var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
-        var orchestrator = new CompletedResearchOrchestrator(deterministicInspection.ProtocolContext!);
 
         var configuredFactory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ITokenInspectionService>();
-                services.RemoveAll<ITokenResearchOrchestrator>();
-                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
                 services.AddScoped<ITokenInspectionService>(_ =>
                     new ResearchingTokenInspectionService(
                         deterministicService,
-                        orchestrator,
+                        new ResearchNeedDetector(new TokenResearchOptions()),
                         NullLogger<ResearchingTokenInspectionService>.Instance));
             });
         });
@@ -156,42 +146,30 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         var root = json.RootElement;
 
         Assert.Equal(deterministicInspection.Identity.Mint, root.GetProperty("identity").GetProperty("mint").GetString());
-        Assert.Equal(deterministicInspection.Identity.Symbol, root.GetProperty("identity").GetProperty("symbol").GetString());
-        Assert.Equal(deterministicInspection.Authorities.MintAuthorityRevoked, root.GetProperty("authorities").GetProperty("mintAuthorityRevoked").GetBoolean());
 
+        // researchStatus contract field remains present and unchanged in shape; the legacy
+        // enrichment pipeline is gone, so the deferred/required case is observably identical
+        // to the not-required case (no field removed, no field renamed).
         var researchStatus = root.GetProperty("researchStatus");
-        Assert.Equal("complete", researchStatus.GetProperty("availability").GetString());
+        Assert.Equal("not-attempted", researchStatus.GetProperty("availability").GetString());
         Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureCategory").ValueKind);
         Assert.Equal(JsonValueKind.Null, researchStatus.GetProperty("failureStage").ValueKind);
-
-        var protocolContext = root.GetProperty("protocolContext");
-        var source = protocolContext.GetProperty("sources")[0];
-        var claim = protocolContext.GetProperty("claims")[0];
-
-        Assert.Equal("OfficialDocumentation", source.GetProperty("sourceType").GetString());
-        Assert.Equal("Documented", claim.GetProperty("verificationStatus").GetString());
-        Assert.Equal("DocumentationOnly", claim.GetProperty("verificationMethod").GetString());
-        Assert.Equal("Unknown", claim.GetProperty("consistency").GetString());
     }
 
     [Fact]
     public async Task PostTokenInspection_CallerCancellation_PropagatesCancellation()
     {
-        var deterministicInspection = ResearchTestData.CreateInspection(mintAuthorityRevoked: false);
-        var deterministicService = new StubInspectionService(TokenInspectionResult.Success(deterministicInspection));
-        var orchestrator = new BlockingResearchOrchestrator();
+        var blockingInspection = new BlockingInspectionService();
 
         var configuredFactory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ITokenInspectionService>();
-                services.RemoveAll<ITokenResearchOrchestrator>();
-                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
                 services.AddScoped<ITokenInspectionService>(_ =>
                     new ResearchingTokenInspectionService(
-                        deterministicService,
-                        orchestrator,
+                        blockingInspection,
+                        new ResearchNeedDetector(new TokenResearchOptions()),
                         NullLogger<ResearchingTokenInspectionService>.Instance));
             });
         });
@@ -204,10 +182,10 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         using var cancellationSource = new CancellationTokenSource();
         var requestTask = client.PostAsJsonAsync("/api/token-inspections", new
         {
-            mint = deterministicInspection.Identity.Mint
+            mint = "ResearchMint1111111111111111111111111111111"
         }, cancellationSource.Token);
 
-        await orchestrator.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await blockingInspection.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await cancellationSource.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
@@ -529,62 +507,6 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
     }
 
     [Fact]
-    public async Task PostTokenInspectionProvenance_DoesNotInvokeResearchOrchestratorPath()
-    {
-        var deterministicInspection = ResearchTestData.CreateInspection() with
-        {
-            Identity = ResearchTestData.CreateInspection().Identity with { Mint = "So11111111111111111111111111111111111111112" }
-        };
-
-        var deterministic = new CountingDeterministicInspectionService(TokenInspectionResult.Success(deterministicInspection));
-        var orchestrator = new ThrowingResearchOrchestrator();
-
-        var configuredFactory = _factory.WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureServices(services =>
-            {
-                services.RemoveAll<ITokenIdentityProvenanceService>();
-                services.RemoveAll<ITokenInspectionDeterministicService>();
-                services.RemoveAll<ITokenInspectionCoreService>();
-                services.RemoveAll<ITokenIdentityObservationRepository>();
-                services.RemoveAll<IOnChainChronologyService>();
-                services.RemoveAll<ITrustedIdentityProvenanceService>();
-                services.RemoveAll<ITokenResearchOrchestrator>();
-
-                services.AddSingleton<ITokenInspectionDeterministicService>(deterministic);
-                services.AddSingleton<ITokenInspectionCoreService>(deterministic);
-                services.AddSingleton<ITokenIdentityObservationRepository>(new NoOpTokenIdentityObservationRepository());
-                services.AddSingleton<IOnChainChronologyService>(new StubChronologyService());
-                services.AddSingleton<ITrustedIdentityProvenanceService>(new StubTrustedIdentityProvenanceService());
-                services.AddSingleton<ITokenResearchOrchestrator>(orchestrator);
-                services.AddSingleton<ITokenIdentityProvenanceService>(serviceProvider =>
-                    new TokenIdentityProvenanceService(
-                        serviceProvider.GetRequiredService<ITokenInspectionCoreService>(),
-                        serviceProvider.GetRequiredService<ITokenIdentityObservationRepository>(),
-                        serviceProvider.GetRequiredService<IOnChainChronologyService>(),
-                        serviceProvider.GetRequiredService<ITrustedIdentityProvenanceService>(),
-                        new TokenIdentityClassifier(),
-                        new TokenIdentityNormalizer(),
-                        Options.Create(new TokenIdentityProvenanceOptions { MaxReturnedCollisions = 25 }),
-                        Options.Create(new TokenIdentityClassificationOptions { MaxClassificationCompetitors = 1 }),
-                        TimeProvider.System,
-                        Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenIdentityProvenanceService>.Instance));
-            });
-        });
-
-        using var client = configuredFactory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("https://localhost")
-        });
-
-        var response = await client.PostAsync("/api/token-inspections/So11111111111111111111111111111111111111112/provenance", content: null);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(1, deterministic.CallCount);
-        Assert.Equal(0, orchestrator.CallCount);
-    }
-
-    [Fact]
     public async Task PostTokenInspectionProvenance_ResponseExposesTrustedIdentityProvenanceWithoutCopycatOrSafetyVerdicts()
     {
         var configuredFactory = _factory.WithWebHostBuilder(builder =>
@@ -838,116 +760,15 @@ public sealed class TokenInspectionEndpointTests : IClassFixture<WebApplicationF
         }
     }
 
-    private sealed class ThrowingResearchOrchestrator : ITokenResearchOrchestrator
-    {
-        public int CallCount { get; private set; }
-
-        public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            CallCount += 1;
-            throw new InvalidOperationException("research orchestrator should not be used by provenance");
-        }
-
-        public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            CallCount += 1;
-            throw new InvalidOperationException("research orchestrator should not be used by provenance");
-        }
-    }
-
-    private sealed class TimeoutResearchOrchestrator : ITokenResearchOrchestrator
-    {
-        public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            throw new OperationCanceledException("optional provider timeout simulated");
-        }
-
-        public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            throw new OperationCanceledException("optional provider timeout simulated");
-        }
-    }
-
-    private sealed class CompletedResearchOrchestrator : ITokenResearchOrchestrator
-    {
-        private readonly ProtocolResearchContext _context;
-
-        public CompletedResearchOrchestrator(ProtocolResearchContext context)
-        {
-            _context = context;
-        }
-
-        public Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new ResearchOutcome(
-                ResearchOutcomeStatus.Completed,
-                Array.Empty<ResearchNeed>(),
-                SourcesAccepted: 1,
-                ClaimsAccepted: 1,
-                ClaimsRejected: 0,
-                Context: _context,
-                UsedCache: false,
-                Availability: ResearchAvailability.Complete));
-        }
-
-            public Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(new ResearchOutcome(
-                ResearchOutcomeStatus.Completed,
-                Array.Empty<ResearchNeed>(),
-                SourcesAccepted: 1,
-                ClaimsAccepted: 1,
-                ClaimsRejected: 0,
-                Context: _context,
-                UsedCache: true,
-                Availability: ResearchAvailability.Complete));
-            }
-    }
-
-    private sealed class BlockingResearchOrchestrator : ITokenResearchOrchestrator
+    private sealed class BlockingInspectionService : ITokenInspectionService
     {
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<ResearchOutcome> RunAsync(TokenInspection inspection, CancellationToken cancellationToken)
+        public async Task<TokenInspectionResult> InspectAsync(string mint, CancellationToken cancellationToken)
         {
             Started.TrySetResult(true);
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-
-            return new ResearchOutcome(
-                ResearchOutcomeStatus.Failed,
-                Array.Empty<ResearchNeed>(),
-                0,
-                0,
-                0,
-                inspection.ProtocolContext,
-                false,
-                ResearchAvailability.Unavailable,
-                ResearchFailureCategory.Cancelled,
-                "provider",
-                "cancelled");
-        }
-
-        public async Task<ResearchOutcome> RunCacheOnlyAsync(TokenInspection inspection, CancellationToken cancellationToken)
-        {
-            Started.TrySetResult(true);
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-
-            return new ResearchOutcome(
-                ResearchOutcomeStatus.Failed,
-                Array.Empty<ResearchNeed>(),
-                0,
-                0,
-                0,
-                inspection.ProtocolContext,
-                false,
-                ResearchAvailability.Unavailable,
-                ResearchFailureCategory.Cancelled,
-                "provider",
-                "cancelled");
+            return TokenInspectionResult.Failure(TokenInspectionErrorCode.ProviderUnavailable, "unreachable");
         }
     }
 }
