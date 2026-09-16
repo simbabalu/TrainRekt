@@ -30,9 +30,18 @@ function formatPercentage(value: number | null): string {
 }
 
 function summarizeReviewExplanation(signal: TokenInspectionReviewSignal): string {
-  const firstSentence = signal.explanation.split(/[.!?]/u)[0]?.trim() ?? '';
-  if (firstSentence.length <= 88) return firstSentence;
-  return `${firstSentence.slice(0, 85).trimEnd()}...`;
+  return signal.explanation;
+}
+
+function reviewSignalTone(signal: TokenInspectionReviewSignal): TokenAnalysisSignalTone {
+  const severity = signal.severity.toUpperCase();
+  const category = signal.category.toUpperCase();
+  if (severity === 'INFO' || category === 'INFORMATIONAL') return 'informational';
+  return 'review';
+}
+
+function reviewSignalIcon(signal: TokenInspectionReviewSignal): TokenAnalysisSignalIcon {
+  return reviewSignalTone(signal) === 'informational' ? 'tokenProgram' : 'review';
 }
 
 function mintAuthorityDescription(report: TokenAnalysisReport): string | undefined {
@@ -110,13 +119,14 @@ export function buildTokenAnalysisSummary(report: TokenAnalysisReport): TokenAna
   if (tokenomics) findings.push(tokenomics);
 
   for (const signal of report.inspection.reviewSignals.slice(0, 3)) {
+    const tone = reviewSignalTone(signal);
     findings.push({
       id: `review:${signal.id}:${signal.category}:${signal.severity}`,
-      icon: 'review',
+      icon: reviewSignalIcon(signal),
       label: signal.category.toUpperCase(),
       value: signal.severity,
       description: summarizeReviewExplanation(signal),
-      tone: 'review',
+      tone,
     });
   }
 

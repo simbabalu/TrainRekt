@@ -12,6 +12,9 @@ const iconNames: Record<TokenAnalysisSignal['icon'], AppIconName> = {
   tokenProgram: { ios: 'info.circle.fill', android: 'info', web: 'info' },
 };
 
+const informationalIcon: AppIconName = { ios: 'info.circle.fill', android: 'info', web: 'info' };
+const reviewIcon: AppIconName = { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' };
+
 const toneColors: Record<TokenAnalysisSignal['tone'], string> = {
   informational: Colors.accent,
   neutral: Colors.secondaryText,
@@ -25,11 +28,12 @@ interface TokenAnalysisSignalRowProps {
 
 export function TokenAnalysisSignalRow({ signal }: TokenAnalysisSignalRowProps) {
   const toneColor = toneColors[signal.tone];
+  const iconName = signal.tone === 'informational' ? informationalIcon : signal.tone === 'review' ? reviewIcon : iconNames[signal.icon];
 
   return (
     <View accessible style={styles.row}>
       <View style={[styles.icon, { backgroundColor: `${toneColor}22` }]}>
-        <AppIcon accessibilityLabel={`${signal.label} signal`} name={iconNames[signal.icon]} size={20} tintColor={toneColor} />
+        <AppIcon accessibilityLabel={`${signal.label} signal`} name={iconName} size={20} tintColor={toneColor} />
       </View>
       <View style={styles.content}>
         <Text style={[styles.label, { color: toneColor }]}>{signal.label}</Text>
@@ -41,10 +45,10 @@ export function TokenAnalysisSignalRow({ signal }: TokenAnalysisSignalRowProps) 
 }
 
 const styles = StyleSheet.create({
-  row: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.md, minHeight: 52, paddingVertical: Spacing.md },
-  icon: { alignItems: 'center', borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
-  content: { flex: 1, gap: Spacing.xs },
-  label: { fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.7 },
-  value: { color: Colors.text, fontSize: Typography.body, fontWeight: '800', lineHeight: TypographyLineHeight.body },
-  description: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
+  row: { alignItems: 'flex-start', flexDirection: 'row', gap: Spacing.md, minHeight: 52, minWidth: 0, paddingVertical: Spacing.md },
+  icon: { alignItems: 'center', borderRadius: 18, flexShrink: 0, height: 36, justifyContent: 'center', width: 36 },
+  content: { flex: 1, gap: Spacing.xs, minWidth: 0 },
+  label: { flexShrink: 1, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.7 },
+  value: { color: Colors.text, flexShrink: 1, fontSize: Typography.body, fontWeight: '800', lineHeight: TypographyLineHeight.body },
+  description: { color: Colors.secondaryText, flexShrink: 1, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
 });

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/AppIcon';
-import { SectionCard } from '@/components/SectionCard';
 import { TokenAnalysisSignalRow } from '@/components/token-analysis/TokenAnalysisSignalRow';
 import { buildTokenAnalysisSummary } from '@/domain/token-analysis/tokenAnalysisSummary';
 import { Colors, Spacing, Typography, TypographyLineHeight } from '@/constants/theme';
@@ -33,16 +32,14 @@ export function TokenAnalysisSummaryCard({
   report,
 }: TokenAnalysisSummaryCardProps) {
   const [failedLogoUri, setFailedLogoUri] = useState<string | null>(null);
-  const summary = buildTokenAnalysisSummary(report);
-  const optionalResearch = presentOptionalResearch(report.inspection.researchStatus);
   const logoUri = report.inspection.identity.logoUri?.trim() || null;
   const tokenName = report.inspection.identity.name?.trim() || 'Unknown';
   const tokenSymbol = report.inspection.identity.symbol?.trim() || 'Unknown';
   const showLogoImage = Boolean(logoUri) && failedLogoUri !== logoUri;
 
   return (
-    <SectionCard>
-      <Text style={styles.eyebrow}>TOKEN ANALYSIS SUMMARY</Text>
+    <View>
+      <Text style={styles.eyebrow}>TOKEN IDENTITY</Text>
       <View style={styles.identityRow}>
         {showLogoImage ? (
           <Image
@@ -63,20 +60,30 @@ export function TokenAnalysisSummaryCard({
       </View>
       <Text style={styles.identityLabel}>Mint</Text>
       <Text selectable style={styles.mint}>{report.inspection.identity.mint}</Text>
-      <Text style={[styles.status, summary.status === 'NEEDS REVIEW' ? styles.reviewStatus : styles.clearStatus]}>{summary.status}</Text>
-      <Text style={styles.findingsTitle}>Key findings</Text>
+    </View>
+  );
+}
+
+export function TokenAnalysisOnChainSummary({ report }: TokenAnalysisSummaryCardProps) {
+  const summary = buildTokenAnalysisSummary(report);
+  const optionalResearch = presentOptionalResearch(report.inspection.researchStatus);
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>ON-CHAIN SUMMARY</Text>
       <View style={styles.findings}>
         {summary.findings.map((finding) => <TokenAnalysisSignalRow key={finding.id} signal={finding} />)}
       </View>
       <Text style={styles.neutralInfo}>Deterministic inspection: complete.</Text>
       {optionalResearch ? <Text style={styles.neutralInfo}>{optionalResearch}</Text> : null}
       <Text style={styles.disclaimer}>Signals are technical observations — not a safety verdict.</Text>
-    </SectionCard>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   eyebrow: { color: Colors.accent, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
+  sectionTitle: { color: Colors.text, fontSize: Typography.label, fontWeight: '900', letterSpacing: 0.8 },
   identityRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -109,9 +116,6 @@ const styles = StyleSheet.create({
   tokenName: { color: Colors.text, fontSize: Typography.heading, fontWeight: '900', lineHeight: TypographyLineHeight.heading },
   symbol: { color: Colors.secondaryText, fontSize: Typography.body, fontWeight: '700' },
   mint: { color: Colors.mutedText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small },
-  status: { fontSize: Typography.body, fontWeight: '900', letterSpacing: 0.6, marginTop: Spacing.md },
-  reviewStatus: { color: Colors.warning },
-  clearStatus: { color: Colors.secondaryText },
   neutralInfo: {
     color: Colors.secondaryText,
     fontSize: Typography.small,
@@ -119,6 +123,5 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   disclaimer: { color: Colors.secondaryText, fontSize: Typography.small, lineHeight: TypographyLineHeight.small, marginTop: Spacing.xs },
-  findingsTitle: { color: Colors.text, fontSize: Typography.body, fontWeight: '800', marginTop: Spacing.lg },
   findings: { marginTop: Spacing.sm },
 });

@@ -55,7 +55,7 @@ function textContent(renderer: ReturnType<typeof create>): string {
 }
 
 describe('TokenAnalysisReportCard', () => {
-  it('renders summary, distribution, and AI coach without full analysis controls', () => {
+  it('keeps identity and deterministic findings visible while key takeaways load', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
@@ -72,10 +72,19 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     const content = textContent(renderer);
-    expect(content).toContain('TOKEN ANALYSIS SUMMARY');
+  expect(content).toContain('TOKEN IDENTITY');
+  expect(content).toContain('The Little Hodler');
+  expect(content).not.toContain('NO REVIEW SIGNALS');
+  expect(content).not.toContain('NEEDS REVIEW');
+  expect(content).toContain('KEY TAKEAWAYS');
+  expect(content).toContain('Loading key takeaways...');
+  expect(content).toContain('ON-CHAIN SUMMARY');
+  expect(content).toContain('MINT AUTHORITY');
+  expect(content).toContain('TOKEN PROGRAM');
     expect(content).toContain('TOKEN DISTRIBUTION (TOP 5 ACCOUNTS)');
-    expect(content).toContain('AI SAFETY COACH');
-    expect(content).toContain('LOADING AI EXPLANATION...');
+  expect(content).not.toContain('AI SAFETY COACH');
+  expect(content).not.toContain('AI explains verified TrainRekt findings');
+  expect(content).not.toContain('TRY AGAIN');
     expect(content).not.toContain('EXPLAIN WITH AI');
     expect(content).not.toContain('VIEW FULL ANALYSIS');
     expect(content).not.toContain('HIDE FULL ANALYSIS');
@@ -134,10 +143,18 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     expect(onRetryAi).toHaveBeenCalledTimes(1);
-    expect(textContent(renderer)).toContain('AI timeout');
+    const content = textContent(renderer);
+    expect(content).toContain('AI timeout');
+    expect(content).toContain('TOKEN IDENTITY');
+    expect(content).not.toContain('NO REVIEW SIGNALS');
+    expect(content).not.toContain('NEEDS REVIEW');
+    expect(content).toContain('ON-CHAIN SUMMARY');
+    expect(content).toContain('MINT AUTHORITY');
+    expect(content).toContain('TOKEN DISTRIBUTION (TOP 5 ACCOUNTS)');
+    expect(content).not.toContain('AI SAFETY COACH');
   });
 
-  it('renders AI bullet sections when coach content is ready', () => {
+  it('renders AI summary and existing guidance in the requested report order', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
@@ -154,11 +171,21 @@ describe('TokenAnalysisReportCard', () => {
     });
 
     const content = textContent(renderer);
-    expect(content).toContain('WHY THIS MATTERS');
+    expect(content).toContain('KEY TAKEAWAYS');
+    expect(content).toContain('summary');
+    expect(content).toContain('ON-CHAIN SUMMARY');
+    expect(content).toContain('TOKEN DISTRIBUTION (TOP 5 ACCOUNTS)');
+    expect(content).toContain('KEY POINTS');
     expect(content).toContain('WHAT TO CHECK NEXT');
-    expect(content).toContain('UNCERTAINTY');
     expect(content).toContain('risk one');
     expect(content).toContain('check one');
-    expect(content).toContain('unknown one');
+    expect(content).not.toContain('TRY AGAIN');
+    expect(content).not.toContain('AI SAFETY COACH');
+    expect(content).not.toContain('AI explains verified TrainRekt findings');
+    expect(content.indexOf('TOKEN IDENTITY')).toBeLessThan(content.indexOf('KEY TAKEAWAYS'));
+    expect(content.indexOf('KEY TAKEAWAYS')).toBeLessThan(content.indexOf('ON-CHAIN SUMMARY'));
+    expect(content.indexOf('ON-CHAIN SUMMARY')).toBeLessThan(content.indexOf('TOKEN DISTRIBUTION (TOP 5 ACCOUNTS)'));
+    expect(content.indexOf('TOKEN DISTRIBUTION (TOP 5 ACCOUNTS)')).toBeLessThan(content.indexOf('KEY POINTS'));
+    expect(content.indexOf('KEY POINTS')).toBeLessThan(content.indexOf('WHAT TO CHECK NEXT'));
   });
 });

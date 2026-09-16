@@ -191,4 +191,31 @@ describe('buildTokenAnalysisSummary', () => {
     const ids = summary.findings.map((finding) => finding.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('keeps informational review signals informational and does not truncate long descriptions', () => {
+    const longDescription = 'Ongoing inflationary issuance is documented, and the observed active mint authority is consistent with that model.';
+
+    const summary = buildTokenAnalysisSummary(createReport({
+      reviewSignals: [
+        {
+          id: 'DOCUMENTED_INFLATIONARY_ISSUANCE',
+          category: 'informational',
+          severity: 'info',
+          explanation: longDescription,
+          evidence: {},
+        },
+      ],
+    }));
+
+    const informational = summary.findings.find((finding) => finding.id.includes('DOCUMENTED_INFLATIONARY_ISSUANCE'));
+
+    expect(informational).toMatchObject({
+      label: 'INFORMATIONAL',
+      value: 'info',
+      tone: 'informational',
+      icon: 'tokenProgram',
+      description: longDescription,
+    });
+    expect(informational?.description).not.toContain('...');
+  });
 });

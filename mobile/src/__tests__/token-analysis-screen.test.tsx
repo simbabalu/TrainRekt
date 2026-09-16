@@ -174,6 +174,7 @@ describe('Token analysis screen routing', () => {
     const text = renderer.root.findAll((node) => String(node.type) === 'Text').map((node) => String(node.props.children ?? '')).join(' ');
     expect(text).toContain('REPORT_CARD');
     expect(text).toContain('< HOME');
+    expect(text).not.toContain('ANALYZE ANOTHER TOKEN');
     expect(text).not.toContain('INPUT_CARD');
     expect(text).not.toContain('ANALYZE TOKEN');
   });

@@ -3,7 +3,7 @@ import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 import { Text } from 'react-native';
 
-import { TokenAnalysisSummaryCard } from './TokenAnalysisSummaryCard';
+import { TokenAnalysisOnChainSummary, TokenAnalysisSummaryCard } from './TokenAnalysisSummaryCard';
 import type { TokenAnalysisReport } from '@/types/tokenAnalysis';
 
 vi.mock('react-native', () => ({
@@ -84,7 +84,7 @@ function textContent(renderer: ReturnType<typeof create>): string {
 }
 
 describe('TokenAnalysisSummaryCard keys', () => {
-  it('does not render identity in key findings and keeps core technical findings', () => {
+  it('renders token identity without the global review verdict', () => {
     let renderer!: ReturnType<typeof create>;
 
     act(() => {
@@ -100,6 +100,20 @@ describe('TokenAnalysisSummaryCard keys', () => {
     expect(content).toContain('Token');
     expect(content).toContain('TOK');
     expect(content).toContain('Mint');
+    expect(content).not.toContain('NEEDS REVIEW');
+    expect(content).not.toContain('NO REVIEW SIGNALS');
+    expect(content).not.toContain('MINT AUTHORITY:Active');
+  });
+
+  it('renders core technical findings in the on-chain summary', () => {
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(<TokenAnalysisOnChainSummary report={report()} />);
+    });
+
+    const content = textContent(renderer);
+    expect(content).toContain('ON-CHAIN SUMMARY');
     expect(content).toContain('MINT AUTHORITY:Active');
     expect(content).toContain('FREEZE AUTHORITY:Revoked');
     expect(content).toContain('TOKEN PROGRAM:SPL Token');
@@ -111,7 +125,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
 
     act(() => {
       create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={report()}
         />,
       );
@@ -130,7 +144,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
 
     act(() => {
       renderer = create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={report()}
         />, 
       );
@@ -139,7 +153,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
     const content = textContent(renderer);
     expect(content).toContain('Deterministic inspection: complete.');
     expect(content).not.toContain('Optional external research:');
-    expect(content).toContain('Mint1111111111111111111111111111111111');
+    expect(content).toContain('MINT AUTHORITY:Active');
   });
 
   it('shows complete optional research indicator', () => {
@@ -159,7 +173,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={withComplete}
         />,
       );
@@ -185,7 +199,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={withPartial}
         />,
       );
@@ -211,7 +225,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={withUnavailable}
         />,
       );
@@ -219,7 +233,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
 
     const content = textContent(renderer);
     expect(content).toContain('Additional external research is unavailable. Deterministic inspection remains available.');
-    expect(content).toContain('Mint1111111111111111111111111111111111');
+    expect(content).toContain('MINT AUTHORITY:Active');
   });
 
   it('shows not-attempted optional research indicator', () => {
@@ -239,7 +253,7 @@ describe('TokenAnalysisSummaryCard keys', () => {
     let renderer!: ReturnType<typeof create>;
     act(() => {
       renderer = create(
-        <TokenAnalysisSummaryCard
+        <TokenAnalysisOnChainSummary
           report={withNotAttempted}
         />,
       );
