@@ -65,7 +65,7 @@ vi.mock('expo-symbols', () => ({
 }));
 
 vi.mock('expo-constants', () => ({
-  default: { expoConfig: { version: '1.0.1' } },
+  default: { expoConfig: { version: '2.0.0' } },
 }));
 
 vi.mock('react-native', () => ({
@@ -231,7 +231,7 @@ describe('SettingsScreen wallet card', () => {
     expect(text).not.toContain('Haptic feedback');
     expect(text).toContain('DATA');
     expect(text).toContain('Reset training progress');
-    expect(text).toContain('1.0.1');
+    expect(text).toContain('2.0.0');
     expect(text).not.toContain('Disconnect');
     expect(text).toContain('SAFE WALLET TRAINING');
     expect(text).toContain('Training never requests real signatures or asset movement.');

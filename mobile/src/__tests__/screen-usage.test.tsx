@@ -20,7 +20,7 @@ vi.mock('expo-router', () => ({
 }));
 
 vi.mock('expo-constants', () => ({
-  default: { expoConfig: { version: '1.0.1' } },
+  default: { expoConfig: { version: '2.0.0' } },
 }));
 
 vi.mock('@/components/Screen', () => ({

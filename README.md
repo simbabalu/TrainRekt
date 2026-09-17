@@ -1,147 +1,273 @@
 # TrainRekt
 
-> Get rekt in training. Not on-chain.
+TrainRekt 2.0.0 is a Solana security awareness and training application that combines real on-chain inspection with practical simulated security training.
 
-TrainRekt is an interactive crypto decision and wallet-safety training app for Solana Mobile. It teaches by making users decide through realistic scenarios, then explaining outcomes and tracking progress over time. Wallet connection and inspection use real public Solana data, while training decisions remain simulated.
+Core positioning:
 
-## Why TrainRekt?
+Wallet security tools protect the wallet. TrainRekt trains the human behind it.
 
-Crypto users are often pushed into high-impact decisions quickly: risk management, signatures, permissions, suspicious claims, and wallet-account behavior. These decisions can be expensive to learn in production.
+TrainRekt presents technical signals and educational context. It does not provide blanket "safe token" or "safe wallet" verdicts.
 
-TrainRekt moves that learning into practice mode first. Users can train decision quality, build wallet-safety habits, and review progress before real assets are on the line.
+## Hackathon Release
 
-## Demo
+- Release version: 2.0.0
+- Planned tag (not created in this step): v2.0.0
+- Planned APK filename: TrainRekt-v2.0.0.apk
 
-- Hackathon demo video: [demo/trainrekt-hackathon-demo.mp4](demo/trainrekt-hackathon-demo.mp4)
-- Demo video build script: [demo/build-demo-video.sh](demo/build-demo-video.sh)
+TrainRekt 2.0.0 is the hackathon release built by Pascal as a solo developer/founder.
 
-## What You Can Train
+## What TrainRekt Does
 
-Current runtime catalog (41 exercises):
+### Token Safety
 
-- Decision Training
-- Signature Simulation
-- Transaction Inspection
-- Permission Challenges
-- Scam Detection
-- Red Flag Identification
-- Surprise Security Challenges (wallet-connected trigger)
+TrainRekt accepts a Solana token mint (including Android share-intent text extraction for a single mint) and runs deterministic inspection through the TrainRekt API.
 
-## Real Wallet, Safe Training
+Current token analysis includes:
 
-TrainRekt integrates Solana Mobile Wallet Adapter (MWA) for wallet authorization/connection on Android development builds.
+- Token identity and metadata context where available
+- Mint authority state
+- Freeze authority state
+- Token program context (SPL Token / Token-2022)
+- Largest-token-account concentration and context
+- Identity provenance and trusted-source mint-link analysis
+- Deterministic on-chain summary findings
 
-Real wallet behavior:
+The current Token Analysis UI intentionally avoids a global token verdict label. It presents technical findings and context instead.
 
-- Wallet authorization/connection through MWA
-- Local wallet disconnect/state clearing
+TrainRekt can request an AI explanation for inspection results, but AI is an explanation layer over deterministic findings.
+
+AI does not independently prove whether a token is safe.
+
+### Wallet Safety
+
+TrainRekt connects to a real wallet on Android via Solana Mobile Wallet Adapter and performs public read-only inspection.
+
+Current wallet safety behavior includes:
+
+- Wallet authorize/connect flow
 - Public wallet identity display (address/label)
-- Read-only RPC wallet snapshot and token-account inspection
+- Read-only Solana RPC wallet snapshot
+- Token-account and mint-level technical observations
+- Token-2022 extension observations for supported extension kinds
+- Wallet-derived training recommendations
 
-Simulated training behavior:
+TrainRekt does not move assets or execute destructive wallet actions as part of inspection.
 
-- Signature decisions in exercises
-- Transaction-approval decisions in exercises
-- Permission decisions in exercises
-- Surprise challenge decisions
+### Security Training
 
-TrainRekt does not submit real asset transactions.
+TrainRekt provides realistic simulated scenarios with immediate feedback and explanation.
 
-Real message signing infrastructure exists in the wallet boundary, but runtime signing is currently disabled (`REAL_MESSAGE_SIGNING_ENABLED = false`).
+Implemented exercise families:
 
-## Learn From Your Wallet
+- Decision training
+- Signature simulation
+- Transaction inspection
+- Permission challenges
+- Scam detection
+- Red flag identification
+- Surprise security challenges
 
-Implemented loop:
+Current runtime catalog size is 41 exercises.
 
-Train -> Connect -> Inspect -> Learn -> Improve
+### Progress
 
-Wallet Safety performs read-only inspection of token-account and mint-level properties, derives educational technical signals, and maps them to targeted training topics.
+TrainRekt tracks learning progress locally, including:
 
-Signals are educational review signals, not automatic scam/safety verdicts.
+- Sessions and decisions
+- Correct vs incorrect outcomes
+- XP and level progression
+- Win rate
+- Streaks
+- Skill scores
+- Recent training history
+- Earned challenge badges
 
-## Training System
+Daily training behavior is implemented with a goal of 3 completed daily decisions and a one-time daily completion bonus.
 
-- Daily Training goal: 3 completed daily decisions
-- Daily completion bonus: +150 XP (awarded once when goal is reached)
-- Extra Practice: available after daily completion
-- Practice XP multiplier: 25% of base XP
-- Wallet lesson replays: XP becomes 0 after that wallet lesson reward was already claimed
-- Adaptive selection: weighted by weak skills, difficulty preference, recent mistakes, and recent-repeat penalty
-- Difficulty preference: Beginner / Intermediate / Advanced
-- Progress: XP, level, win rate, streaks, skill scores, recent history
-- Achievements: security-training achievements earned through completed challenges
-- Local persistence: AsyncStorage with schema normalization/hydration
+## Security and Trust Boundary
 
-## Solana Mobile Integration
+- Deterministic code establishes inspection facts.
+- AI explains deterministic findings when available.
+- Training scenarios are simulated.
+- Real wallet or on-chain context can drive recommendations, but training interactions do not submit real asset transactions.
+- Real wallet message signing remains runtime-disabled in the current implementation.
 
-TrainRekt is implemented as an Expo/React Native app with Android development-build workflow and Solana mobile wallet integration.
+## Install the Android APK
 
-Verified integration points:
+Judges should receive/download the artifact named:
 
-- Solana Mobile Wallet Adapter for connection flow
-- Solana RPC reads for snapshot and inspection data
-- Physical-device Android flow for wallet-connected training and Wallet Safety
+- TrainRekt-v2.0.0.apk
 
-## Security Model
+### Option A: Install directly on Android / Solana Seeker
 
-- No seed phrase or private-key handling in app logic
-- No real asset transaction submission
-- Training signature/transaction/permission decisions are simulated
-- Wallet inspection is read-only RPC
-- Sensitive MWA auth token is kept in memory and not persisted in training progress storage
-- Disconnect behavior intentionally clears local wallet state; native deauthorize is currently disabled pending safe upstream behavior validation
-- Real wallet message signing is currently disabled in runtime
+1. Download or copy TrainRekt-v2.0.0.apk to the device.
+2. Open the APK file from the browser or file manager.
+3. If Android asks for "install unknown apps" permission for that source, allow it for that specific app.
+4. Continue the install flow.
+5. Launch TrainRekt.
 
-## Architecture
+Android may show normal warnings for APKs installed outside an app store.
 
-Mobile app implementation is in [mobile](mobile).
+### Option B: Install with ADB
 
-- [mobile/src/app](mobile/src/app): route composition and screen entry points
-- [mobile/src/components](mobile/src/components): reusable UI/presentation
-- [mobile/src/context](mobile/src/context): application state providers
-- [mobile/src/hooks](mobile/src/hooks): screen/application hooks
-- [mobile/src/domain](mobile/src/domain): pure business logic
-- [mobile/src/data](mobile/src/data): exercise catalogs and static training content
-- [mobile/src/services](mobile/src/services): external/native boundaries (wallet + RPC)
-- [mobile/src/storage](mobile/src/storage): local persistence adapters
-- [mobile/src/constants](mobile/src/constants): theme and app constants
-- [mobile/src/types](mobile/src/types): domain models and discriminated unions
+Prerequisites:
 
-Wallet/native integration is isolated behind service boundaries in [mobile/src/services/wallet](mobile/src/services/wallet).
+- Android Platform Tools (adb)
+- USB debugging enabled on the device
+- Device connected and authorized
 
-## Tech Stack
+Commands:
 
-- TypeScript
-- React Native
-- Expo
-- Expo Router
-- Solana Mobile Wallet Adapter
-- @solana/web3.js
-- @solana/spl-token
-- AsyncStorage
-- Vitest
-- ESLint
+```bash
+adb devices
+adb install -r TrainRekt-v2.0.0.apk
+```
 
-## Running Locally
+If `adb devices` does not show the device as authorized, accept the device authorization prompt and run again.
 
-See [mobile/README.md](mobile/README.md) for full setup and Android development-build workflow.
+If an incompatible prior build blocks installation, use the confirmed package ID from app configuration and reinstall:
 
-For the reproducible backend/mobile setup, exact demo configuration, Seeker workflow, validation commands, and preflight checklist, see [docs/DEMO_PREFLIGHT.md](docs/DEMO_PREFLIGHT.md).
+```bash
+adb uninstall com.anonymous.trainrekt
+adb install -r TrainRekt-v2.0.0.apk
+```
 
-Note: Expo Go is not sufficient for MWA functionality in this project.
+## Runtime Requirements
 
-## Android Release / Hackathon APK
+### Using the prebuilt APK
 
-The signed hackathon APK artifact is:
+- Internet access is required for on-chain inspection features.
+- Wallet Safety uses public Solana RPC reads from the mobile app.
+- Token Analysis requires a reachable TrainRekt API base URL embedded at build time via `EXPO_PUBLIC_TRAINREKT_API_BASE_URL`.
+- A compatible Solana wallet app on Android is required for wallet-connected flows.
 
-- `TrainRekt-1.0.0-hackathon.apk`
+Important:
 
-SHA-256:
+- This repository confirms how configuration is consumed, but cannot by itself prove which backend URL a separately distributed APK was built with.
+- If the release APK points to a public hosted backend, judges do not need local backend setup.
+- If it points to a private/local backend, token analysis endpoints will be unavailable until that backend is reachable.
+- For a judge using only the prebuilt APK, no local API keys should be required in-app. Backend keys remain server-side.
 
-- `9ba20f722f7af945d313886ab43c5039696e32277ee162cb57b9169924a05d73`
+### Running from source
 
-The signed hackathon APK is distributed as a GitHub Release/submission artifact rather than stored directly in the source repository.
+Mobile prerequisites observed in this repo:
 
-## Hackathon
+- Node.js + npm (Node version is not pinned in package.json)
+- Expo SDK 57.x stack
+- Android SDK + adb
+- JDK 17+
+- Physical Android device for MWA flows
 
-TrainRekt was started on September 10, 2026 for the Solana Mobile CLOCK IN hackathon.
+Backend prerequisites observed in this repo:
+
+- .NET SDK 8.x (`net8.0` target)
+- Helius API key for Helius-dependent inspection behavior
+- Optional services: Gemini and MongoDB (feature-flag/config dependent)
+
+Mobile setup and run:
+
+```bash
+cd mobile
+npm install
+npx expo run:android --device
+npx expo start --dev-client --clear
+```
+
+Fresh-clone native generation note:
+
+- This repository ignores `mobile/android` and `mobile/ios` as generated native output.
+- If those folders are absent in a fresh clone, generate Android from tracked Expo config first:
+
+```bash
+cd mobile
+npx expo prebuild --platform android --no-install
+```
+
+- Then continue with `npx expo run:android --device` or `cd android && ./gradlew assembleRelease`.
+
+Backend setup and run (local dev):
+
+```bash
+cd backend/TrainRekt.Api
+dotnet user-secrets set "Helius:ApiKey" "<your-helius-api-key>"
+cd ../..
+dotnet run --project backend/TrainRekt.Api --launch-profile http
+```
+
+Health check:
+
+```bash
+curl http://localhost:5256/health
+```
+
+Backend build/tests:
+
+```bash
+dotnet build backend/TrainRekt.Api/TrainRekt.Api.csproj
+dotnet test backend/TrainRekt.Api.Tests/TrainRekt.Api.Tests.csproj
+```
+
+Backend Docker + Render (Web Service):
+
+- Render Root Directory: `backend/TrainRekt.Api`
+- Dockerfile Path: `backend/TrainRekt.Api/Dockerfile`
+- Health Check Path: `/health`
+- Container port handling: container startup maps `PORT` to Kestrel via `ASPNETCORE_URLS=http://0.0.0.0:$PORT` (with fallback to `8080` when `PORT` is not set).
+
+Render environment variables (no values in source control):
+
+- Required: `HELIUS_API_KEY`
+- Optional: `ASPNETCORE_ENVIRONMENT` (defaults to `Production` in Dockerfile)
+- Optional: `Gemini__Enabled`, `GEMINI_API_KEY`, `AiSafetyCoach__Enabled`, `TokenExternalContext__Enabled`
+- Optional: `MongoDb__Enabled`, `MONGODB_CONNECTION_STRING`, `MongoDb__DatabaseName`
+
+Mobile checks:
+
+```bash
+cd mobile
+npm run typecheck
+npm run lint
+npm run test
+```
+
+Android release build from generated native project:
+
+```bash
+cd mobile/android
+./gradlew assembleRelease
+```
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+	A[Wallet or Token Mint Input] --> B[Deterministic Inspection]
+	B --> C[Structured Findings]
+	C --> D[Mobile UI Presentation]
+	C --> E[AI Explanation Endpoint]
+	C --> F[Contextual Training Recommendations]
+```
+
+Trust boundary summary:
+
+- Deterministic inspection establishes technical facts.
+- AI endpoints generate educational explanation and prioritization.
+- AI is not a source of on-chain truth.
+
+## Testing and Quality
+
+Validated on this release-prep pass:
+
+- Mobile typecheck: passed
+- Mobile lint: passed
+- Mobile tests: passed (113 files, 590 tests)
+
+Backend tests can be run with the command documented above when backend release verification is required.
+
+## Project Links
+
+- Mobile app workspace: [mobile](mobile)
+- Mobile implementation guide: [mobile/README.md](mobile/README.md)
+- Demo and reproducibility checklist: [docs/DEMO_PREFLIGHT.md](docs/DEMO_PREFLIGHT.md)
+- Backend details: [backend/README.md](backend/README.md)
+- Demo video: [demo/trainrekt-hackathon-demo.mp4](demo/trainrekt-hackathon-demo.mp4)
